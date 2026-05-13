@@ -41,12 +41,46 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM --- Make sure node_modules + data dir exist ---
+REM --- First-run setup is inlined here (no separate install.bat anymore) ---
+
+REM 1. npm install if node_modules is missing
 if not exist node_modules (
-    echo node_modules missing. Running install.bat first...
-    call install.bat
-    if errorlevel 1 exit /b 1
+    echo.
+    echo ==================================================
+    echo  First run · installing dependencies
+    echo ==================================================
+    echo This takes 1-3 minutes. You will only see this once.
+    echo.
+    call npm install --no-audit --no-fund
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] npm install failed. Read the error above and try again.
+        echo.
+        pause
+        exit /b 1
+    )
 )
+
+REM 2. Write default .env.local if it doesn't exist (user can change ports later
+REM    from the launcher's Settings card without re-running anything)
+if not exist .env.local (
+    > .env.local echo # AdForge configuration ^(default ports - change in launcher Settings if needed^)
+    >> .env.local echo PORT=3005
+    >> .env.local echo ADFORGE_SYNC_PORT=3006
+)
+
+REM 3. Create Desktop shortcut on first run (only if it isn't already there)
+powershell -NoProfile -Command ^
+  "$d = [Environment]::GetFolderPath('Desktop');" ^
+  "$lnk = Join-Path $d 'AdForge.lnk';" ^
+  "if (-not (Test-Path $lnk)) {" ^
+  "  $t = Join-Path '%CD%' 'AdForge.bat';" ^
+  "  $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk);" ^
+  "  $s.TargetPath = $t; $s.WorkingDirectory = '%CD%';" ^
+  "  $s.Description = 'Launch AdForge'; $s.WindowStyle = 7; $s.Save();" ^
+  "  Write-Host '  -> Created Desktop shortcut: ' $lnk" ^
+  "}" 2>nul
+
 if not exist data mkdir data
 
 REM --- Spawn the sidecar detached, hidden, with the right env var ---

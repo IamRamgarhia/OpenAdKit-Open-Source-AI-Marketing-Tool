@@ -72,21 +72,18 @@ curl -fsSL https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/scripts/
 
 That single command: installs Node + git if missing (Windows uses winget), clones the repo into `~/AdForge`, runs `npm install`, asks for a port, then opens the launcher control panel in your browser. Click **▶ Start AdForge** and you're live.
 
-### Manual · Windows · 3 double-clicks
+### Manual · Windows · 2 double-clicks
 1. **Download** this repo (green "Code" button → "Download ZIP" → extract)
-2. **Double-click `install.bat`** · waits for dependencies, asks for a port, creates an **AdForge** shortcut on your Desktop
-3. **Double-click the new `AdForge` icon on your Desktop** *(or `AdForge.bat` in the folder)* · your default browser opens to the AdForge launcher
+2. **Double-click `AdForge.bat`** — that's it. First run installs Node dependencies, writes a default `.env.local`, drops an `AdForge` shortcut on your Desktop, then opens the launcher. From the second run onwards it's a single click → browser opens to the launcher.
 
-The launcher is a control panel: hit **▶ Start AdForge**, watch the progress bar, then click **↗ Open AdForge** when it's up. From the launcher you can also stop, restart, change ports, and open three different local URLs.
+The launcher is a control panel: hit **▶ Start AdForge**, watch the progress bar, then click **↗ Open AdForge** when it's up. From the launcher you can stop, restart, change ports, see update notices, and open three different local URLs.
 
 To shut everything down: close the launcher tab and run `scripts\stop.bat` (or just close the hidden sidecar via Task Manager).
 
-### Manual · Mac / Linux · 3 commands
+### Manual · Mac / Linux · 2 commands
 ```bash
-git clone https://github.com/IamRamgarhia/AdForge-.git adforge
-cd adforge
-bash install.sh                  # one-time setup · creates ~/Desktop/AdForge shortcut
-bash AdForge.command             # or double-click AdForge on your Desktop
+git clone https://github.com/IamRamgarhia/AdForge.git adforge && cd adforge
+bash AdForge.command             # first run installs + creates Desktop shortcut · subsequent runs just launch
 # bash scripts/stop.sh           # to force-stop later
 ```
 
@@ -99,7 +96,7 @@ npm run start:all      # web app + local-sync sidecar together
 > First launch walks you through a 5-step wizard: welcome → tour → pick AI provider → paste key → optional first brand. No accounts. No env vars. No database.
 
 ### Pick your own port
-`install.bat` / `install.sh` ask which port you want and save it to `.env.local`. Defaults to **3005**. Pick anything 1024–65535 (avoid 80 unless you want admin rights).
+The default is **3005** for the web app and **3006** for the sidecar. Change either from the launcher's **Settings** card any time — no editor needed. Pick anything 1024–65535 (avoid 80 unless you want admin rights).
 
 ### Want a prettier URL?
 - **Zero setup:** open `http://adforge.localhost:3005/` instead of `http://localhost:3005/`. Works in Chrome / Firefox / Safari / Edge today — all modern browsers auto-resolve `*.localhost` to 127.0.0.1.
@@ -307,9 +304,8 @@ adforge/
 │
 ├── data/                        Your snapshot lives here (gitignored)
 ├── AdForge.bat / AdForge.command  Click-to-launch (Desktop shortcut points here)
-├── install.bat / install.sh       Manual installer (after you clone/unzip)
-├── scripts/install/install.ps1    One-line online bootstrap (Windows · PowerShell)
-├── scripts/install/install.sh     One-line online bootstrap (Mac / Linux / WSL)
+├── scripts/install/install.ps1    One-line online bootstrap (Windows · PowerShell · iwr | iex)
+├── scripts/install/install.sh     One-line online bootstrap (Mac / Linux / WSL · curl | bash)
 ├── scripts/start.bat / start.sh    Manual sidecar runner (advanced)
 ├── scripts/stop.bat / stop.sh      Force shutdown
 └── package.json
@@ -337,8 +333,7 @@ Production build: 56 statically prerendered routes · 87 KB shared JS · 130-160
 
 | Action | Windows | Mac / Linux | Cross-platform |
 |---|---|---|---|
-| Install (one-time) | double-click `install.bat` | `bash install.sh` | `npm install` |
-| **Launch** | double-click `AdForge` on Desktop *(or `AdForge.bat`)* | double-click `AdForge` on Desktop *(or `bash AdForge.command`)* | — |
+| Install + Launch | double-click `AdForge.bat` — first run installs, every run after just launches | `bash AdForge.command` (same: first run sets up, after that it just launches) | `npm install && npm run start:all` |
 | Force-stop everything | `scripts\stop.bat` | `bash scripts/stop.sh` | Ctrl+C in the sidecar window |
 | Manual sidecar (visible log) | `scripts\start.bat` | `bash scripts/start.sh` | `npm run start:all` |
 | Web only | `npm run dev` | `npm run dev` | `npm run dev` |
