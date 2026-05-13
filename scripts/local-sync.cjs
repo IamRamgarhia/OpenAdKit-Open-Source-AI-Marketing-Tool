@@ -27,6 +27,7 @@
 const http = require("http");
 const fs = require("fs");
 const fsp = require("fs/promises");
+const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 
@@ -41,11 +42,39 @@ const MAX_BODY = 25 * 1024 * 1024;
 // --- State ---
 let webChild = null;
 let webStatus = "down"; // 'down' | 'starting' | 'up' | 'stopping'
-let webPort = 3005;
+let webPort = 3005; // overwritten from .env.local right below
 let webStartedAt = 0;
 let webLastLog = "";
 
+// --- Update state (auto-update from GitHub) ---
+// See "Update rules" in README. Single in-flight job at a time.
+let updateState = {
+  status: "idle", // 'idle' | 'checking' | 'available' | 'applying' | 'done' | 'error'
+  current_sha: null,
+  latest_sha: null,
+  latest_commit_message: null,
+  latest_commit_date: null,
+  branch: null,
+  dirty: false,
+  log: [], // ring buffer of step events
+  started_at: 0,
+  finished_at: 0,
+  error: null,
+};
+function appendUpdateLog(line) {
+  const t = new Date().toISOString();
+  updateState.log.push(`[${t}] ${line}`);
+  if (updateState.log.length > 200) updateState.log.shift();
+  console.log(`[adforge:update] ${line}`);
+}
+const GH_REPO = "IamRamgarhia/AdForge"; // public, no auth required
+
 // --- Helpers ---
+function envPort(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 && n <= 65535 ? n : fallback;
+}
+
 function readEnvLocal() {
   if (!fs.existsSync(ENV_LOCAL)) return { PORT: "3005", ADFORGE_SYNC_PORT: String(PORT) };
   const out = {};
@@ -109,15 +138,22 @@ function json(res, status, body) {
 }
 
 function tryProbeWeb(port, cb) {
+  let done = false;
+  const finish = (alive) => {
+    if (done) return;
+    done = true;
+    cb(Boolean(alive));
+  };
   const req = http.request(
     { host: "127.0.0.1", port, path: "/", method: "GET", timeout: 1500 },
     (resp) => {
       resp.resume();
-      cb(resp.statusCode && resp.statusCode < 500);
+      finish(resp.statusCode && resp.statusCode < 500);
     }
   );
-  req.on("error", () => cb(false));
-  req.on("timeout", () => { req.destroy(); cb(false); });
+  req.on("error", () => finish(false));
+  req.on("timeout", () => { try { req.destroy(); } catch {} finish(false); });
+  req.on("close", () => finish(false));
   req.end();
 }
 
@@ -168,6 +204,224 @@ function startWeb() {
   setTimeout(tick, 1500);
 
   return { ok: true, pid: webChild.pid, port: webPort };
+}
+
+/**
+ * "Clean rebuild" — kills any running web child, deletes the .next/ build cache,
+ * and lets the caller restart fresh. Common fix when CSS chunk references go
+ * stale (which happens if `next build` ever runs over a `next dev` working
+ * directory). User-triggered from the launcher control panel.
+ */
+function cleanRebuild() {
+  // Stop the running web first.
+  if (webChild && !webChild.killed) {
+    try {
+      if (process.platform === "win32") {
+        spawn("taskkill", ["/pid", String(webChild.pid), "/F", "/T"]);
+      } else {
+        webChild.kill("SIGTERM");
+      }
+    } catch { /* ignore */ }
+    webChild = null;
+  }
+  webStatus = "down";
+
+  // Recursively delete .next/. Use fs.rm with force+recursive (Node 14+).
+  const nextDir = path.join(PROJECT_ROOT, ".next");
+  try {
+    if (fs.existsSync(nextDir)) {
+      fs.rmSync(nextDir, { recursive: true, force: true });
+    }
+    return { ok: true, deleted: true };
+  } catch (e) {
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+}
+
+// --- Update helpers (auto-update from GitHub) ---
+
+/** Read the current Git HEAD's branch + sha by parsing .git directly. Avoids
+ *  shelling out to git for the cheap check. Returns null if not a git repo. */
+function readLocalGit() {
+  const gitDir = path.join(PROJECT_ROOT, ".git");
+  try {
+    const head = fs.readFileSync(path.join(gitDir, "HEAD"), "utf8").trim();
+    // HEAD is either "ref: refs/heads/<branch>" (detached if 40-char sha).
+    if (head.startsWith("ref: ")) {
+      const ref = head.slice(5).trim();
+      const branch = ref.replace(/^refs\/heads\//, "");
+      let sha = "";
+      const refPath = path.join(gitDir, ref);
+      if (fs.existsSync(refPath)) {
+        sha = fs.readFileSync(refPath, "utf8").trim();
+      } else {
+        // Packed refs fallback.
+        const packed = path.join(gitDir, "packed-refs");
+        if (fs.existsSync(packed)) {
+          const lines = fs.readFileSync(packed, "utf8").split("\n");
+          for (const line of lines) {
+            if (line.endsWith(` ${ref}`)) { sha = line.split(" ")[0]; break; }
+          }
+        }
+      }
+      return { branch, sha };
+    }
+    // Detached HEAD — return the literal sha + null branch.
+    return { branch: null, sha: head };
+  } catch { return null; }
+}
+
+/** Quick check: does git status report any uncommitted changes? */
+function checkDirtyTree() {
+  return new Promise((resolve) => {
+    const isWin = process.platform === "win32";
+    const git = spawn("git", ["status", "--porcelain"], {
+      cwd: PROJECT_ROOT, shell: isWin, stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    git.stdout.on("data", (c) => { out += c.toString(); });
+    git.on("close", () => resolve(out.trim().length > 0));
+    git.on("error", () => resolve(false));
+  });
+}
+
+/** Fetch the latest commit on origin's main branch via the GitHub REST API.
+ *  No auth needed — public repo. R2 in the rules. */
+function fetchLatestFromGitHub() {
+  return new Promise((resolve) => {
+    const https = require("https");
+    const req = https.request(
+      {
+        host: "api.github.com",
+        path: `/repos/${GH_REPO}/commits/main`,
+        method: "GET",
+        headers: {
+          "User-Agent": "AdForge-Updater/1.0",
+          Accept: "application/vnd.github+json",
+        },
+        timeout: 8000,
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (c) => { body += c.toString(); });
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(body);
+            resolve({
+              sha: data.sha,
+              message: data?.commit?.message?.split("\n")[0] ?? "(no message)",
+              date: data?.commit?.author?.date ?? null,
+            });
+          } catch {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => { try { req.destroy(); } catch {} resolve(null); });
+    req.end();
+  });
+}
+
+/** Run a shell command in PROJECT_ROOT, append output to update log live,
+ *  resolve with { ok, code, output }. Used by the apply pipeline. */
+function runCommand(cmd, args, label) {
+  return new Promise((resolve) => {
+    appendUpdateLog(`▶ ${label || `${cmd} ${args.join(" ")}`}`);
+    const isWin = process.platform === "win32";
+    const child = spawn(cmd, args, { cwd: PROJECT_ROOT, shell: isWin, stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    child.stdout.on("data", (c) => {
+      const s = c.toString();
+      output += s;
+      for (const line of s.split("\n")) if (line.trim()) appendUpdateLog(`  ${line.trim()}`);
+    });
+    child.stderr.on("data", (c) => {
+      const s = c.toString();
+      output += s;
+      for (const line of s.split("\n")) if (line.trim()) appendUpdateLog(`  ${line.trim()}`);
+    });
+    child.on("close", (code) => {
+      appendUpdateLog(`${code === 0 ? "✓" : "✗"} ${label || cmd} exited ${code}`);
+      resolve({ ok: code === 0, code: code ?? -1, output });
+    });
+    child.on("error", (e) => {
+      appendUpdateLog(`✗ ${label || cmd} failed: ${e.message}`);
+      resolve({ ok: false, code: -1, output: e.message });
+    });
+  });
+}
+
+async function applyUpdate() {
+  if (updateState.status === "applying") {
+    return { ok: false, error: "Update already in progress." };
+  }
+  // R4: branch lock
+  const local = readLocalGit();
+  if (!local) return { ok: false, error: "Not a git repository — can't auto-update. Re-clone the repo or pull manually." };
+  if (local.branch !== "main") {
+    return { ok: false, error: `Current branch is "${local.branch || "(detached)"}", not main. Auto-update only runs on the main branch.` };
+  }
+  // R5: dirty-tree lock
+  const dirty = await checkDirtyTree();
+  if (dirty) {
+    return { ok: false, error: "Local working tree has uncommitted changes. Commit or stash first, then update." };
+  }
+
+  updateState = {
+    ...updateState,
+    status: "applying",
+    log: [],
+    started_at: Date.now(),
+    finished_at: 0,
+    error: null,
+  };
+  appendUpdateLog(`Starting update on branch "main" from sha ${local.sha.slice(0, 7)}`);
+
+  // R7 step 1: stop web
+  if (webChild && !webChild.killed) {
+    appendUpdateLog("Stopping web app…");
+    stopWeb();
+    await new Promise((r) => setTimeout(r, 600));
+  }
+
+  // R7 step 2: fetch
+  let r = await runCommand("git", ["fetch", "origin", "main"], "git fetch origin main");
+  if (!r.ok) return finishUpdate(false, "git fetch failed");
+
+  // R7 step 3: pull --ff-only (no merges, no rebases)
+  r = await runCommand("git", ["pull", "--ff-only", "origin", "main"], "git pull --ff-only origin main");
+  if (!r.ok) return finishUpdate(false, "git pull failed (likely non-fast-forward — abort instead of force)");
+
+  // R7 step 4: npm install (only if package-lock changed; cheap to always run though)
+  r = await runCommand("npm", ["install", "--no-audit", "--no-fund"], "npm install");
+  if (!r.ok) return finishUpdate(false, "npm install failed");
+
+  // R7 step 5: wipe .next/
+  try {
+    const nextDir = path.join(PROJECT_ROOT, ".next");
+    if (fs.existsSync(nextDir)) fs.rmSync(nextDir, { recursive: true, force: true });
+    appendUpdateLog("✓ wiped .next/ build cache");
+  } catch (e) {
+    return finishUpdate(false, `Failed to wipe .next: ${e?.message ?? e}`);
+  }
+
+  // R7 step 6: restart web
+  appendUpdateLog("Starting web app on fresh build…");
+  startWeb();
+
+  // Re-read local git so launcher shows the new sha.
+  const after = readLocalGit();
+  appendUpdateLog(`✓ Update complete. New HEAD: ${after?.sha?.slice(0, 7) ?? "(unknown)"}`);
+  return finishUpdate(true, null);
+}
+
+function finishUpdate(ok, errMsg) {
+  updateState.status = ok ? "done" : "error";
+  updateState.error = errMsg;
+  updateState.finished_at = Date.now();
+  return { ok, error: errMsg };
 }
 
 function stopWeb() {
@@ -240,9 +494,114 @@ const server = http.createServer(async (req, res) => {
       setTimeout(() => startWeb(), 1200);
       return json(res, 200, { ok: true });
     }
+    // --- Update endpoints (auto-update from GitHub main) ---
+    if (req.method === "GET" && url === "/update/check") {
+      // R3 + R4: read local sha + branch, refuse on non-main branches.
+      const local = readLocalGit();
+      if (!local) {
+        return json(res, 200, {
+          status: "unsupported",
+          reason: "Not a git checkout — cannot auto-update. Use the original installer to refresh.",
+        });
+      }
+      if (local.branch !== "main") {
+        return json(res, 200, {
+          status: "branch_locked",
+          branch: local.branch,
+          current_sha: local.sha,
+          reason: `Auto-update only runs on the main branch. You're on "${local.branch || "(detached)"}".`,
+        });
+      }
+      const dirty = await checkDirtyTree();
+      updateState.dirty = dirty;
+      updateState.current_sha = local.sha;
+      updateState.branch = local.branch;
+      const latest = await fetchLatestFromGitHub();
+      if (!latest) {
+        return json(res, 200, {
+          status: "network_error",
+          current_sha: local.sha,
+          branch: local.branch,
+          dirty,
+          reason: "Couldn't reach GitHub. Check your internet connection and try again.",
+        });
+      }
+      updateState.latest_sha = latest.sha;
+      updateState.latest_commit_message = latest.message;
+      updateState.latest_commit_date = latest.date;
+      const available = latest.sha && latest.sha !== local.sha;
+      updateState.status = available ? "available" : "idle";
+      return json(res, 200, {
+        status: updateState.status,
+        update_available: available,
+        current_sha: local.sha,
+        latest_sha: latest.sha,
+        latest_commit_message: latest.message,
+        latest_commit_date: latest.date,
+        branch: local.branch,
+        dirty,
+        // R5 hint — if dirty, the apply endpoint will refuse. Surface that here too.
+        blocked_reason: dirty ? "Working tree has uncommitted changes. Commit or stash first." : null,
+      });
+    }
+
+    if (req.method === "POST" && url === "/update/apply") {
+      // Don't await — kick off the job and return immediately. Launcher polls
+      // /update/status for progress. Saves the user from a 60s blocked request.
+      applyUpdate().catch((e) => {
+        finishUpdate(false, e?.message ?? "Unknown error during update");
+      });
+      return json(res, 200, { ok: true, started: true });
+    }
+
+    if (req.method === "GET" && url === "/update/status") {
+      return json(res, 200, {
+        ...updateState,
+        // Trim the log when serializing — last 60 lines is plenty for the
+        // launcher UI; full log stays in memory if anyone debugs further.
+        log: updateState.log.slice(-60),
+      });
+    }
+
+    if (req.method === "POST" && url === "/web/rebuild") {
+      // Clean rebuild: stop web → wipe .next → start fresh. Fixes
+      // "CSS not loading / page renders unstyled" caused by stale chunk refs.
+      const result = cleanRebuild();
+      if (!result.ok) return json(res, 500, result);
+      // Wait a beat for the FS to settle then restart.
+      setTimeout(() => startWeb(), 800);
+      return json(res, 200, { ok: true, deleted_next_cache: true, restart_initiated: true });
+    }
+    if (req.method === "POST" && url === "/quit") {
+      // Stop the web child, ack to the caller, then exit the sidecar.
+      stopWeb();
+      json(res, 200, { ok: true, bye: true });
+      setTimeout(() => { try { server.close(); } catch {} process.exit(0); }, 250);
+      return;
+    }
 
     if (req.method === "GET" && url === "/config") {
       return json(res, 200, readEnvLocal());
+    }
+    if (req.method === "GET" && url === "/diagnostics") {
+      let pkgVersion = "unknown";
+      try { pkgVersion = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, "package.json"), "utf8")).version || "unknown"; } catch {}
+      return json(res, 200, {
+        adforge_version: pkgVersion,
+        node_version: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        os_release: os.release(),
+        os_type: os.type(),
+        web_status: webStatus,
+        web_port: webPort,
+        sync_port: PORT,
+        web_pid: webChild?.pid ?? null,
+        web_uptime_ms: webStartedAt ? Date.now() - webStartedAt : 0,
+        web_last_log: webLastLog,
+        cwd: PROJECT_ROOT,
+        timestamp: new Date().toISOString(),
+      });
     }
     if (req.method === "POST" && url === "/config") {
       const body = await readBody(req);
@@ -278,6 +637,10 @@ const server = http.createServer(async (req, res) => {
     return json(res, 500, { ok: false, error: String(e?.message ?? e) });
   }
 });
+
+// Pick up the configured web port at boot so /status is correct
+// before the user clicks Start.
+try { webPort = envPort(readEnvLocal().PORT, 3005); } catch {}
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`[adforge] launcher + sync listening on http://127.0.0.1:${PORT}`);

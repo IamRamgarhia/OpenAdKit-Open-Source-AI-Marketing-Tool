@@ -1,16 +1,24 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, Suspense, memo, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, Save, AlertTriangle, StopCircle } from "lucide-react";
 import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
 import { CopyButton } from "@/components/CopyButton";
 import { useThrottledStream } from "@/lib/stream-hook";
 import { getApiKey, getModel, getActiveBrainId, addUsage, getLanguage, getToneOverride, getAutoSave } from "@/lib/settings";
-import { streamClaude, estimateCostUsd, tryParseJson } from "@/lib/claude";
+import { streamClaude, estimateCostUsd, tryParseJson, llmStream } from "@/lib/llm";
+import { getProvider, type Provider } from "@/lib/providers";
+import { getProviderKey } from "@/lib/settings";
 import { getBrain, saveAd, type GeneratedAd } from "@/lib/storage";
 import { buildBrandSystemPrompt, type BrandBrain } from "@/lib/brand-brain";
 import { applySmartFill } from "@/lib/smart-fill";
+import { rememberLastGenerated, suggestNextSteps, type NextStep } from "@/lib/next-steps";
+import { providerSupportsVision, fileToImagePart, pickVisionProvider } from "@/lib/providers/vision";
+import { getActiveProviderId } from "@/lib/settings";
+import type { ContentPart, ImagePart } from "@/lib/providers/types";
+import Link from "next/link";
 import type { GeneratorConfig, InputField } from "@/lib/generator-config";
 
 interface Props<I extends Record<string, unknown>> {
@@ -21,12 +29,15 @@ interface Props<I extends Record<string, unknown>> {
 export function GeneratorShell<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
   return (
     <ApiKeyGate>
-      <Inner config={config} scope={scope} />
+      <Suspense fallback={null}>
+        <Inner config={config} scope={scope} />
+      </Suspense>
     </ApiKeyGate>
   );
 }
 
 function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
+  const searchParams = useSearchParams();
   const [input, setInput] = useState<I>(config.initial);
   const [brain, setBrain] = useState<BrandBrain | null>(null);
   const [running, setRunning] = useState(false);
@@ -34,21 +45,37 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [hasRun, setHasRun] = useState(false);
+  const [nextSteps, setNextSteps] = useState<NextStep[]>([]);
+  const [fillToast, setFillToast] = useState<string | null>(null);
   const stream = useThrottledStream();
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const loadBrain = async () => {
+    const loadBrain = async (opts: { resetForm?: boolean } = {}) => {
       const id = getActiveBrainId();
       const b = id ? (await getBrain(id)) ?? null : null;
       setBrain(b);
-      // Smart-fill: pre-populate any empty input fields from the active brand brain
-      setInput((cur) => applySmartFill(config.fields, cur, b));
+      // Smart-fill behavior:
+      //   - On initial load + on brain attribute edits: top-up empty fields only.
+      //   - On active-client SWITCH: reset form to defaults, then auto-fill from
+      //     the new brain. This is what "select a client → all tools populate"
+      //     means — switching clients shouldn't leave the previous client's
+      //     industry / audience / etc. in the form.
+      if (opts.resetForm) {
+        setInput(applyQueryOverrides(applySmartFill(config.fields, config.initial, b), searchParams));
+      } else {
+        setInput((cur) => applyQueryOverrides(applySmartFill(config.fields, cur, b), searchParams));
+      }
     };
     loadBrain();
-    const h = () => loadBrain();
-    window.addEventListener("ados:brains-changed", h);
-    return () => window.removeEventListener("ados:brains-changed", h);
+    const handleBrainsChanged = () => loadBrain();
+    const handleClientSwitched = () => loadBrain({ resetForm: true });
+    window.addEventListener("ados:brains-changed", handleBrainsChanged);
+    window.addEventListener("ados:active-brain-changed", handleClientSwitched);
+    return () => {
+      window.removeEventListener("ados:brains-changed", handleBrainsChanged);
+      window.removeEventListener("ados:active-brain-changed", handleClientSwitched);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,9 +105,13 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
     setParsed(null);
     stream.reset();
 
-    const missing = config.fields.filter(
-      (f) => f.required && !String((input as any)[f.name] ?? "").trim()
-    );
+    // Validate required fields. Image fields are required if their value is null.
+    const missing = config.fields.filter((f) => {
+      if (!f.required) return false;
+      const v = (input as any)[f.name];
+      if (f.kind === "image") return !v;
+      return !String(v ?? "").trim();
+    });
     if (missing.length) {
       setError(`Required: ${missing.map((m) => m.label).join(", ")}`);
       return;
@@ -91,25 +122,83 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
       return;
     }
 
+    // Vision capability check: if any image fields have a value, the active
+    // provider+model must support vision. When it doesn't, we either auto-pick
+    // a vision-capable fallback (if the user has a key for one) or hard-fail
+    // with a specific switch suggestion.
+    const imageFields = config.fields.filter((f) => f.kind === "image");
+    const attachedImages: ImagePart[] = imageFields
+      .map((f) => (input as any)[f.name])
+      .filter((v): v is ImagePart => Boolean(v && (v as ImagePart).type === "image"));
+    if (attachedImages.length) {
+      const providerId = getActiveProviderId() as any;
+      if (!providerId || !providerSupportsVision(providerId, getModel())) {
+        const fallback = pickVisionProvider(providerId);
+        if (fallback) {
+          setError(
+            `Active provider can't read images. Falling back to ${fallback} for this run only. Make it permanent in Settings.`
+          );
+          // Let the run continue — llmStream below will use providerOverride.
+          (input as any).__vision_provider_override = fallback;
+        } else {
+          setError(
+            "Active provider can't read images, and no vision-capable provider has a saved key. Add a key for Claude / OpenAI / Gemini / OpenRouter in Settings, or remove the screenshot."
+          );
+          return;
+        }
+      }
+    }
+
     setRunning(true);
     setHasRun(true);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const system = buildBrandSystemPrompt(brain, { language: getLanguage(), tone_override: getToneOverride() });
+      const system = buildBrandSystemPrompt(brain, {
+        language: getLanguage(),
+        tone_override: getToneOverride(),
+        skip_framework_stack: config.skip_framework_stack,
+      });
       const prompt = config.buildPrompt(input, brain);
-      const res = await streamClaude(
-        {
-          apiKey,
-          model: getModel(),
-          system,
-          messages: [{ role: "user", content: prompt }],
-          maxTokens: config.maxTokens ?? 3000,
-          temperature: config.temperature ?? 0.7,
-          signal: controller.signal,
-        },
-        { onDelta: stream.append }
-      );
+      // Build content. With no images, send a plain string for cheapest path.
+      // With images, send the array of parts (images first → text last is the
+      // convention all three vision-capable providers expect).
+      const content: string | ContentPart[] = attachedImages.length
+        ? [...attachedImages, { type: "text", text: prompt }]
+        : prompt;
+
+      // If the vision fallback was triggered above, pass the override down so
+      // llmStream resolves the call against that provider instead of the
+      // active one. The user-facing toast already explained the swap.
+      const visionFallbackId: string | undefined = (input as any).__vision_provider_override;
+      const fallbackProvider: Provider | null = visionFallbackId ? getProvider(visionFallbackId) ?? null : null;
+      const fallbackKey = fallbackProvider ? getProviderKey(fallbackProvider.id) : undefined;
+
+      const res = fallbackProvider
+        ? await llmStream(
+            {
+              system,
+              messages: [{ role: "user", content }],
+              maxTokens: config.maxTokens ?? 3000,
+              temperature: config.temperature ?? 0.7,
+              signal: controller.signal,
+              providerOverride: fallbackProvider,
+              apiKeyOverride: fallbackKey,
+            },
+            { onDelta: stream.append }
+          )
+        : await streamClaude(
+            {
+              apiKey,
+              model: getModel(),
+              system,
+              messages: [{ role: "user", content }],
+              maxTokens: config.maxTokens ?? 3000,
+              temperature: config.temperature ?? 0.7,
+              signal: controller.signal,
+            },
+            { onDelta: stream.append }
+          );
 
       const cost = estimateCostUsd(res.modelId, res.usage);
       addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
@@ -142,6 +231,15 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
         };
         await saveAd(ad);
         setSavedId(ad.id);
+        rememberLastGenerated({
+          id: ad.id,
+          title: ad.title,
+          platform: ad.platform,
+          campaign_type: ad.campaign_type,
+          brand_id: ad.brand_id,
+          saved_at: ad.created_at,
+        });
+        setNextSteps(suggestNextSteps({ platform: ad.platform, campaign_type: ad.campaign_type, ad_id: ad.id }));
       }
     } catch (e: any) {
       if (e?.name === "AbortError") setError("Generation stopped.");
@@ -166,43 +264,85 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
               <span className="text-[11px] font-normal normal-case tracking-normal text-ink-muted">
                 {config.fields.filter(f => f.required).length} required
               </span>
-              {brain ? (
-                <button
-                  onClick={() => setInput((cur) => applySmartFill(config.fields, cur as any, brain) as I)}
-                  className="text-[12px] font-medium normal-case tracking-normal text-live hover:underline"
-                  title="Auto-fill empty fields from the active brand brain"
-                >
-                  ✨ smart-fill
-                </button>
-              ) : null}
             </div>
 
             {!brain ? (
-              <div className="border border-live/30 bg-live/5 text-live text-[13px] px-3 py-2 flex gap-2 items-start">
-                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                <div>
-                  No active brand brain — copy will be generic + smart-fill disabled.{" "}
-                  <a href="/brand" className="underline font-medium">Create one</a>.
+              <div className="border border-live/40 bg-live/[0.06] px-4 py-3">
+                <div className="flex items-start gap-2 mb-2">
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5 text-live" />
+                  <div className="text-[13px] text-ink">
+                    <div className="font-medium text-live">Output will be generic without a client.</div>
+                    <p className="text-ink-muted text-[12px] mt-1 leading-relaxed">
+                      Every AdForge tool reads the active client's brand brain — voice, audience, USP, content pillars. Without one, the AI defaults to neutral DR copy. Takes ~10 seconds to set up by pasting a website URL.
+                    </p>
+                  </div>
                 </div>
+                <a href="/brand/new" className="btn-primary text-[12px]">
+                  ✨ Add your first client
+                </a>
               </div>
             ) : (
-              <div className="border border-base-700 bg-base-900/30 text-[13px] px-3 py-2 flex items-center gap-2 text-ink-muted">
-                <span className="h-2 w-2 bg-pos rounded-full" />
-                <span>Active brand: <span className="text-pos font-medium">{brain.name || brain.business_name}</span></span>
-                <div className="flex-1" />
-                <span className="text-[11px] text-ink-faint hidden md:inline">Saved to history under this brand</span>
+              <div className="border border-live/30 bg-live/5 px-3 py-2.5 space-y-2">
+                <div className="flex items-center gap-2 text-[13px]">
+                  <span className="h-2 w-2 bg-pos rounded-full" />
+                  <span className="text-ink-muted">Active brand: <span className="text-pos font-medium">{brain.name || brain.business_name}</span></span>
+                  <div className="flex-1" />
+                  <span className="text-[11px] text-ink-faint hidden md:inline">Saved to history under this brand</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInput((cur) => {
+                      const next = applySmartFill(config.fields, cur as any, brain) as I;
+                      // Count fields that actually changed so the user sees what happened.
+                      let filled = 0;
+                      for (const f of config.fields) {
+                        if ((cur as any)[f.name] !== (next as any)[f.name]) filled++;
+                      }
+                      if (filled === 0) {
+                        setFillToast("All fields already match — nothing to fill.");
+                      } else {
+                        setFillToast(`Filled ${filled} field${filled === 1 ? "" : "s"} from ${brain.name || brain.business_name}. Edit anything that looks off.`);
+                      }
+                      setTimeout(() => setFillToast(null), 3000);
+                      return next;
+                    });
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-live text-base-950 font-semibold text-[13px] hover:bg-live/90 transition"
+                  title="Auto-fill empty fields from this client's brand brain"
+                >
+                  <Sparkles size={13} />
+                  <span>Auto-fill from {brain.name || brain.business_name}</span>
+                </button>
+                {fillToast ? (
+                  <div className="text-[11px] text-pos font-mono uppercase tracking-ui-wide animate-fade-up">
+                    ✓ {fillToast}
+                  </div>
+                ) : null}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              {config.fields.map((f) => (
-                <FieldRenderer
-                  key={f.name}
-                  field={f}
-                  value={(input as any)[f.name]}
-                  onChange={(v) => setField(f.name, v)}
-                />
-              ))}
+              {config.fields.map((f, i) => {
+                const prevSection = i > 0 ? config.fields[i - 1].section : undefined;
+                const showHeading = f.section && f.section !== prevSection;
+                return (
+                  <Fragment key={f.name}>
+                    {showHeading ? (
+                      <div className="col-span-2 mt-2 first:mt-0">
+                        <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live pb-1 border-b border-base-700">
+                          {f.section}
+                        </div>
+                      </div>
+                    ) : null}
+                    <FieldRenderer
+                      field={f}
+                      value={(input as any)[f.name]}
+                      onChange={(v) => setField(f.name, v)}
+                    />
+                  </Fragment>
+                );
+              })}
             </div>
 
             {error ? (
@@ -234,8 +374,60 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
 
         <section className="lg:col-span-3 space-y-4">
           <OutputArea running={running} stream={stream.text} parsed={parsed} config={config as unknown as GeneratorConfig<Record<string, unknown>>} hasRun={hasRun} />
+          {savedId && nextSteps.length ? <NextStepsPanel steps={nextSteps} /> : null}
         </section>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Apply URL query params on top of a smart-filled input. Only fields whose
+ * names actually appear in the generator's config get overridden, so URLs like
+ * `/optimize/ctr?platform=Meta+Feed&ad_id=...` are safe to pass through unknown
+ * params (ad_id, brand_id) without polluting form state.
+ *
+ * Skipped if `?carry=0` is passed (used to force-reset the form).
+ */
+function applyQueryOverrides<I extends Record<string, unknown>>(
+  current: I,
+  searchParams: URLSearchParams | null
+): I {
+  if (!searchParams) return current;
+  if (searchParams.get("carry") === "0") return current;
+  const next: any = { ...current };
+  for (const [key, val] of searchParams.entries()) {
+    if (key === "ad_id" || key === "brand_id" || key === "carry") continue;
+    if (val) next[key] = val;
+  }
+  return next as I;
+}
+
+function NextStepsPanel({ steps }: { steps: NextStep[] }) {
+  return (
+    <div className="border border-live/30 bg-live/[0.03] p-4 rounded-md">
+      <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-3 pb-2 border-b border-base-700">
+        What's next · this asset is saved, here are the natural follow-ups
+      </div>
+      <ul className="space-y-1.5">
+        {steps.map((s) => {
+          const qs = s.carry ? "?" + new URLSearchParams(s.carry).toString() : "";
+          return (
+            <li key={s.href + (s.carry?.platform ?? "")}>
+              <Link
+                href={s.href + qs}
+                className="flex items-start gap-3 px-2 py-1.5 hover:bg-base-800/40 transition rounded-sm"
+              >
+                <span className="text-live text-xs mt-0.5">→</span>
+                <div className="flex-1">
+                  <div className="text-sm text-ink">{s.label}</div>
+                  <div className="text-[11px] text-ink-muted">{s.reason}</div>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -284,6 +476,8 @@ const FieldRenderer = memo(function FieldRenderer({
           value={(value as number | string) ?? ""}
           onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
         />
+      ) : field.kind === "image" ? (
+        <ImageInput value={value as ImagePart | null} onChange={onChange} placeholder={field.placeholder} />
       ) : (
         <input
           className="input-base"
@@ -296,6 +490,111 @@ const FieldRenderer = memo(function FieldRenderer({
     </div>
   );
 });
+
+function ImageInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: ImagePart | null;
+  onChange: (v: ImagePart | null) => void;
+  placeholder?: string;
+}) {
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  async function handle(file: File | null | undefined) {
+    setErr(null);
+    if (!file) return;
+    setBusy(true);
+    try {
+      const part = await fileToImagePart(file);
+      onChange(part);
+    } catch (e: any) {
+      setErr(e?.message ?? "Couldn't read that image.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (value) {
+    const dataUrl = `data:${value.media_type};base64,${value.data}`;
+    return (
+      <div className="border border-base-700 bg-base-900/40 p-2 rounded-md">
+        <div className="flex items-start gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={dataUrl} alt="upload preview" className="h-20 w-20 object-cover border border-base-700" />
+          <div className="flex-1 text-[11px] text-ink-muted">
+            <div>Image ready · {value.media_type} · {Math.round((value.data.length * 3) / 4 / 1024)} KB</div>
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              className="text-[10px] text-neg hover:underline font-mono uppercase tracking-ui-wide mt-1"
+            >
+              remove
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={busy}
+        className="w-full border border-dashed border-base-600 bg-base-900/30 hover:border-base-500 hover:bg-base-800/40 transition px-3 py-4 text-xs text-ink-muted"
+      >
+        {busy ? "Reading image…" : placeholder ?? "Drop a screenshot here or click to upload (PNG / JPEG / WebP / GIF · ≤ 4.5 MB)"}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => handle(e.target.files?.[0])}
+      />
+      {err ? <p className="text-[10px] text-neg mt-1 font-mono uppercase tracking-ui-wide">{err}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Surfaces framework_meta the AI returns alongside structured JSON output.
+ * The framework stack in the system prompt asks for awareness_level /
+ * framework_used / u_scores — this component renders them as a tight pill row
+ * above the main output so users see why the AI made the calls it did.
+ *
+ * Looks for the metadata in two shapes: top-level `framework_meta` (added by
+ * the wizard-era prompts) OR top-level `awareness_level` (older direct shape).
+ */
+function FrameworkMetaPill({ json }: { json: any }) {
+  const meta = json?.framework_meta ?? json;
+  const aw = meta?.awareness_level;
+  const fw = meta?.framework_used;
+  const us = meta?.u_scores;
+  if (!aw && !fw && !us) return null;
+  const total = us ? (us.useful ?? 0) + (us.urgent ?? 0) + (us.unique ?? 0) + (us.ultra_specific ?? 0) : null;
+  return (
+    <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono uppercase tracking-ui-wide border border-base-700 bg-base-900/30 px-2 py-1.5">
+      <span className="text-ink-faint">framework:</span>
+      {aw ? <span className="text-info">{String(aw).replace(/_/g, " ")}</span> : null}
+      {aw && fw ? <span className="text-ink-faint">·</span> : null}
+      {fw ? <span className="text-live">{fw}</span> : null}
+      {total !== null ? (
+        <>
+          <span className="text-ink-faint">·</span>
+          <span className={total >= 12 ? "text-pos" : total >= 8 ? "text-live" : "text-neg"}>
+            U-score {total}/16
+          </span>
+        </>
+      ) : null}
+    </div>
+  );
+}
 
 const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
   running,
@@ -344,6 +643,7 @@ const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
   if (parsed && config.renderJson) {
     return (
       <div className="space-y-4 animate-fade-up">
+        <FrameworkMetaPill json={parsed} />
         {config.renderJson(parsed)}
         <div className="flex items-center justify-end gap-2">
           <CopyButton text={stream} label="copy raw output" />

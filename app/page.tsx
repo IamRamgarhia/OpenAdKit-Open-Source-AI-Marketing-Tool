@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, Brain, History, Settings, Rocket, Target, FileBarChart, Activity, ClipboardList, BookOpen, Hash, ImageIcon, Search, GitBranch, Calendar } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { FeatureTour } from "@/components/FeatureTour";
-import { hasAnyKeyConfigured, isOnboarded } from "@/lib/settings";
+import { hasAnyKeyConfigured, isOnboarded, getActiveBrainId } from "@/lib/settings";
 import { listBrains, listAds, type GeneratedAd } from "@/lib/storage";
 import type { BrandBrain } from "@/lib/brand-brain";
 
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [brains, setBrains] = useState<BrandBrain[]>([]);
   const [recent, setRecent] = useState<GeneratedAd[]>([]);
+  const [activeBrainId, setActiveBrainIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,11 +47,27 @@ export default function Dashboard() {
       router.replace("/setup");
       return;
     }
-    Promise.all([listBrains(), listAds()]).then(([b, a]) => {
-      setBrains(b);
-      setRecent(a.slice(0, 6));
-      setLoading(false);
-    });
+    const load = () => {
+      const active = getActiveBrainId();
+      setActiveBrainIdState(active);
+      // Scope recent generations to the active client when one is selected —
+      // every other "active client" surface in the app does the same, so the
+      // dashboard's recent list shouldn't be the one place showing other
+      // clients' work.
+      Promise.all([listBrains(), listAds(active ? { brand_id: active } : undefined)]).then(([b, a]) => {
+        setBrains(b);
+        setRecent(a.slice(0, 6));
+        setLoading(false);
+      });
+    };
+    load();
+    const onChange = () => load();
+    window.addEventListener("ados:brains-changed", onChange);
+    window.addEventListener("ados:active-brain-changed", onChange);
+    return () => {
+      window.removeEventListener("ados:brains-changed", onChange);
+      window.removeEventListener("ados:active-brain-changed", onChange);
+    };
   }, [router]);
 
   if (loading) return null;
@@ -63,6 +80,29 @@ export default function Dashboard() {
         title="Cockpit"
         subtitle="Your browser-only AI ads operating system. Everything you generate stays on this device."
       />
+
+      {/* First-touch CTA: a fresh install has no brand brain yet. Without it,
+          every generator below produces generic copy. Surface this clearly
+          before the user starts clicking tools and wonders why the output
+          sounds nothing like their brand. */}
+      {brains.length === 0 ? (
+        <div className="mb-6 border border-live/40 bg-live/[0.04] p-6 grid md:grid-cols-[1fr_auto] items-center gap-4 animate-fade-up">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-1">step 1 of 1</div>
+            <h2 className="font-display italic text-2xl text-ink leading-tight">Add your first client to unlock everything.</h2>
+            <p className="text-sm text-ink-muted mt-2 leading-relaxed max-w-xl">
+              AdForge's brand brain is what makes every output sound like <em>this</em> client — not generic AI copy. Paste a website URL and the AI auto-extracts the niche, products, platforms, content pillars, and tone in ~10 seconds.
+            </p>
+          </div>
+          <Link
+            href="/brand/new"
+            className="btn-primary whitespace-nowrap text-base"
+          >
+            <Brain size={14} />
+            Create first client
+          </Link>
+        </div>
+      ) : null}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 stagger">
         {tiles.map((t) => {
@@ -94,7 +134,14 @@ export default function Dashboard() {
 
       <section className="mt-10 stagger">
         <div className="flex items-center justify-between mb-3 hairline pb-2">
-          <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink">Recent generations</h2>
+          <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink">
+            Recent generations
+            {activeBrainId ? (
+              <span className="ml-2 text-[10px] font-mono uppercase tracking-ui-wide text-live normal-case">
+                · scoped to active client
+              </span>
+            ) : null}
+          </h2>
           <Link href="/history" className="text-[12px] font-medium uppercase tracking-wide text-live hover:underline">
             view all →
           </Link>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Trash2, Download, Search, Star, TrendingUp } from "lucide-react";
 import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
@@ -8,6 +9,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { PerformanceDialog } from "@/components/PerformanceDialog";
 import { listAds, listBrains, softDeleteAd, restoreAd, updateAd, type GeneratedAd, type Platform } from "@/lib/storage";
 import { showUndoToast } from "@/components/UndoToast";
+import { SkeletonRow, LoadingAnnouncement } from "@/components/Skeleton";
 import { getActiveBrainId } from "@/lib/settings";
 import type { BrandBrain } from "@/lib/brand-brain";
 
@@ -25,12 +27,16 @@ const statusTone: Record<GeneratedAd["status"], string> = {
 export default function HistoryPage() {
   return (
     <ApiKeyGate>
-      <HistoryInner />
+      <Suspense fallback={null}>
+        <HistoryInner />
+      </Suspense>
     </ApiKeyGate>
   );
 }
 
 function HistoryInner() {
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get("focus");
   const [ads, setAds] = useState<GeneratedAd[]>([]);
   const [brains, setBrains] = useState<BrandBrain[]>([]);
   const [q, setQ] = useState("");
@@ -41,12 +47,14 @@ function HistoryInner() {
   const [scope, setScope] = useState<"active_brand" | "all_brands">("active_brand");
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
   const [perfDialogAd, setPerfDialogAd] = useState<GeneratedAd | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function refresh() {
     const [a, b] = await Promise.all([listAds(), listBrains()]);
     setAds(a);
     setBrains(b);
     setActiveBrandId(getActiveBrainId());
+    setLoading(false);
   }
   useEffect(() => {
     refresh();
@@ -54,6 +62,25 @@ function HistoryInner() {
     window.addEventListener("ados:brains-changed", h);
     return () => window.removeEventListener("ados:brains-changed", h);
   }, []);
+
+  // Deep-link support: /history?focus=<adId> expands the row and scrolls it
+  // into view. Wait until ads are loaded so the target element exists, then
+  // widen the scope to "all brands" if the focused ad isn't in the active one
+  // (otherwise the row may be filtered out).
+  useEffect(() => {
+    if (!focusId || ads.length === 0) return;
+    const target = ads.find((a) => a.id === focusId);
+    if (!target) return;
+    if (activeBrandId && target.brand_id !== activeBrandId) setScope("all_brands");
+    setExpanded(focusId);
+    // Wait one frame so the row is rendered before scrolling.
+    requestAnimationFrame(() => {
+      const el = document.getElementById(focusId);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.classList.add("ring-2", "ring-live");
+      setTimeout(() => el?.classList.remove("ring-2", "ring-live"), 2400);
+    });
+  }, [focusId, ads, activeBrandId]);
 
   const filtered = useMemo(() => {
     return ads.filter((a) => {
@@ -68,6 +95,25 @@ function HistoryInner() {
   }, [ads, q, platform, status, starredOnly, scope, activeBrandId]);
 
   const activeBrand = brains.find((b) => b.id === activeBrandId);
+
+  // Per-brand cost rollup over the visible (filtered) set + last-30-days slice.
+  // Agencies running N clients can see at a glance which client is consuming
+  // the most token budget this month.
+  const perBrandCost = useMemo(() => {
+    const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const rows = new Map<string, { brain_id: string; name: string; total: number; last30: number; count: number; tokens: number }>();
+    for (const a of ads) {
+      const brain = brains.find((b) => b.id === a.brand_id);
+      const name = brain?.name || brain?.business_name || "(no client)";
+      const cur = rows.get(a.brand_id) ?? { brain_id: a.brand_id, name, total: 0, last30: 0, count: 0, tokens: 0 };
+      cur.total += a.cost_usd ?? 0;
+      cur.count += 1;
+      cur.tokens += (a.usage_input_tokens ?? 0) + (a.usage_output_tokens ?? 0);
+      if (a.created_at >= monthAgo) cur.last30 += a.cost_usd ?? 0;
+      rows.set(a.brand_id, cur);
+    }
+    return Array.from(rows.values()).sort((a, b) => b.last30 - a.last30);
+  }, [ads, brains]);
 
   function download(name: string, content: string, type: string) {
     const blob = new Blob([content], { type });
@@ -129,6 +175,42 @@ function HistoryInner() {
         title="History"
         subtitle={`${ads.length} generation${ads.length === 1 ? "" : "s"} stored in this browser. Tag with status, star winners, export anywhere.`}
       />
+
+      {perBrandCost.length > 1 ? (
+        <details className="mb-3 border border-base-600 bg-base-900/40 group">
+          <summary className="cursor-pointer list-none flex items-center gap-2 px-3 py-2 hover:bg-base-800/40 transition">
+            <span className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">Spend by client · last 30d</span>
+            <span className="flex-1" />
+            <span className="text-[11px] tabular text-ink">
+              total ${perBrandCost.reduce((s, r) => s + r.last30, 0).toFixed(2)}
+            </span>
+            <span className="text-[10px] text-ink-faint font-mono uppercase tracking-ui-wide group-open:hidden">show</span>
+            <span className="text-[10px] text-ink-faint font-mono uppercase tracking-ui-wide hidden group-open:inline">hide</span>
+          </summary>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[9px] font-mono uppercase tracking-ui-mega text-ink-faint border-t border-base-700">
+                <th className="text-left px-3 py-1.5 font-normal">client</th>
+                <th className="text-right px-3 py-1.5 font-normal">last 30d</th>
+                <th className="text-right px-3 py-1.5 font-normal">all time</th>
+                <th className="text-right px-3 py-1.5 font-normal">runs</th>
+                <th className="text-right px-3 py-1.5 font-normal">tokens</th>
+              </tr>
+            </thead>
+            <tbody>
+              {perBrandCost.map((r) => (
+                <tr key={r.brain_id} className="border-t border-base-700/50 hover:bg-base-800/30">
+                  <td className="px-3 py-1.5 text-ink">{r.name}</td>
+                  <td className="px-3 py-1.5 text-right tabular text-pos">${r.last30.toFixed(2)}</td>
+                  <td className="px-3 py-1.5 text-right tabular text-ink-muted">${r.total.toFixed(2)}</td>
+                  <td className="px-3 py-1.5 text-right tabular text-ink-muted">{r.count}</td>
+                  <td className="px-3 py-1.5 text-right tabular text-ink-subtle">{r.tokens.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      ) : null}
 
       <div className="flex items-center gap-2 mb-3 border border-base-600 bg-base-900/40 p-2">
         <span className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint ml-1">scope:</span>
@@ -199,10 +281,32 @@ function HistoryInner() {
         ))}
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="border border-base-600 bg-base-900/40 px-4 py-3 text-sm text-ink-muted">
-          no matching generations.
+      {loading ? (
+        <div className="space-y-1.5" aria-busy="true">
+          <LoadingAnnouncement what="history" />
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </div>
+      ) : filtered.length === 0 ? (
+        ads.length === 0 ? (
+          <div className="border border-live/30 bg-live/[0.03] p-6 text-center">
+            <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-2">empty history</div>
+            <h3 className="font-display italic text-xl text-ink leading-tight mb-2">Nothing generated yet.</h3>
+            <p className="text-sm text-ink-muted max-w-md mx-auto leading-relaxed mb-4">
+              Every ad you generate gets saved here automatically — local-only, never sent off-device. Start with the wizard or pick a tool from the sidebar.
+            </p>
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <a href="/launch/wizard" className="btn-primary">⚡ 10-minute Launch Wizard</a>
+              <a href="/" className="btn-ghost">Browse tools</a>
+            </div>
+          </div>
+        ) : (
+          <div className="border border-base-600 bg-base-900/40 px-4 py-3 text-sm text-ink-muted">
+            no matching generations — try clearing filters above.
+          </div>
+        )
       ) : (
         <div className="space-y-1.5">
           {filtered.map((a) => (

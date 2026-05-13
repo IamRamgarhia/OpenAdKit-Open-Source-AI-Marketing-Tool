@@ -1,7 +1,7 @@
 "use client";
 
 import { GeneratorShell } from "@/components/GeneratorShell";
-import { Section, Pill, ScoreBar } from "@/components/OutputBlocks";
+import { Section, Pill, ScoreBar, Kv } from "@/components/OutputBlocks";
 import { CharBadge } from "@/components/CharBadge";
 import { CopyButton } from "@/components/CopyButton";
 import { buildLandingPrompt, type LandingPageInput } from "@/lib/prompts/landing-page";
@@ -9,16 +9,47 @@ import type { GeneratorConfig } from "@/lib/generator-config";
 
 const config: GeneratorConfig<LandingPageInput & Record<string, unknown>> = {
   title: "Landing Page Grader",
-  subtitle: "8 levers scored. Specific fixes with exact quote → replacement. Above-the-fold rewrite included.",
+  subtitle: "8 levers scored against your actual traffic + conversion data. Specific fixes with exact quote → replacement. Above-the-fold rewrite included.",
   platform: "google",
   campaign_type: "LP Grade",
-  maxTokens: 3500,
+  maxTokens: 4000,
   fields: [
-    { name: "ad_promise", label: "Ad promise", kind: "text", required: true, placeholder: "e.g. 'Get 50% off your first month'", span: 2 },
+    { name: "landing_page_url", label: "Landing page URL", kind: "text", section: "Page", placeholder: "https://example.com/lp", span: 2 },
+    { name: "ad_promise", label: "Ad promise (exact wording the visitor clicked)", kind: "text", required: true, placeholder: "Get 50% off your first month", span: 2 },
     { name: "landing_copy", label: "Landing page copy", kind: "textarea", required: true, rows: 8, placeholder: "Paste H1 + subhead + above-the-fold + first sections.", span: 2 },
-    { name: "audience", label: "Audience", kind: "text", required: true, placeholder: "e.g. solo founders", span: 2 },
+    { name: "audience", label: "Audience", kind: "text", required: true, placeholder: "Solo founders, 25-40, US/CA", span: 2 },
+
+    // ----- Performance data -----
+    { name: "visitors", label: "Paid visitors / period", kind: "number", section: "Performance data (last 7-30 days)", placeholder: "e.g. 1850" },
+    { name: "conversions", label: "Conversions", kind: "number", placeholder: "e.g. 28" },
+    { name: "bounce_rate", label: "Bounce rate %", kind: "text", placeholder: "e.g. 68%", hint: "From GA4 or your analytics platform." },
+    { name: "time_on_page", label: "Avg. time on page", kind: "text", placeholder: "e.g. 24s", hint: "Below 30s usually signals weak message match." },
+    { name: "lcp", label: "LCP (Largest Contentful Paint)", kind: "text", placeholder: "e.g. 2.4s", hint: "From PageSpeed Insights or Vercel/CrUX. >2.5s hurts Google QS." },
+    { name: "mobile_pct", label: "% mobile traffic", kind: "text", placeholder: "e.g. 72%", hint: "Above 60% means mobile-first review." },
+
+    { name: "primary_goal", label: "Primary conversion goal", kind: "select", section: "Goal", options: [
+      { value: "lead", label: "Lead capture (form / email)" },
+      { value: "trial", label: "Free trial signup" },
+      { value: "purchase", label: "Purchase / checkout" },
+      { value: "demo", label: "Book a demo" },
+      { value: "subscribe", label: "Newsletter / waitlist" },
+    ] },
+    { name: "lp_screenshot", label: "Screenshot of the landing page (optional)", kind: "image", section: "Optional — drop a screenshot, AI reads it directly", placeholder: "Full-page screenshot. AI judges visual hierarchy, CTA prominence, message match against the ad promise.", span: 2, hint: "Vision-capable providers only (Claude / OpenAI / Gemini)." },
   ],
-  initial: { ad_promise: "", landing_copy: "", audience: "" } as any,
+  initial: {
+    landing_page_url: "",
+    ad_promise: "",
+    landing_copy: "",
+    audience: "",
+    visitors: "" as any,
+    conversions: "" as any,
+    bounce_rate: "",
+    time_on_page: "",
+    lcp: "",
+    mobile_pct: "",
+    primary_goal: "lead",
+    lp_screenshot: null,
+  } as any,
   buildPrompt: (input) => buildLandingPrompt(input as unknown as LandingPageInput),
   buildTitle: (i: any) => `LP · ${i.ad_promise?.slice(0, 30)}`,
   expectJson: true,
@@ -32,6 +63,20 @@ export default function Page() {
 function LpOutput({ json }: { json: any }) {
   return (
     <div className="space-y-4 stagger">
+      {json?.computed_metrics ? (
+        <Section title="Computed metrics — from your numbers">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <Kv k="conversion rate" v={json.computed_metrics.conversion_rate ?? "—"} />
+            <Kv k="bounce vs benchmark" v={json.computed_metrics.bounce_vs_benchmark ?? "—"} />
+            <Kv k="LCP verdict" v={json.computed_metrics.lcp_verdict ?? "—"} />
+            <Kv k="engagement" v={json.computed_metrics.engagement_health ?? "—"} />
+          </div>
+          {json.computed_metrics.notes ? (
+            <p className="text-[11px] text-ink-muted mt-2">{json.computed_metrics.notes}</p>
+          ) : null}
+        </Section>
+      ) : null}
+
       {json?.overall_grade_pulse ? (
         <Section title="Pulse">
           <div className="grid md:grid-cols-3 gap-2">
@@ -57,11 +102,11 @@ function LpOutput({ json }: { json: any }) {
       ) : null}
 
       {json?.fixes?.length ? (
-        <Section title="Fixes">
+        <Section title="Fixes — ranked by lift">
           <ul className="space-y-2">
             {json.fixes.map((f: any, i: number) => (
               <li key={i} className="border border-base-700 p-3">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <Pill text={f.lever?.replace(/_/g, " ")} tone="live" />
                   <Pill text={f.expected_impact} tone={f.expected_impact === "high" ? "pos" : "default"} label="impact" />
                 </div>

@@ -23,6 +23,8 @@ jobs:
         run: npm ci || npm install --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
+      - name: Test
+        run: npm test
       - name: Build
         run: npm run build
       - name: Lint

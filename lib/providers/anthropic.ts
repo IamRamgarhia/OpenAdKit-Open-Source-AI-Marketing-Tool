@@ -1,4 +1,4 @@
-import { LLMError, type LLMCallOptions, type LLMResult, type LLMUsage, type Provider, type StreamHandlers } from "./types";
+import { LLMError, type LLMCallOptions, type LLMMessage, type LLMResult, type LLMUsage, type Provider, type StreamHandlers } from "./types";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const API_VERSION = "2023-06-01";
@@ -10,6 +10,25 @@ function headers(apiKey: string): HeadersInit {
     "anthropic-version": API_VERSION,
     "anthropic-dangerous-direct-browser-access": "true",
   };
+}
+
+/** Translate AdForge's neutral LLMMessage[] into Anthropic's wire format,
+ *  handling both plain text and multimodal (text + image) content. */
+function toAnthropicMessages(messages: LLMMessage[]) {
+  return messages.map((m) => {
+    if (typeof m.content === "string") return { role: m.role, content: m.content };
+    return {
+      role: m.role,
+      content: m.content.map((part) =>
+        part.type === "text"
+          ? { type: "text", text: part.text }
+          : {
+              type: "image",
+              source: { type: "base64", media_type: part.media_type, data: part.data },
+            }
+      ),
+    };
+  });
 }
 
 async function readError(res: Response): Promise<LLMError> {
@@ -30,7 +49,7 @@ async function call(opts: LLMCallOptions): Promise<LLMResult> {
       max_tokens: opts.maxTokens ?? 2048,
       temperature: opts.temperature ?? 0.7,
       system: opts.system,
-      messages: opts.messages,
+      messages: toAnthropicMessages(opts.messages),
     }),
     signal: opts.signal,
   });
@@ -53,7 +72,7 @@ async function stream(opts: LLMCallOptions, handlers: StreamHandlers): Promise<L
       temperature: opts.temperature ?? 0.7,
       stream: true,
       system: opts.system,
-      messages: opts.messages,
+      messages: toAnthropicMessages(opts.messages),
     }),
     signal: opts.signal,
   });
@@ -119,10 +138,11 @@ export const anthropic: Provider = {
   description: "The model AdForge was originally built for. Strongest at long-context reasoning + safety. No free tier; pay-per-use.",
   get_key_url: "https://console.anthropic.com/settings/keys",
   default_model: "claude-sonnet-4-6",
+  supports_vision: true,
   models: [
-    { id: "claude-opus-4-7", label: "Opus 4.7 — deepest reasoning", pricing: { input_per_million_usd: 15, output_per_million_usd: 75 }, best_for: "Complex audits, multi-step reasoning, long teardowns" },
-    { id: "claude-sonnet-4-6", label: "Sonnet 4.6 — balanced (recommended)", pricing: { input_per_million_usd: 3, output_per_million_usd: 15 }, best_for: "Default for ad copy + optimization" },
-    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5 — fastest & cheapest", pricing: { input_per_million_usd: 1, output_per_million_usd: 5 }, best_for: "High-volume hashtag/subject generation" },
+    { id: "claude-opus-4-7", label: "Opus 4.7 — deepest reasoning", pricing: { input_per_million_usd: 15, output_per_million_usd: 75 }, best_for: "Complex audits, multi-step reasoning, long teardowns", supports_vision: true },
+    { id: "claude-sonnet-4-6", label: "Sonnet 4.6 — balanced (recommended)", pricing: { input_per_million_usd: 3, output_per_million_usd: 15 }, best_for: "Default for ad copy + optimization", supports_vision: true },
+    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5 — fastest & cheapest", pricing: { input_per_million_usd: 1, output_per_million_usd: 5 }, best_for: "High-volume hashtag/subject generation", supports_vision: true },
   ],
   testKey,
   call,

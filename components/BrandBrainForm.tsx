@@ -54,6 +54,29 @@ export function BrandBrainForm({ initial }: Props) {
   function setList(key: ListField, raw: string) {
     setBrain((b) => ({ ...b, [key]: splitList(raw) }));
   }
+  function setSocial(platform: keyof BrandBrain["social_links"], value: string) {
+    setBrain((b) => ({ ...b, social_links: { ...b.social_links, [platform]: value } }));
+  }
+  function setCsv(key: "platforms", raw: string) {
+    setBrain((b) => ({ ...b, [key]: raw.split(",").map((s) => s.trim()).filter(Boolean) }));
+  }
+  function togglePending(key: string, on: boolean) {
+    setBrain((b) => {
+      const set = new Set(b.pending_user_input ?? []);
+      if (on) set.add(key); else set.delete(key);
+      return { ...b, pending_user_input: [...set] };
+    });
+  }
+
+  // Which essentials are still blank — used to surface a "fill later or fill now" prompt.
+  const missingEssentials: { key: string; label: string }[] = [];
+  if (!brain.platforms?.length) missingEssentials.push({ key: "platforms", label: "Active platforms" });
+  if (!brain.content_pillars?.length) missingEssentials.push({ key: "content_pillars", label: "Content pillars" });
+  if (!Object.values(brain.social_links ?? {}).some((v) => v && String(v).trim())) {
+    missingEssentials.push({ key: "social_links", label: "Social media links" });
+  }
+  const pending = new Set(brain.pending_user_input ?? []);
+  const blocking = missingEssentials.filter((m) => !pending.has(m.key));
 
   async function extract() {
     setError(null);
@@ -145,6 +168,12 @@ export function BrandBrainForm({ initial }: Props) {
     setError(null);
     if (!brain.business_name.trim()) {
       setError("Business name is required.");
+      return;
+    }
+    if (blocking.length) {
+      setError(
+        `Still missing: ${blocking.map((m) => m.label).join(", ")}. Either fill them in or tick "Fill later" on each row.`
+      );
       return;
     }
     setSaving(true);
@@ -277,6 +306,84 @@ export function BrandBrainForm({ initial }: Props) {
             placeholder="premium / mid / affordable / freemium"
           />
         </div>
+
+        <section className="border border-live/30 bg-live/[0.03] p-4 rounded-md space-y-4">
+          <div>
+            <h3 className="text-[11px] font-mono uppercase tracking-ui-mega text-live">Onboarding essentials · auto-filled from website</h3>
+            <p className="text-xs text-ink-muted mt-1">
+              These drive every generator downstream — Content Calendar, Hashtags, Reels, Strategy. Edit
+              anything AI got wrong. If you don't have something on hand, tick <em>Fill later</em> and
+              move on.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field
+              label="Niche (one-sentence positioning)"
+              value={brain.niche}
+              onChange={(v) => setField("niche", v)}
+              placeholder="DTC sleep brand selling weighted blankets to women 35-55"
+            />
+            <ListInput
+              label="Products / offers"
+              value={brain.products}
+              onChange={(v) => setBrain((b) => ({ ...b, products: splitList(v) }))}
+            />
+          </div>
+
+          <PendingRow
+            label="Active social platforms"
+            hint="Comma-separated · e.g. Instagram, TikTok, LinkedIn"
+            empty={!brain.platforms?.length}
+            pending={pending.has("platforms")}
+            onTogglePending={(on) => togglePending("platforms", on)}
+          >
+            <input
+              className="input-base"
+              value={(brain.platforms ?? []).join(", ")}
+              onChange={(e) => setCsv("platforms", e.target.value)}
+              placeholder="Instagram, TikTok, LinkedIn"
+            />
+          </PendingRow>
+
+          <PendingRow
+            label="Content pillars (recurring themes)"
+            hint="One per line · 4-6 themes the brand consistently posts about"
+            empty={!brain.content_pillars?.length}
+            pending={pending.has("content_pillars")}
+            onTogglePending={(on) => togglePending("content_pillars", on)}
+          >
+            <textarea
+              rows={3}
+              className="input-base font-mono text-xs"
+              value={joinList(brain.content_pillars ?? [])}
+              onChange={(e) => setBrain((b) => ({ ...b, content_pillars: splitList(e.target.value) }))}
+              placeholder={"Founder stories\nBehind the scenes\nCustomer wins\nProduct education"}
+            />
+          </PendingRow>
+
+          <PendingRow
+            label="Social media links"
+            hint="Paste full URL or @handle for each platform the brand uses"
+            empty={!Object.values(brain.social_links ?? {}).some((v) => v && String(v).trim())}
+            pending={pending.has("social_links")}
+            onTogglePending={(on) => togglePending("social_links", on)}
+          >
+            <div className="grid gap-2 md:grid-cols-2">
+              {(["instagram", "tiktok", "youtube", "linkedin", "twitter", "facebook"] as const).map((p) => (
+                <div key={p}>
+                  <label className="text-[10px] font-mono uppercase tracking-ui-wide text-ink-faint">{p}</label>
+                  <input
+                    className="input-base"
+                    value={(brain.social_links as any)?.[p] ?? ""}
+                    onChange={(e) => setSocial(p, e.target.value)}
+                    placeholder={p === "tiktok" ? "@brand or full URL" : "@brand or full URL"}
+                  />
+                </div>
+              ))}
+            </div>
+          </PendingRow>
+        </section>
 
         <div className="grid gap-4 md:grid-cols-2">
           <ListInput
@@ -414,6 +521,50 @@ function ListInput({
         value={joinList(value)}
         onChange={(e) => onChange(e.target.value)}
       />
+    </div>
+  );
+}
+
+/**
+ * Onboarding row that surfaces a "Fill later" checkbox when the value is empty.
+ * Lets the user move past the field without filling it, while recording that
+ * intent in `brain.pending_user_input` so we can nudge them later.
+ */
+function PendingRow({
+  label,
+  hint,
+  empty,
+  pending,
+  onTogglePending,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  empty: boolean;
+  pending: boolean;
+  onTogglePending: (on: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <label className="label">{label}</label>
+        {empty ? (
+          <label className="text-[10px] font-mono uppercase tracking-ui-wide text-ink-muted flex items-center gap-1.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={pending}
+              onChange={(e) => onTogglePending(e.target.checked)}
+              className="accent-live h-3 w-3"
+            />
+            <span>Fill later</span>
+          </label>
+        ) : (
+          <span className="text-[10px] font-mono uppercase tracking-ui-wide text-pos">✓ filled</span>
+        )}
+      </div>
+      <div className={pending ? "opacity-50" : ""}>{children}</div>
+      {hint ? <p className="text-[10px] text-ink-subtle mt-1">{hint}</p> : null}
     </div>
   );
 }

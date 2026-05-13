@@ -11,9 +11,32 @@ export type ProviderId =
 
 export type ProviderCategory = "free" | "freemium" | "paid";
 
+/**
+ * Image part for multimodal messages.
+ * media_type is the MIME type (image/png, image/jpeg, image/webp, image/gif).
+ * data is base64-encoded raw bytes (no `data:` prefix).
+ */
+export interface ImagePart {
+  type: "image";
+  media_type: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  data: string;
+}
+
+export interface TextPart {
+  type: "text";
+  text: string;
+}
+
+export type ContentPart = TextPart | ImagePart;
+
 export interface LLMMessage {
   role: "user" | "assistant";
-  content: string;
+  /**
+   * Either a plain text string (most calls) OR an array of parts for multimodal
+   * input. Provider adapters translate this into their native format. Providers
+   * with supports_vision=false will reject messages containing ImageParts.
+   */
+  content: string | ContentPart[];
 }
 
 export interface LLMUsage {
@@ -54,6 +77,8 @@ export interface ModelDef {
   };
   context_k?: number;
   best_for?: string;
+  /** True if this specific model can accept image inputs. Defaults to the provider-level flag when omitted. */
+  supports_vision?: boolean;
 }
 
 export interface Provider {
@@ -65,6 +90,8 @@ export interface Provider {
   get_key_url: string;
   default_model: string;
   models: ModelDef[];
+  /** True if at least one model in the provider's catalog can accept images. */
+  supports_vision?: boolean;
   testKey: (apiKey: string) => Promise<boolean>;
   call: (opts: LLMCallOptions) => Promise<LLMResult>;
   stream: (opts: LLMCallOptions, handlers: StreamHandlers) => Promise<LLMResult>;

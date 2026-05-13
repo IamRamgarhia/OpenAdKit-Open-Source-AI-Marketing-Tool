@@ -3,10 +3,18 @@ import { LLMError, type LLMCallOptions, type LLMResult, type LLMUsage, type Prov
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 function toGeminiBody(opts: LLMCallOptions) {
-  const contents = opts.messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+  const contents = opts.messages.map((m) => {
+    const role = m.role === "assistant" ? "model" : "user";
+    if (typeof m.content === "string") return { role, parts: [{ text: m.content }] };
+    return {
+      role,
+      parts: m.content.map((p) =>
+        p.type === "text"
+          ? { text: p.text }
+          : { inlineData: { mimeType: p.media_type, data: p.data } }
+      ),
+    };
+  });
   const body: any = {
     contents,
     generationConfig: {
@@ -126,10 +134,11 @@ export const google: Provider = {
   free_note: "Free tier (AI Studio key): ~15 RPM on Gemini 2.5 Flash; ~5 RPM on Pro. Plenty for most users.",
   get_key_url: "https://aistudio.google.com/app/apikey",
   default_model: "gemini-2.5-flash",
+  supports_vision: true,
   models: [
-    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash — recommended (free tier)", pricing: { input_per_million_usd: 0.3, output_per_million_usd: 2.5 }, best_for: "Default — strong on free tier" },
-    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro — strongest", pricing: { input_per_million_usd: 1.25, output_per_million_usd: 10 }, best_for: "Long-context teardowns, complex reasoning" },
-    { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite — cheapest", pricing: { input_per_million_usd: 0.075, output_per_million_usd: 0.3 } },
+    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash — recommended (free tier)", pricing: { input_per_million_usd: 0.3, output_per_million_usd: 2.5 }, best_for: "Default — strong on free tier", supports_vision: true },
+    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro — strongest", pricing: { input_per_million_usd: 1.25, output_per_million_usd: 10 }, best_for: "Long-context teardowns, complex reasoning", supports_vision: true },
+    { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite — cheapest", pricing: { input_per_million_usd: 0.075, output_per_million_usd: 0.3 }, supports_vision: true },
   ],
   testKey,
   call,

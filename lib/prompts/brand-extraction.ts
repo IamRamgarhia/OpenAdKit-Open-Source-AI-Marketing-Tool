@@ -26,6 +26,14 @@ Return ONLY valid JSON. No prose, no markdown fences. Use this exact schema:
 {
   "business_name": "",
   "industry": "",
+  "niche": "",
+  "products": [],
+  "platforms": [],
+  "content_pillars": [],
+  "social_links": {
+    "instagram": "", "tiktok": "", "youtube": "", "linkedin": "",
+    "twitter": "", "facebook": "", "pinterest": "", "threads": "", "other": ""
+  },
   "tone": "",
   "personality_traits": [],
   "writing_style": "",
@@ -50,7 +58,14 @@ Return ONLY valid JSON. No prose, no markdown fences. Use this exact schema:
   "failed_angles": []
 }
 
-Rules:
+Extraction rules for the new onboarding fields:
+- "niche" — one specific sentence positioning the business beyond its industry ("DTC sleep brand selling weighted blankets to women 35-55", not just "ecommerce").
+- "products" — 1-8 concrete product / service names you can see on the site. Skip generic categories.
+- "platforms" — Social platforms the brand is ACTIVE on, detected from social-icon links in the page footer / header / contact section. Use canonical names: Instagram, TikTok, YouTube, LinkedIn, X, Facebook, Pinterest, Threads. If you can't find any social links in the content, return an empty array (do NOT guess).
+- "content_pillars" — 4-6 short, repeatable themes the brand consistently talks about (e.g. "Founder stories", "Behind the scenes", "Customer wins", "Product education"). Infer from blog topics, About text, or featured headings. Empty array if not enough signal.
+- "social_links" — Full URLs (or @handles) you actually find in the content. Leave each platform string empty if the URL/handle is not present. DO NOT fabricate handles.
+
+General rules:
 - Match every objection in "objections" with a same-index rebuttal in "objection_handling".
 - "voc_phrases" must be REAL phrases from the reviews — exact wording, not paraphrased.
 - If a field is truly unknown from the input, return an empty string or empty array — never invent details.`;

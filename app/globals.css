@@ -14,6 +14,29 @@ body {
   color: #e7e7ea;
 }
 
+/* Bumped base size: every rem-based Tailwind utility (text-xs / text-sm /
+   text-base) scales up ~10% from the default 16px, restoring readability
+   without breaking the dense-information design language. */
+html {
+  font-size: 17.5px;
+}
+
+/* Lock down the very smallest absolute pixel sizes — text-[10px] is below the
+   accessibility floor on most displays. Anywhere the design uses those,
+   override to 11-12px which still reads as "mono uppercase label" but is
+   actually legible. Tailwind generates these as utility selectors. */
+[class*="text-[10px]"] {
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+[class*="text-[9px]"] {
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+[class*="text-[11px]"] {
+  font-size: 12px !important;
+}
+
 body {
   font-feature-settings: "cv11", "ss01", "ss03";
   background-image:
@@ -40,6 +63,18 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #2a2a32;
+}
+
+/* Sidebar gets a thinner, more subtle scrollbar — only visible on hover. */
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 0.2s;
+}
+.sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 ::selection {

@@ -2,19 +2,15 @@
 
 import { useEffect, useState, Suspense, useRef } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Plus, Pencil, Trash2, Download, Upload, Globe, Loader2 } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Plus, Pencil, Trash2, Download, Upload } from "lucide-react";
 import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
 import { BrandBrainForm } from "@/components/BrandBrainForm";
-import { listBrains, softDeleteBrain, restoreBrain, getBrain, saveBrain, exportBrain, importBrain } from "@/lib/storage";
+import { listBrains, softDeleteBrain, restoreBrain, getBrain, exportBrain, importBrain } from "@/lib/storage";
 import { showUndoToast } from "@/components/UndoToast";
-import { emptyBrandBrain, type BrandBrain } from "@/lib/brand-brain";
-import { setActiveBrainId, addUsage } from "@/lib/settings";
-import { ingestUrl, ingestPasted } from "@/lib/url-ingest";
-import { INDUSTRY_TEMPLATES } from "@/lib/industry-templates";
-import { llmCall, estimateCostUsd, tryParseJson } from "@/lib/llm";
-import { buildBrandExtractionPrompt } from "@/lib/prompts/brand-extraction";
+import { type BrandBrain } from "@/lib/brand-brain";
+import { setActiveBrainId, getActiveBrainId } from "@/lib/settings";
 
 export default function BrandPage() {
   return (
@@ -28,105 +24,27 @@ export default function BrandPage() {
 
 function BrandInner() {
   const params = useSearchParams();
+  const router = useRouter();
+  // Backwards-compat: anything in the codebase still pointing at /brand?first=1
+  // gets routed forward to the dedicated onboarding page.
   const isFirst = params.get("first") === "1";
   const [brains, setBrains] = useState<BrandBrain[]>([]);
   const [editing, setEditing] = useState<BrandBrain | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [activeBrandId, setActiveBrandIdState] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const importRef = useRef<HTMLInputElement>(null);
-  const [quickUrl, setQuickUrl] = useState("");
-  const [quickBusy, setQuickBusy] = useState(false);
-  const [quickStatus, setQuickStatus] = useState<string | null>(null);
-  const [showPaste, setShowPaste] = useState(false);
-  const [pasted, setPasted] = useState("");
-
-  async function quickAddFromUrl() {
-    if (!quickUrl.trim()) return;
-    setQuickBusy(true);
-    setQuickStatus("Reading the page…");
-    setShowPaste(false);
-    try {
-      const r = await ingestUrl(quickUrl);
-      if (!r.ok) {
-        setQuickStatus(r.message);
-        if (r.recoverable) setShowPaste(true);
-        return;
-      }
-      setQuickStatus(r.source === "allorigins" ? "Got content via fallback reader. Extracting brand intelligence…" : "Extracting brand intelligence…");
-      const res = await llmCall({
-        messages: [{ role: "user", content: buildBrandExtractionPrompt({ website_content: r.content, description: `Brand at ${r.url}`, audience_notes: "", reviews: "" }) }],
-        maxTokens: 3000,
-        temperature: 0.4,
-      });
-      const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
-      addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
-      window.dispatchEvent(new Event("ados:usage"));
-      const parsed = tryParseJson<any>(res.text);
-      const brain: BrandBrain = {
-        ...emptyBrandBrain(),
-        ...(parsed ?? {}),
-        name: parsed?.business_name || new URL(r.url).hostname.replace(/^www\./, ""),
-        business_name: parsed?.business_name || new URL(r.url).hostname.replace(/^www\./, ""),
-        website_url: r.url,
-      };
-      await saveBrain(brain);
-      setActiveBrainId(brain.id);
-      window.dispatchEvent(new Event("ados:brains-changed"));
-      setQuickUrl("");
-      setQuickStatus(null);
-      setPasted("");
-      setShowPaste(false);
-      refresh();
-    } catch (e: any) {
-      setQuickStatus(e?.message ?? "Failed");
-    } finally {
-      setQuickBusy(false);
-    }
-  }
-
-  async function quickAddFromPaste() {
-    if (!pasted.trim()) return;
-    setQuickBusy(true);
-    setQuickStatus("Extracting brand intelligence from pasted content…");
-    try {
-      const r = ingestPasted(quickUrl, pasted);
-      if (!r.ok) {
-        setQuickStatus(r.message);
-        return;
-      }
-      const res = await llmCall({
-        messages: [{ role: "user", content: buildBrandExtractionPrompt({ website_content: r.content, description: `Brand pasted from ${quickUrl || "manual entry"}`, audience_notes: "", reviews: "" }) }],
-        maxTokens: 3000,
-        temperature: 0.4,
-      });
-      const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
-      addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
-      window.dispatchEvent(new Event("ados:usage"));
-      const parsed = tryParseJson<any>(res.text);
-      const fallbackName = quickUrl ? (() => { try { return new URL(/^https?:\/\//i.test(quickUrl) ? quickUrl : `https://${quickUrl}`).hostname.replace(/^www\./, ""); } catch { return "My Brand"; } })() : "My Brand";
-      const brain: BrandBrain = {
-        ...emptyBrandBrain(),
-        ...(parsed ?? {}),
-        name: parsed?.business_name || fallbackName,
-        business_name: parsed?.business_name || fallbackName,
-        website_url: quickUrl,
-      };
-      await saveBrain(brain);
-      setActiveBrainId(brain.id);
-      window.dispatchEvent(new Event("ados:brains-changed"));
-      setQuickUrl("");
-      setPasted("");
-      setQuickStatus(null);
-      setShowPaste(false);
-      refresh();
-    } catch (e: any) {
-      setQuickStatus(e?.message ?? "Extraction failed");
-    } finally {
-      setQuickBusy(false);
-    }
-  }
 
   async function refresh() {
-    setBrains(await listBrains());
+    const list = await listBrains();
+    setBrains(list);
+    setActiveBrandIdState(getActiveBrainId());
+    setLoading(false);
+  }
+
+  function activateBrand(id: string) {
+    setActiveBrainId(id);
+    setActiveBrandIdState(id);
+    window.dispatchEvent(new Event("ados:brains-changed"));
   }
 
   async function downloadBrain(id: string, name: string) {
@@ -153,18 +71,27 @@ function BrandInner() {
 
   useEffect(() => {
     refresh();
-    if (isFirst) setShowForm(true);
-  }, [isFirst]);
+    // Route /brand?first=1 to the dedicated onboarding page.
+    if (isFirst) router.replace("/brand/new");
+  }, [isFirst, router]);
 
-  if (showForm || editing) {
+  // Editing flow — when the user clicks "Edit" on a brand card, the existing
+  // BrandBrainForm component takes over. Cleaner than having a separate route
+  // for now since the form already handles save + cancel + redirect.
+  if (editing) {
     return (
       <div>
         <PageHeader
-          scope={editing ? `brand/${editing.id.slice(0, 8)}` : "brand/new"}
-          title={editing ? "Edit Brand Brain" : "New Brand Brain"}
-          subtitle="Persistent brand intelligence injected into every generation."
+          scope={`brand/${editing.id.slice(0, 8)}`}
+          title="Edit client"
+          subtitle="Refine the brand brain. Every change flows into future generations."
+          actions={
+            <button onClick={() => { setEditing(null); refresh(); }} className="btn-ghost">
+              ← back to clients
+            </button>
+          }
         />
-        <BrandBrainForm initial={editing ?? undefined} />
+        <BrandBrainForm initial={editing} />
       </div>
     );
   }
@@ -173,8 +100,8 @@ function BrandInner() {
     <div>
       <PageHeader
         scope="brand"
-        title="Brand Brain"
-        subtitle="One or more brand profiles. Each generation uses the active brain."
+        title="Clients"
+        subtitle="Your saved brand brains. Click a card to activate it — every tool across AdForge auto-uses the active client's voice, audience, products, and pillars."
         actions={
           <div className="flex gap-2">
             <input
@@ -187,164 +114,147 @@ function BrandInner() {
             <button onClick={() => importRef.current?.click()} className="btn-ghost">
               <Upload size={12} /> import
             </button>
-            <button onClick={() => setShowForm(true)} className="btn-primary">
-              <Plus size={12} /> new
-            </button>
+            <Link href="/brand/new" className="btn-primary">
+              <Plus size={12} /> Add new client
+            </Link>
           </div>
         }
       />
 
-      <div className="border border-base-600 bg-base-900/40 p-4 mb-4">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-muted">Quick start from industry</span>
+      {loading ? (
+        <div className="space-y-2">
+          <div className="h-24 border border-base-700/50 bg-base-900/30 animate-pulse-soft" />
+          <div className="h-24 border border-base-700/50 bg-base-900/30 animate-pulse-soft" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          {INDUSTRY_TEMPLATES.map((t) => (
-            <button
-              key={t.slug}
-              onClick={async () => {
-                const b = t.apply({ business_name: "" });
-                await saveBrain(b);
-                setActiveBrainId(b.id);
-                window.dispatchEvent(new Event("ados:brains-changed"));
-                refresh();
-                setEditing(b);
-              }}
-              className="text-left border border-base-700 bg-base-900/30 hover:bg-base-800/60 hover:border-base-500 p-3 transition"
-              title={t.description}
-            >
-              <div className="text-xl">{t.emoji}</div>
-              <div className="text-[13px] text-ink font-medium leading-tight mt-1">{t.name}</div>
-            </button>
-          ))}
-        </div>
-        <p className="text-[11px] text-ink-muted mt-2">
-          Tap one → AdForge creates a Brand Brain pre-filled with sensible defaults for that industry. Then refine it.
-        </p>
-      </div>
-
-      <div className="border border-live/30 bg-live/5 p-4 mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Globe size={14} className="text-live" />
-          <span className="text-[12px] font-semibold uppercase tracking-wider text-live">Or add a client by URL</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <input
-            className="input-base flex-1 min-w-[240px]"
-            placeholder="acme.com / clientwebsite.com — we extract everything"
-            value={quickUrl}
-            onChange={(e) => setQuickUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") quickAddFromUrl(); }}
-            disabled={quickBusy}
-          />
-          <button onClick={quickAddFromUrl} disabled={quickBusy || !quickUrl.trim()} className="btn-primary">
-            {quickBusy ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
-            {quickBusy ? "ingesting" : "add brand"}
-          </button>
-        </div>
-        {quickStatus ? (
-          <p className="text-[10px] font-mono uppercase tracking-ui-wide text-neg mt-2">{quickStatus}</p>
-        ) : (
-          <p className="text-[10px] font-mono uppercase tracking-ui-wide text-ink-subtle mt-2">
-            tries jina reader → allorigins fallback · facebook/instagram block scrapers (paste manually below)
+      ) : brains.length === 0 ? (
+        // First-touch empty state — clear single path forward.
+        <div className="border border-live/40 bg-live/[0.04] p-8 text-center">
+          <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-2">no clients yet</div>
+          <h2 className="font-display italic text-3xl text-ink leading-tight mb-2">Add your first client to unlock every tool.</h2>
+          <p className="text-sm text-ink-muted max-w-xl mx-auto leading-relaxed mb-5">
+            AdForge's brand brain is what makes every output sound like <em>this</em> client — not generic AI copy. Paste a website URL, search Google by name, or start from an industry template. AI extracts 90% of the intelligence in ~10 seconds; you cross-check and approve.
           </p>
-        )}
-
-        {showPaste ? (
-          <div className="mt-4 border-t border-live/30 pt-3 space-y-2">
-            <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live">
-              ✱ paste content manually
-            </div>
-            <p className="text-[11px] text-ink-muted leading-relaxed">
-              Open <span className="text-ink font-mono">{quickUrl || "the website"}</span> in a new tab → select all
-              (Ctrl+A or ⌘A) → copy (Ctrl+C or ⌘C) → paste below. AI extracts the brand from your paste.
-            </p>
-            <textarea
-              rows={6}
-              className="input-base font-mono text-xs"
-              value={pasted}
-              onChange={(e) => setPasted(e.target.value)}
-              placeholder="Paste hero copy, about section, features, customer reviews — anything from the site…"
-              disabled={quickBusy}
-            />
-            <button onClick={quickAddFromPaste} disabled={quickBusy || pasted.trim().length < 50} className="btn-primary">
-              {quickBusy ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
-              {quickBusy ? "extracting" : "extract from paste"}
-            </button>
-          </div>
-        ) : (
-          <div className="mt-2">
-            <button
-              onClick={() => setShowPaste(true)}
-              className="text-[10px] font-mono uppercase tracking-ui-wide text-info hover:underline"
-            >
-              ✱ or paste content manually instead
-            </button>
-          </div>
-        )}
-      </div>
-
-      {brains.length === 0 ? (
-        <div className="border border-base-600 bg-base-900/40 px-4 py-3 text-sm text-ink-muted">
-          No Brand Brains yet. Paste a URL above or click <strong className="text-ink">new</strong> for manual entry.
+          <Link href="/brand/new" className="btn-primary text-base">
+            <Plus size={14} /> Add your first client
+          </Link>
         </div>
       ) : (
-        <div className="space-y-2 stagger">
-          {brains.map((b) => (
-            <div key={b.id} className="border border-base-600 bg-base-900/40 p-4 flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">
-                    {b.industry || "industry unspecified"}
-                  </span>
-                  <span className="text-[10px] text-ink-faint">·</span>
-                  <span className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-subtle">
-                    updated {new Date(b.updated_at).toLocaleDateString()}
-                  </span>
-                </div>
-                <div className="font-display italic text-xl text-ink">{b.name || b.business_name}</div>
-                {b.usp ? (
-                  <p className="text-sm text-ink-muted mt-2 line-clamp-2">{b.usp}</p>
-                ) : null}
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => downloadBrain(b.id, b.name || b.business_name)}
-                  className="btn-ghost"
-                  title="Export this brain as JSON"
+        <>
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="text-[12px] font-semibold uppercase tracking-wider text-ink">
+              {brains.length} {brains.length === 1 ? "client" : "clients"}
+            </h2>
+            <p className="text-[10px] font-mono uppercase tracking-ui-wide text-ink-subtle">click a card to switch · entire app reflects the active client</p>
+          </div>
+          <div className="space-y-2 stagger">
+            {brains.map((b) => {
+              const isActive = b.id === activeBrandId;
+              // Brain-completeness signal: how many of the 12 brand-defining fields
+              // are filled? Below 50% means most generators will fall back to
+              // generic copy for at least some surfaces.
+              const completeness = brainCompleteness(b);
+              return (
+                <div
+                  key={b.id}
+                  className={`group border bg-base-900/40 p-4 flex items-start justify-between gap-4 transition-all cursor-pointer ${
+                    isActive
+                      ? "border-live shadow-[0_0_0_1px_rgba(255,176,32,0.4)_inset] bg-live/[0.03]"
+                      : "border-base-600 hover:border-base-500 hover:bg-base-800/40"
+                  }`}
+                  onClick={() => activateBrand(b.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateBrand(b.id); } }}
+                  aria-pressed={isActive}
                 >
-                  <Download size={11} />
-                </button>
-                <button
-                  onClick={async () => setEditing((await getBrain(b.id)) ?? null)}
-                  className="btn-ghost"
-                >
-                  <Pencil size={11} /> edit
-                </button>
-                <button
-                  onClick={async () => {
-                    const label = b.name || b.business_name;
-                    await softDeleteBrain(b.id);
-                    window.dispatchEvent(new Event("ados:brains-changed"));
-                    refresh();
-                    showUndoToast({
-                      message: `Deleted "${label}"`,
-                      undo: async () => {
-                        await restoreBrain(b.id);
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      {isActive ? (
+                        <span className="text-[10px] font-mono uppercase tracking-ui-mega bg-live text-base-950 px-1.5 py-0.5 font-bold">
+                          ✓ active
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">
+                          click to activate
+                        </span>
+                      )}
+                      <span className="text-[10px] text-ink-faint">·</span>
+                      <span className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">
+                        {b.industry || "industry unspecified"}
+                      </span>
+                      <span className="text-[10px] text-ink-faint">·</span>
+                      <span className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-subtle">
+                        updated {new Date(b.updated_at).toLocaleDateString()}
+                      </span>
+                      <span className="text-[10px] text-ink-faint">·</span>
+                      <span
+                        className={`text-[10px] font-mono uppercase tracking-ui-mega ${
+                          completeness.tone === "good" ? "text-pos" : completeness.tone === "okay" ? "text-live" : "text-neg"
+                        }`}
+                        title={`${completeness.filled} of ${completeness.total} brand fields filled. Generators read every field — thin brains produce more generic copy.`}
+                      >
+                        brain {completeness.filled}/{completeness.total}
+                      </span>
+                    </div>
+                    <div className={`font-display italic text-xl ${isActive ? "text-live" : "text-ink"}`}>
+                      {b.name || b.business_name}
+                    </div>
+                    {b.usp ? (
+                      <p className="text-sm text-ink-muted mt-2 line-clamp-2">{b.usp}</p>
+                    ) : null}
+                    {(b.platforms?.length || b.content_pillars?.length) ? (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {(b.platforms ?? []).slice(0, 6).map((p) => (
+                          <span key={p} className="text-[10px] font-mono uppercase tracking-ui-wide border border-base-700 px-1.5 py-0.5 text-ink-muted">{p}</span>
+                        ))}
+                        {(b.content_pillars ?? []).slice(0, 4).map((p) => (
+                          <span key={p} className="text-[10px] font-mono uppercase tracking-ui-wide border border-info/30 text-info px-1.5 py-0.5">{p}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={async () => setEditing((await getBrain(b.id)) ?? null)}
+                      className="text-[11px] font-mono uppercase tracking-ui-wide text-ink-muted hover:text-ink transition flex items-center gap-1.5 px-2 py-1 border border-base-700 hover:border-base-500"
+                      title="Edit this brand's fields"
+                    >
+                      <Pencil size={10} /> Edit
+                    </button>
+                    <button
+                      onClick={() => downloadBrain(b.id, b.name || b.business_name)}
+                      className="text-[11px] font-mono uppercase tracking-ui-wide text-ink-muted hover:text-ink transition flex items-center gap-1.5 px-2 py-1 border border-base-700 hover:border-base-500"
+                      title="Export this brain as JSON"
+                    >
+                      <Download size={10} /> Export
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const label = b.name || b.business_name;
+                        if (!confirm(`Delete "${label}"?\n\nYou can undo from the toast for 7 seconds, but after that the brand and its history link are gone.`)) return;
+                        await softDeleteBrain(b.id);
                         window.dispatchEvent(new Event("ados:brains-changed"));
                         refresh();
-                      },
-                    });
-                  }}
-                  className="btn-ghost hover:text-neg"
-                  title="Delete (undo for 7 seconds)"
-                >
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+                        showUndoToast({
+                          message: `Deleted "${label}"`,
+                          undo: async () => {
+                            await restoreBrain(b.id);
+                            window.dispatchEvent(new Event("ados:brains-changed"));
+                            refresh();
+                          },
+                        });
+                      }}
+                      className="text-[11px] font-mono uppercase tracking-ui-wide text-neg hover:bg-neg/10 transition flex items-center gap-1.5 px-2 py-1 border border-neg/40"
+                      title="Delete (undo for 7 seconds)"
+                    >
+                      <Trash2 size={10} /> Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <div className="mt-6 text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">
@@ -356,4 +266,28 @@ function BrandInner() {
       </div>
     </div>
   );
+}
+
+/**
+ * Rough brain-completeness rating. Counts how many of the 12 generator-defining
+ * fields are populated and buckets into good (≥9) / okay (5-8) / thin (<5).
+ * Used by the client cards on /brand so users can see at-a-glance which
+ * clients have skinny brains.
+ */
+function brainCompleteness(b: BrandBrain): { filled: number; total: number; tone: "good" | "okay" | "thin" } {
+  const filled =
+    (b.business_name ? 1 : 0) +
+    (b.industry ? 1 : 0) +
+    (b.niche ? 1 : 0) +
+    (b.usp ? 1 : 0) +
+    (b.tone ? 1 : 0) +
+    (b.audience_who ? 1 : 0) +
+    (b.audience_pain_points?.length ? 1 : 0) +
+    (b.audience_desires?.length ? 1 : 0) +
+    (b.key_benefits?.length ? 1 : 0) +
+    (b.products?.length ? 1 : 0) +
+    (b.platforms?.length ? 1 : 0) +
+    (b.content_pillars?.length ? 1 : 0);
+  const total = 12;
+  return { filled, total, tone: filled >= 9 ? "good" : filled >= 5 ? "okay" : "thin" };
 }

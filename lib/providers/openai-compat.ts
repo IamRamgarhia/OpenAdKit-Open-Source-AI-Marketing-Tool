@@ -25,9 +25,23 @@ async function readError(res: Response, providerId: string): Promise<LLMError> {
 }
 
 function toMessages(opts: LLMCallOptions) {
-  const messages: { role: string; content: string }[] = [];
+  const messages: { role: string; content: any }[] = [];
   if (opts.system) messages.push({ role: "system", content: opts.system });
-  for (const m of opts.messages) messages.push({ role: m.role, content: m.content });
+  for (const m of opts.messages) {
+    if (typeof m.content === "string") {
+      messages.push({ role: m.role, content: m.content });
+    } else {
+      // OpenAI vision format: content is an array of { type: "text", text } | { type: "image_url", image_url: { url } }
+      const parts = m.content.map((p) => {
+        if (p.type === "text") return { type: "text", text: p.text };
+        return {
+          type: "image_url",
+          image_url: { url: `data:${p.media_type};base64,${p.data}` },
+        };
+      });
+      messages.push({ role: m.role, content: parts });
+    }
+  }
   return messages;
 }
 

@@ -7,7 +7,7 @@ import type { GeneratorConfig } from "@/lib/generator-config";
 
 const config: GeneratorConfig<AudienceTargetingInput & Record<string, unknown>> = {
   title: "Audience Targeting Plan",
-  subtitle: "Three-tier layered targeting (cold / warm / hot) with budget allocation + suppressions.",
+  subtitle: "Layered targeting (cold / warm / hot) sized to your actual budget + tested against current performance. Paste real numbers — the AI rebalances based on what's working.",
   platform: "meta",
   campaign_type: "Audience Plan",
   maxTokens: 3500,
@@ -16,6 +16,7 @@ const config: GeneratorConfig<AudienceTargetingInput & Record<string, unknown>> 
       name: "platform",
       label: "Platform",
       kind: "select",
+      section: "Context",
       options: [
         { value: "meta", label: "Meta" },
         { value: "google", label: "Google" },
@@ -25,11 +26,34 @@ const config: GeneratorConfig<AudienceTargetingInput & Record<string, unknown>> 
     },
     { name: "product", label: "Product", kind: "text", required: true, placeholder: "e.g. accounting SaaS for solopreneurs", span: 2 },
     { name: "audience_who", label: "Who buys this", kind: "textarea", required: true, rows: 2, placeholder: "Solo freelancers + 1-3 person agencies, US/CA, $1k-10k MRR", span: 2 },
-    { name: "budget_monthly", label: "Budget / mo (USD)", kind: "text", required: true, placeholder: "3000" },
     { name: "geo", label: "Geo", kind: "text", required: true, placeholder: "US + Canada" },
-    { name: "goal", label: "Goal", kind: "text", required: true, placeholder: "trial signups" },
+    { name: "goal", label: "Goal", kind: "text", required: true, placeholder: "trial signups · purchases · qualified leads" },
+
+    // ----- Performance data -----
+    { name: "budget_monthly", label: "Budget / mo (USD)", kind: "text", required: true, section: "Performance data (last 7-30 days)", placeholder: "e.g. 3000", hint: "What you can spend per month total across all tiers." },
+    { name: "current_cpa", label: "Current CPA", kind: "text", placeholder: "e.g. $42", hint: "Cost per acquired customer / signup / lead so far." },
+    { name: "current_cvr", label: "Current conversion rate", kind: "text", placeholder: "e.g. 2.1%", hint: "Click → goal completion rate." },
+    { name: "current_aov_or_ltv", label: "AOV or LTV", kind: "text", placeholder: "e.g. $120 AOV / $480 LTV", hint: "Helps the AI rebalance toward higher-LTV cohorts." },
+    { name: "existing_audiences", label: "Audiences currently running", kind: "textarea", rows: 3, placeholder: "List the audience-name + monthly spend + CPA for each currently active audience. e.g.\nLAL 1% Purchasers — $1200/mo — $38 CPA\nInterest: 'Bookkeeping' — $400/mo — $89 CPA", span: 2, hint: "AI uses this to decide what to scale, pause, or replace." },
+    { name: "best_creator_audience", label: "Best-performing audience signal", kind: "text", placeholder: "e.g. LAL 1% Purchasers (last 180d)", hint: "Optional — name the audience you'd seed a new lookalike from." },
+
+    // ----- Optional screenshot -----
+    { name: "audience_screenshot", label: "Screenshot of your Audiences tab (optional)", kind: "image", section: "Optional — drop a screenshot, AI reads it directly", placeholder: "Drop a Meta Ads Manager / Google Audiences screenshot. AI extracts size + spend + CPA per row.", span: 2, hint: "Vision-capable providers only (Claude / OpenAI / Gemini)." },
   ],
-  initial: { platform: "meta", product: "", audience_who: "", budget_monthly: "", geo: "", goal: "" } as any,
+  initial: {
+    platform: "meta",
+    product: "",
+    audience_who: "",
+    budget_monthly: "",
+    geo: "",
+    goal: "",
+    current_cpa: "",
+    current_cvr: "",
+    current_aov_or_ltv: "",
+    existing_audiences: "",
+    best_creator_audience: "",
+    audience_screenshot: null,
+  } as any,
   buildPrompt: (input) => buildAudienceTargetingPrompt(input as unknown as AudienceTargetingInput),
   buildTitle: (i: any) => `Audience · ${i.platform} · ${i.product?.slice(0, 24)}`,
   expectJson: true,
@@ -96,6 +120,20 @@ function Tier({ title, data, tone }: { title: string; data: any; tone: "info" | 
 function AudienceOutput({ json }: { json: any }) {
   return (
     <div className="space-y-4 stagger">
+      {json?.computed_targets ? (
+        <Section title="Reality check — computed from your numbers">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <Kv k="CPA ceiling" v={json.computed_targets.cpa_target_ceiling ?? "—"} />
+            <Kv k="LTV : CPA" v={json.computed_targets.ltv_to_cpa_health ?? "—"} />
+            <Kv k="next move" v={json.computed_targets.scale_or_squeeze ?? "—"} />
+          </div>
+        </Section>
+      ) : null}
+      {json?.audience_diagnosis ? (
+        <Section title="Existing setup · diagnosis">
+          <p className="text-sm text-ink leading-relaxed">{json.audience_diagnosis}</p>
+        </Section>
+      ) : null}
       <Tier title="Cold prospecting" data={json?.cold_prospecting} tone="info" />
       <Tier title="Warm retargeting" data={json?.warm_retargeting} tone="live" />
       <Tier title="Hot remarketing" data={json?.hot_remarketing} tone="pos" />

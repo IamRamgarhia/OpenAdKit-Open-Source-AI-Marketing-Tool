@@ -1,9 +1,26 @@
+export interface SocialLinks {
+  instagram?: string;
+  tiktok?: string;
+  youtube?: string;
+  linkedin?: string;
+  twitter?: string;
+  facebook?: string;
+  pinterest?: string;
+  threads?: string;
+  other?: string;
+}
+
 export interface BrandBrain {
   id: string;
   name: string;
   business_name: string;
   industry: string;
+  niche: string;
   website_url?: string;
+  products: string[];
+  platforms: string[];
+  content_pillars: string[];
+  social_links: SocialLinks;
   tone: string;
   personality_traits: string[];
   writing_style: string;
@@ -26,6 +43,9 @@ export interface BrandBrain {
   voc_success_quotes: string[];
   best_performing_angles: string[];
   failed_angles: string[];
+  // Field names the user explicitly marked "fill later" during onboarding.
+  // Used to suppress soft warnings + show a follow-up nudge in the dashboard.
+  pending_user_input: string[];
   created_at: number;
   updated_at: number;
   deleted_at?: number;
@@ -38,7 +58,12 @@ export function emptyBrandBrain(): BrandBrain {
     name: "",
     business_name: "",
     industry: "",
+    niche: "",
     website_url: "",
+    products: [],
+    platforms: [],
+    content_pillars: [],
+    social_links: {},
     tone: "",
     personality_traits: [],
     writing_style: "",
@@ -61,26 +86,42 @@ export function emptyBrandBrain(): BrandBrain {
     voc_success_quotes: [],
     best_performing_angles: [],
     failed_angles: [],
+    pending_user_input: [],
     created_at: now,
     updated_at: now,
   };
 }
 
+/**
+ * Defensive read for brains saved before a field was added to the schema —
+ * IndexedDB doesn't enforce missing properties.
+ */
+export function normalizeBrandBrain(b: any): BrandBrain {
+  return { ...emptyBrandBrain(), ...(b ?? {}) };
+}
+
 const list = (arr: string[]) => (arr.length ? arr.join(" | ") : "(none specified)");
+
+import { FRAMEWORK_STACK } from "./prompts/framework-stack";
 
 export interface SystemPromptOverrides {
   language?: string;
   tone_override?: string;
+  /** Suppress the 1.1k-token framework stack — used by short-form generators
+   *  (hashtags, email subjects, concept explainers) where the full strategic
+   *  framework would dwarf the actual output. */
+  skip_framework_stack?: boolean;
 }
 
 export function buildBrandSystemPrompt(brain: BrandBrain | null, overrides?: SystemPromptOverrides): string {
   const lang = overrides?.language && overrides.language !== "English" ? `\n\nLANGUAGE: Output ALL generated copy in ${overrides.language}. Variant labels, JSON field names, and metadata stay in English.` : "";
   const toneOverride = overrides?.tone_override ? `\n\nTONE OVERRIDE (replaces brand default): ${overrides.tone_override}` : "";
+  const framework = overrides?.skip_framework_stack ? "" : `\n${FRAMEWORK_STACK}\n`;
   if (!brain || !brain.business_name) {
     return `You are an expert direct-response copywriter and paid media specialist.
 The user has not configured a Brand Brain yet. Write professional, conversion-focused copy
 that respects all platform character limits given in the user prompt.
-
+${framework}
 HONESTY: Never fabricate stats, testimonials, named partnerships, awards, or certifications.
 AVOID: streamline, optimize, innovative, utilize, leverage, synergy, transform, "best", "#1", "leading" — unless verifiable.
 WEAK CTAs to replace: "Submit", "Sign Up", "Learn More", "Click Here", "Get Started" → use outcome-named action verbs ("Start My Free Trial", "Get the Checklist").${lang}${toneOverride}`;
@@ -90,12 +131,21 @@ WEAK CTAs to replace: "Submit", "Sign Up", "Learn More", "Click Here", "Get Star
         .map((o, i) => `- ${o} → ${brain.objection_handling[i] ?? "(handle thoughtfully)"}`)
         .join("\n")
     : "(none provided)";
+  const socialHandles = Object.entries(brain.social_links ?? {})
+    .filter(([, v]) => v && String(v).trim())
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(", ");
   return `You are an expert direct-response copywriter and paid media specialist.
 You write exclusively for ${brain.business_name}.
 
 === BRAND BRAIN: READ BEFORE WRITING ANYTHING ===
 
 BUSINESS: ${brain.business_name} (${brain.industry || "industry unspecified"})
+NICHE: ${brain.niche || "(not specified — fall back to industry)"}
+PRODUCTS / OFFERS: ${list(brain.products ?? [])}
+PRIMARY SOCIAL PLATFORMS: ${list(brain.platforms ?? [])}
+CONTENT PILLARS (recurring themes): ${list(brain.content_pillars ?? [])}
+SOCIAL HANDLES: ${socialHandles || "(none provided)"}
 TONE: ${brain.tone || "(default: confident, clear, conversion-focused)"}
 PERSONALITY: ${list(brain.personality_traits)}
 WRITING STYLE: ${brain.writing_style || "(default: short punchy sentences, action verbs first)"}
@@ -127,7 +177,7 @@ PROVEN ANGLES: ${list(brain.best_performing_angles)}
 ANGLES TO AVOID: ${list(brain.failed_angles)}
 
 === END BRAND BRAIN ===
-
+${framework}
 RULES:
 1. Always write in the exact tone and style above.
 2. Use VOC phrases naturally — never force them.

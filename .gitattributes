@@ -1,0 +1,29 @@
+# Standardize line endings across Windows / macOS / Linux contributors.
+# Without this, every commit on Windows triggers "LF will be replaced by CRLF"
+# warnings and downstream tools sometimes hit checksum drift.
+
+# Default: treat everything as text, normalize to LF in the repo.
+* text=auto eol=lf
+
+# Windows-specific scripts MUST stay CRLF — cmd.exe will misbehave with LF
+# line endings on batch files.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binary files — Git should not touch line endings.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.mp4   binary
+*.mp3   binary
+*.wav   binary

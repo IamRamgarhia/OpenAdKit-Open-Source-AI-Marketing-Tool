@@ -88,6 +88,35 @@
     <div class="scope" id="scope">~/launcher</div>
   </header>
 
+  <!-- Update banner — auto-checks GitHub for newer commits on first load. -->
+  <div class="card" id="update-card" style="display:none;border-color:#ffb020;background:rgba(255,176,32,0.05)">
+    <div style="display:flex;align-items:start;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <div style="font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;text-transform:uppercase;color:#ffb020;margin-bottom:4px">⬆ update available</div>
+        <h2 style="margin:0;font-size:18px;color:#e7e7ea">A newer version is on GitHub.</h2>
+        <p id="update-summary" style="margin:6px 0 0;font-size:12px;color:#9a9aa3;line-height:1.5"></p>
+      </div>
+      <div class="btns" style="margin:0">
+        <button id="btn-update-apply" class="primary">⬆ Update now</button>
+        <button id="btn-update-dismiss" class="btn">Later</button>
+      </div>
+    </div>
+    <div id="update-blocked" style="display:none;margin-top:10px;padding:8px 10px;border:1px solid #ff5470;background:rgba(255,84,112,0.06);font-size:11px;color:#ff5470;font-family:'JetBrains Mono',monospace;letter-spacing:0.02em"></div>
+  </div>
+
+  <!-- Update progress modal — covers the page while git pull + npm install run. -->
+  <div id="update-progress" style="display:none;position:fixed;inset:0;z-index:50;background:rgba(8,8,10,0.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:24px">
+    <div style="max-width:680px;width:100%;background:#101013;border:1px solid #ffb020;padding:20px">
+      <div style="font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:24px;color:#e7e7ea;margin-bottom:6px">Updating AdForge…</div>
+      <p id="update-step" style="margin:0 0 14px;font-size:13px;color:#9a9aa3">Stopping web app…</p>
+      <pre id="update-log" style="font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.5;color:#9a9aa3;background:#0a0a0d;border:1px solid #1c1c22;padding:10px;max-height:50vh;overflow:auto;white-space:pre-wrap;margin:0"></pre>
+      <div id="update-done-actions" style="display:none;margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        <button id="btn-update-reload" class="primary">↻ Reload launcher</button>
+        <button id="btn-update-close" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Status + start/stop -->
   <div class="card">
     <h2>Service status</h2>
@@ -106,6 +135,11 @@
       <button id="btn-restart" style="display:none">⟳ Restart</button>
     </div>
     <div class="log" id="log"></div>
+    <div class="btns" id="trouble-row" style="display:none;margin-top:10px">
+      <button id="btn-report" class="btn">⚠ Report a problem on GitHub</button>
+      <button id="btn-rebuild" class="btn" title="Wipe .next cache and rebuild — fixes unstyled-render / stale-chunk issues">🧹 Clean rebuild</button>
+      <a class="btn" href="https://github.com/IamRamgarhia/AdForge-#troubleshooting" target="_blank">📖 Troubleshooting guide</a>
+    </div>
   </div>
 
   <!-- Quick links once running -->
@@ -164,6 +198,9 @@
   const btnStop = $("btn-stop");
   const btnRestart = $("btn-restart");
   const btnSaveConfig = $("btn-save-config");
+  const btnReport = $("btn-report");
+  const btnRebuild = $("btn-rebuild");
+  const troubleRow = $("trouble-row");
   const log = $("log");
   const linksCard = $("links-card");
   const urlList = $("url-list");
@@ -200,6 +237,9 @@
     lastStatus = s;
     dot.className = "dot " + s.web;
     meta.textContent = `web :${s.web_port}  ·  sync :${s.sync_port}`;
+    // Show the "Report a problem" row whenever the web app is not happily up.
+    const trouble = s.web === "down" || s.web === "stopping" || (s.web === "starting" && Date.now() - progressStart > 25000);
+    troubleRow.style.display = trouble ? "flex" : "none";
     if (s.web === "up") {
       label.textContent = "AdForge is running";
       progressWrap.style.display = "none";
@@ -246,9 +286,36 @@
       const s = await api("GET", "/status");
       applyStatus(s);
     } catch (e) {
-      label.textContent = "Sidecar unreachable — restart start.bat / start.sh";
+      label.textContent = "Sidecar unreachable — relaunch AdForge.bat / AdForge.command";
       dot.className = "dot down";
+      troubleRow.style.display = "flex";
     }
+  }
+
+  async function openGitHubIssue() {
+    let diag = null;
+    try { diag = await api("GET", "/diagnostics"); } catch {}
+    const lines = [
+      "## What were you trying to do?",
+      "",
+      "<!-- Describe what you were doing when the problem happened. -->",
+      "",
+      "## What happened instead?",
+      "",
+      "<!-- The error message, screenshot, or what went wrong. -->",
+      "",
+      "## Diagnostics",
+      "",
+      "```",
+      diag ? JSON.stringify(diag, null, 2) : "(launcher could not reach sidecar at " + SYNC + "/diagnostics)",
+      "```",
+      "",
+      "Browser: " + navigator.userAgent,
+    ];
+    const title = "Launcher issue — " + (diag ? diag.web_status : "sidecar unreachable");
+    const body = encodeURIComponent(lines.join("\n"));
+    const url = "https://github.com/IamRamgarhia/AdForge-/issues/new?labels=bug&title=" + encodeURIComponent(title) + "&body=" + body;
+    window.open(url, "_blank");
   }
 
   async function loadConfig() {
@@ -290,6 +357,140 @@
   btnOpen.addEventListener("click", () => {
     if (lastStatus) window.open(`http://localhost:${lastStatus.web_port}/`, "_blank");
   });
+
+  btnReport.addEventListener("click", openGitHubIssue);
+
+  btnRebuild.addEventListener("click", async () => {
+    if (!confirm("Clean rebuild will stop the web app, wipe the .next/ build cache, and restart it.\n\nUse this when:\n- The page renders as raw unstyled HTML\n- You see 404s on /_next/static/chunks/*\n- The web app feels broken after a build\n\nProceed?")) return;
+    btnRebuild.disabled = true;
+    showToast("Wiping build cache + restarting…");
+    try {
+      const r = await api("POST", "/web/rebuild");
+      if (r.ok) {
+        progressStart = Date.now();
+        showToast("Rebuilding — first render takes ~20s");
+      } else {
+        showToast(r.error || "Rebuild failed");
+      }
+    } catch (e) {
+      showToast("Couldn't reach the sidecar");
+    } finally {
+      setTimeout(() => { btnRebuild.disabled = false; poll(); }, 800);
+    }
+  });
+
+  // ── Update flow ─────────────────────────────────────────────────────────
+  const updateCard = $("update-card");
+  const updateSummary = $("update-summary");
+  const updateBlocked = $("update-blocked");
+  const updateProgress = $("update-progress");
+  const updateStep = $("update-step");
+  const updateLogEl = $("update-log");
+  const updateDoneActions = $("update-done-actions");
+  const btnUpdateApply = $("btn-update-apply");
+  const btnUpdateDismiss = $("btn-update-dismiss");
+  const btnUpdateReload = $("btn-update-reload");
+  const btnUpdateClose = $("btn-update-close");
+
+  async function pollUpdateStatus() {
+    let ticks = 0;
+    const tick = async () => {
+      ticks++;
+      try {
+        const s = await api("GET", "/update/status");
+        if (s.log && s.log.length) {
+          updateLogEl.textContent = s.log.join("\n");
+          updateLogEl.scrollTop = updateLogEl.scrollHeight;
+        }
+        // Heuristic step labels for the header line based on the most recent log entry.
+        const last = s.log?.length ? s.log[s.log.length - 1] : "";
+        if (/fetch/i.test(last)) updateStep.textContent = "Fetching commits from GitHub…";
+        else if (/pull/i.test(last)) updateStep.textContent = "Applying patches (git pull --ff-only)…";
+        else if (/npm/i.test(last) || /install/i.test(last)) updateStep.textContent = "Installing dependencies (npm install)…";
+        else if (/wiped\s+\.next/i.test(last)) updateStep.textContent = "Wiping build cache…";
+        else if (/starting web/i.test(last)) updateStep.textContent = "Starting the freshly-built web app…";
+
+        if (s.status === "done") {
+          updateStep.textContent = "Update complete — reload this page to see new launcher changes.";
+          updateDoneActions.style.display = "flex";
+          return;
+        }
+        if (s.status === "error") {
+          updateStep.textContent = "Update failed: " + (s.error || "see log");
+          updateStep.style.color = "#ff5470";
+          updateDoneActions.style.display = "flex";
+          return;
+        }
+        if (ticks > 600) return; // 10 min hard ceiling
+      } catch {}
+      setTimeout(tick, 1000);
+    };
+    tick();
+  }
+
+  btnUpdateApply.addEventListener("click", async () => {
+    if (!confirm(
+      "Apply the latest update from GitHub?\n\n" +
+      "This will:\n" +
+      "  1. Stop the web app\n" +
+      "  2. git fetch + git pull --ff-only origin main\n" +
+      "  3. npm install\n" +
+      "  4. Wipe the .next/ build cache\n" +
+      "  5. Restart the web app\n\n" +
+      "Your data in data/snapshot.json is not touched. Continue?"
+    )) return;
+    updateLogEl.textContent = "";
+    updateStep.textContent = "Stopping web app…";
+    updateStep.style.color = "";
+    updateDoneActions.style.display = "none";
+    updateProgress.style.display = "flex";
+    try {
+      await api("POST", "/update/apply");
+      pollUpdateStatus();
+    } catch (e) {
+      updateStep.textContent = "Couldn't reach the sidecar.";
+      updateStep.style.color = "#ff5470";
+      updateDoneActions.style.display = "flex";
+    }
+  });
+
+  btnUpdateDismiss.addEventListener("click", () => {
+    updateCard.style.display = "none";
+    // Persist dismissal for the current sha so the banner doesn't return on
+    // every page load. Cleared the next time a newer commit appears.
+    try { sessionStorage.setItem("adforge:update_dismissed_sha", lastLatestSha || ""); } catch {}
+  });
+  btnUpdateReload.addEventListener("click", () => { location.reload(); });
+  btnUpdateClose.addEventListener("click", () => { updateProgress.style.display = "none"; });
+
+  let lastLatestSha = "";
+  // R1: one fetch per page load.
+  (async () => {
+    try {
+      const r = await api("GET", "/update/check");
+      lastLatestSha = r?.latest_sha || "";
+      if (r?.status !== "available") return;
+      // Honor a session-scoped "later" dismissal so the banner doesn't pester
+      // users who already saw it this session for the same incoming sha.
+      const dismissed = sessionStorage.getItem("adforge:update_dismissed_sha");
+      if (dismissed && dismissed === lastLatestSha) return;
+      // Render banner with the data we already have — saves a second fetch.
+      const shortNew = lastLatestSha.slice(0, 7);
+      const shortOld = (r.current_sha || "").slice(0, 7);
+      const when = r.latest_commit_date ? new Date(r.latest_commit_date).toLocaleString() : "(unknown)";
+      const safe = (r.latest_commit_message || "(no message)").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+      updateSummary.innerHTML =
+        "<strong style=\"color:#e7e7ea\">" + safe + "</strong>" +
+        "<br/><span style=\"font-family:'JetBrains Mono',monospace;font-size:11px;color:#6b6b74\">" + shortOld + " → " + shortNew + " · " + when + "</span>";
+      if (r.blocked_reason) {
+        updateBlocked.textContent = r.blocked_reason;
+        updateBlocked.style.display = "block";
+        btnUpdateApply.disabled = true;
+        btnUpdateApply.title = r.blocked_reason;
+      }
+      updateCard.style.display = "block";
+    } catch {}
+  })();
 
   btnSaveConfig.addEventListener("click", async () => {
     const PORT = portInput.value.trim();

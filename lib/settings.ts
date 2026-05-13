@@ -95,6 +95,28 @@ export function hasAnyKeyConfigured(): boolean {
   return false;
 }
 
+/** Return every provider id that has a saved key (length > 8) in localStorage.
+ *  Used by the launch wizard's failover logic to pick a backup when the active
+ *  provider stalls. */
+export function getProvidersWithKeys(): string[] {
+  migrateLegacyOnce();
+  const s = safeLocal();
+  if (!s) return [];
+  const ids: string[] = [];
+  for (let i = 0; i < s.length; i++) {
+    const k = s.key(i);
+    if (k && k.startsWith("ados.provider.") && k.endsWith(".key")) {
+      const v = s.getItem(k);
+      if (v && v.length > 8) {
+        // Key format: ados.provider.<id>.key
+        const id = k.slice("ados.provider.".length, -".key".length);
+        if (id) ids.push(id);
+      }
+    }
+  }
+  return ids;
+}
+
 // --- Brand brain ---
 export function getActiveBrainId(): string | null {
   return safeLocal()?.getItem(KEYS.activeBrain) ?? null;
@@ -102,8 +124,12 @@ export function getActiveBrainId(): string | null {
 export function setActiveBrainId(id: string | null): void {
   const s = safeLocal();
   if (!s) return;
+  const prev = s.getItem(KEYS.activeBrain);
   if (id) s.setItem(KEYS.activeBrain, id);
   else s.removeItem(KEYS.activeBrain);
+  if (prev !== id && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("ados:active-brain-changed", { detail: { id } }));
+  }
 }
 
 // --- Usage ---

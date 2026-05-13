@@ -56,27 +56,41 @@ You bring your own AI key — free tier (Groq · Gemini · Cerebras · OpenRoute
 
 ## Install in 60 seconds
 
-You need **Node.js 20+** ([download here](https://nodejs.org/en/download)). That's the only prerequisite.
+You need **Node.js 20+** ([download here](https://nodejs.org/en/download)). That's the only prerequisite — the one-liner below installs everything else.
 
-### Windows · 3 double-clicks
+### Fastest · one line, any OS
+
+**Windows** (PowerShell):
+```powershell
+iwr -useb https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/scripts/install/install.ps1 | iex
+```
+
+**macOS / Linux / WSL**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/scripts/install/install.sh | bash
+```
+
+That single command: installs Node + git if missing (Windows uses winget), clones the repo into `~/AdForge`, runs `npm install`, asks for a port, then opens the launcher control panel in your browser. Click **▶ Start AdForge** and you're live.
+
+### Manual · Windows · 3 double-clicks
 1. **Download** this repo (green "Code" button → "Download ZIP" → extract)
-2. **Double-click `install.bat`** · waits for dependencies, asks for a port
-3. **Double-click `start.bat`** · opens the **AdForge launcher** in your browser
+2. **Double-click `install.bat`** · waits for dependencies, asks for a port, creates an **AdForge** shortcut on your Desktop
+3. **Double-click the new `AdForge` icon on your Desktop** *(or `AdForge.bat` in the folder)* · your default browser opens to the AdForge launcher
 
 The launcher is a control panel: hit **▶ Start AdForge**, watch the progress bar, then click **↗ Open AdForge** when it's up. From the launcher you can also stop, restart, change ports, and open three different local URLs.
 
-To shut everything down: **double-click `stop.bat`** (or close the launcher's terminal window).
+To shut everything down: close the launcher tab and run `scripts\stop.bat` (or just close the hidden sidecar via Task Manager).
 
-### Mac / Linux · 3 commands
+### Manual · Mac / Linux · 3 commands
 ```bash
 git clone https://github.com/IamRamgarhia/AdForge-.git adforge
 cd adforge
-bash install.sh        # one-time setup
-bash start.sh          # launches everything · open http://localhost:3005
-# bash stop.sh         # to shut down later
+bash install.sh                  # one-time setup · creates ~/Desktop/AdForge shortcut
+bash AdForge.command             # or double-click AdForge on your Desktop
+# bash scripts/stop.sh           # to force-stop later
 ```
 
-### Cross-platform · one command
+### Cross-platform · one command (after clone)
 ```bash
 npm install
 npm run start:all      # web app + local-sync sidecar together
@@ -100,20 +114,28 @@ After install, **everything you do** (brand brains, generated ads, campaigns, ch
 
 ## What's inside
 
-### 17 AI generators
+### Sidebar is grouped by platform
+Pick where you're running ads first ("I'm doing Meta this week"), then see every tool that applies. Cross-platform tools appear under each relevant group so discovery happens by *where* you ship, not by the action verb.
 
-| Platform | What |
-|---|---|
-| **Google** | Responsive Search Ad · Performance Max · Shopping · Display banners |
-| **Meta** | Feed · Stories · Reels · Carousel (3 angle-distinct variants per request) |
-| **TikTok** | 50 native hooks per click · UGC scripts · Spark Ads · Branded Hashtag Challenge |
-| **YouTube** | In-Stream (60s) · Bumpers (6s) · Discovery |
-| **LinkedIn** | Sponsored Content · Lead Gen Forms |
-| **Twitter / X** | Promoted Tweets · 6-tweet threads |
-| **Universal** | Full Campaign Kit · Hashtags (any language) · Email subjects · Lead forms · AI image/video prompts · Social content calendar |
+| Platform group | Generators | Optimizers in this group |
+|---|---|---|
+| **Meta · Facebook + Instagram** | Meta Ads · Reel Ideas · Lead Form · Hashtags · Content Calendar · Image / Video Prompts | CTR Optimizer (Meta-tuned) · Creative Score · Audience Targeting · Ad Fatigue · A/B Test · Landing Page · Bid Strategy |
+| **Google · Search + PMax + Shopping** | Google RSA · Performance Max · Shopping · Display Banners | Quality Score Improver · Keyword Builder · Bid Strategy · CTR Optimizer · Audience · Landing Page · A/B Test |
+| **TikTok** | TikTok In-Feed · Reel Ideas · Spark Ads · Branded Hashtag Challenge · Hashtags · Content Calendar · Image / Video Prompts | CTR Optimizer · Creative Score · Audience · Ad Fatigue |
+| **LinkedIn · B2B** | LinkedIn Sponsored · Lead Form | CTR Optimizer · Audience · Landing Page · A/B Test |
+| **YouTube** | YouTube TrueView Scripts · Shorts Ideas · Hashtags · Image / Video Prompts | Creative Score |
+| **X · Twitter** | Twitter Ads · Hashtags · Content Calendar | — |
+| **Email + Display** | Email Subjects · Display Banners | — |
 
-### 11 optimization tools
-**Creative Score** · **CTR Optimizer** · **Quality Score Improver** · **Budget Waste Analyzer** · **Budget Planner** · **Cost-Saving Tips** · **A/B Test Planner** · **Keyword Builder** · **Audience Targeting** · **Landing Page Grader** · **Bid Strategy Advisor** · **Ad Fatigue Detector**
+### Flagship features
+- **⚡ 10-Minute Launch Wizard** (`/launch/wizard`) — single click → strategy brief + cross-platform ad copy + content calendar + 3-email sequence + launch-day social posts. One Campaign, five chained AI calls, streaming live.
+- **Multi-Client Batch Mode** (`/batch`) — pick N clients → generate the same asset (Content Calendar / Hashtags / Reel Ideas / Campaign Kit) for all in parallel. Each output uses that client's own brand brain so voice is preserved per-client.
+- **Reel Idea Generator** (`/generate/reel-ideas`) — 10 proven hook formulas rotated across a batch (POV / Contradiction / Listicle / Number-Promise / Pattern-Interrupt / Before-After / Story / Demo / Controversy / Insider) with platform-native rules baked in for IG Reels / TikTok / Shorts / FB Reels.
+- **Competitor Reel Teardown** (`/research/reel-teardown`) — paste a competitor's captions → AI maps hook formulas, content pillars, format mix, weakness map → writes 5 "beat-their-reel" scripts citing the specific reels they respond to.
+- **Data-first optimizers** — every optimizer (CTR · Quality Score · Audience · Landing Page · Keywords · Bid Strategy · Ad Fatigue) requires real Google Ads / Meta / TikTok numbers, computes derived metrics, and cites specific values in its recommendations. Optional dashboard-screenshot upload on vision-capable providers (Claude / OpenAI 4.1+ / Gemini).
+
+### Universal tools (used across platforms)
+**Full Campaign Kit** · **Hashtags (any language)** · **Email Subjects** · **Lead Forms** · **AI Image/Video Prompts** · **Social Content Calendar** · **Steal & Beat** competitor ad teardown · **Compare 2 Ads** · **Budget Waste Analyzer** · **Budget Planner** · **A/B Test Planner**
 
 ### Multi-client management
 - Add a client by **pasting a website URL** — AdForge auto-extracts the Brand Brain (tone, audience, USP, VOC, words to use/avoid) using Jina Reader + your chosen LLM
@@ -284,9 +306,12 @@ adforge/
 │   └── refresh_knowledge.py     Optional maintainer tool
 │
 ├── data/                        Your snapshot lives here (gitignored)
-├── install.bat / install.sh     One-click installer
-├── start.bat / start.sh         Launches web + sync sidecar
-├── stop.bat / stop.sh           Clean shutdown
+├── AdForge.bat / AdForge.command  Click-to-launch (Desktop shortcut points here)
+├── install.bat / install.sh       Manual installer (after you clone/unzip)
+├── scripts/install/install.ps1    One-line online bootstrap (Windows · PowerShell)
+├── scripts/install/install.sh     One-line online bootstrap (Mac / Linux / WSL)
+├── scripts/start.bat / start.sh    Manual sidecar runner (advanced)
+├── scripts/stop.bat / stop.sh      Force shutdown
 └── package.json
 ```
 
@@ -313,14 +338,119 @@ Production build: 56 statically prerendered routes · 87 KB shared JS · 130-160
 | Action | Windows | Mac / Linux | Cross-platform |
 |---|---|---|---|
 | Install (one-time) | double-click `install.bat` | `bash install.sh` | `npm install` |
-| **Start** (web + sync) | double-click `start.bat` | `bash start.sh` | `npm run start:all` |
-| **Stop** | double-click `stop.bat` | `bash stop.sh` | Ctrl+C |
+| **Launch** | double-click `AdForge` on Desktop *(or `AdForge.bat`)* | double-click `AdForge` on Desktop *(or `bash AdForge.command`)* | — |
+| Force-stop everything | `scripts\stop.bat` | `bash scripts/stop.sh` | Ctrl+C in the sidecar window |
+| Manual sidecar (visible log) | `scripts\start.bat` | `bash scripts/start.sh` | `npm run start:all` |
 | Web only | `npm run dev` | `npm run dev` | `npm run dev` |
 | Sync sidecar only | `npm run sync` | `npm run sync` | `npm run sync` |
 | Typecheck | `npm run typecheck` | — | — |
 | Production build | `npm run build` | — | — |
 
 Ports: web app **3005** · sync sidecar **3006** (both localhost-only).
+
+---
+
+## Troubleshooting
+
+Most problems come down to one of four things: a port already in use, Node missing or too old, Windows Defender blocking a script, or `.env.local` pointing at the wrong port. The launcher's **⚠ Report a problem on GitHub** button auto-fills an issue with your exact Node/OS/port state — use it if any of these don't help.
+
+### Sidecar won't start
+
+**Symptom:** Double-clicking `AdForge` does nothing, or the cmd window flashes and disappears.
+
+1. Open a terminal in the install folder and run `node --version`. If it reports anything below **v20.0.0** or "command not found," install Node 20+ from <https://nodejs.org/en/download>.
+2. Run `scripts\start.bat` (Windows) or `bash scripts/start.sh` (Mac/Linux) directly — the window stays open and prints the real error.
+3. If you see `Input Error: There is no script engine for file extension ".vbs"`, your Windows Script Host is disabled. The current `AdForge.bat` uses PowerShell instead — make sure you have the latest version from this repo.
+
+### Port already in use
+
+**Symptom:** Sidecar starts but `/status` returns `web: starting` forever, or the launcher says "EADDRINUSE 3005."
+
+- The web app defaults to port 3005, sidecar to 3006. Open the launcher → **Settings** → change to anything 1024–65535. Save, then Stop + Start.
+- On Windows, find who owns the port: `netstat -ano | findstr :3005` then `taskkill /PID <pid> /F`.
+- On Mac/Linux: `lsof -iTCP:3005 -sTCP:LISTEN`.
+
+### Port mismatch between `.env.local` and the launcher
+
+**Symptom:** Launcher's "Open AdForge" button points at the wrong port.
+
+- Open `.env.local` in the install folder. It should have two lines: `PORT=3005` and `ADFORGE_SYNC_PORT=3006` (use whatever values you picked at install).
+- If both ports match what the launcher shows, you're fine. If they don't, save the correct values in `.env.local` and force-stop everything (`scripts\stop.bat` or `bash scripts/stop.sh`), then relaunch.
+
+### Windows Defender / SmartScreen warning
+
+**Symptom:** "Windows protected your PC" dialog when running `install.bat` or `AdForge.bat`.
+
+- Click **More info → Run anyway**. The warning appears for any unsigned script downloaded from the internet — AdForge is open source and reviewable.
+- For zero warnings: clone the repo with `git clone` instead of downloading the ZIP. Files created locally don't carry the "mark of the web."
+
+### Auto-update from GitHub
+
+The launcher checks GitHub once per page load for new commits on `main` and surfaces an **⬆ Update available** banner when there's something newer than your local HEAD. Click **Update now** to apply.
+
+**What it does** (each step's failure stops the pipeline and surfaces the error — your tree is never force-reset):
+
+1. Stop the web app
+2. `git fetch origin main`
+3. `git pull --ff-only origin main` *(no merges, no rebases — refuses on non-fast-forward to protect local work)*
+4. `npm install --no-audit --no-fund` *(in case package-lock.json changed)*
+5. Recursively delete `.next/` build cache
+6. Restart the web app on the new code
+
+**Rules the updater follows:**
+
+| Rule | What it does |
+|---|---|
+| **Branch lock** | Only runs when local branch is `main`. If you're on a feature branch, the banner stays hidden — you're developing, we don't second-guess. |
+| **Dirty-tree lock** | Pre-flight `git status --porcelain`. Any uncommitted change → refuse with a clear "Commit or stash first" message. |
+| **No auto-apply** | The check is automatic, the apply is always manual via the button + confirm dialog. |
+| **No destructive ops** | No `git reset --hard`, no `--force`, no `--no-verify`. If something's wrong, your state is preserved. |
+| **Single in-flight** | Only one update job at a time. The button locks until the current one finishes. |
+| **Observable** | Live log streams during apply. After success: "Reload launcher" button (manual — never auto-reloads). |
+| **Source of truth** | GitHub REST API at `/repos/IamRamgarhia/AdForge/commits/main`. No auth needed (public repo). |
+| **Data safe** | Your `data/snapshot.json` is never touched by the update. Brand brains, generated ads, campaigns, and history all survive. |
+
+**If the banner says "Working tree has uncommitted changes":** you've modified files locally. Either `git add . && git commit -m "my changes"` or `git stash`, then click **Update now** again.
+
+**If the banner says "Couldn't reach GitHub":** check your internet connection. The check happens once per launcher page load, so reload to retry.
+
+### Page loads as raw unstyled HTML (no CSS / no layout)
+
+**Symptom:** Sidebar items show as a vertical list of plain text links, no orange branding, no dark background.
+
+This is a stale `.next/` build-cache problem — usually caused by running `npm run build` while `next dev` is also running, which clobbers chunk files the dev server still references.
+
+**Fastest fix:**
+1. Open the launcher (http://127.0.0.1:3006/)
+2. Scroll to the **🧹 Clean rebuild** button in the trouble row
+3. Click it → confirms → wipes `.next/`, restarts the web app on a clean cache
+
+**Manual fix** (no launcher available): delete the `.next/` folder in the install directory and re-run `AdForge.bat` (or `bash AdForge.command` on Mac/Linux).
+
+### Web app stays on "Starting…" past 30 seconds
+
+**Symptom:** Launcher shows "Starting AdForge…" with progress bar that never completes.
+
+- First boot compiles 56 routes; this can take 15-30 seconds on slow disks. Wait a full minute.
+- If it's still stuck, click **⚠ Report a problem** in the launcher — the GitHub issue will include `web_last_log` which usually shows the exact compile error.
+- Workaround: stop the launcher, delete `.next/` in the install folder, restart.
+
+### Browser says "site can't be reached"
+
+**Symptom:** Clicking "Open AdForge" shows `ERR_CONNECTION_REFUSED`.
+
+- The web app isn't running. Go back to the launcher and check the status dot — orange means starting, gray means stopped. Click **Start**.
+- If the dot is green but the page still fails, your browser may have cached an old port. Try `http://127.0.0.1:<port>/` directly with the port shown in the launcher.
+
+### Where do I find the logs?
+
+- **Launcher (sidecar) logs:** the launcher page shows the last 3 lines of the Next.js output in the gray log box. For full logs, run `scripts\start.bat` / `bash scripts/start.sh` in a visible window instead of `AdForge.bat`.
+- **Web app errors in the browser:** open DevTools (F12) → Console.
+- **Data file:** `data/snapshot.json` in the install folder is everything AdForge has saved.
+
+### Reporting a bug
+
+Click **⚠ Report a problem on GitHub** in the launcher — it pre-fills [github.com/IamRamgarhia/AdForge-/issues/new](https://github.com/IamRamgarhia/AdForge-/issues/new) with your platform, Node version, port config, and recent log lines. Add what you were trying to do and submit.
 
 ---
 

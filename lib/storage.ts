@@ -1,5 +1,5 @@
 import Dexie, { type Table } from "dexie";
-import type { BrandBrain } from "./brand-brain";
+import { normalizeBrandBrain, type BrandBrain } from "./brand-brain";
 
 export type Platform =
   | "google"
@@ -132,11 +132,13 @@ export async function listBrains(opts?: { include_deleted?: boolean }): Promise<
   const rows = await db().brains.toArray();
   return rows
     .filter((b: any) => opts?.include_deleted || !b.deleted_at)
+    .map((b: any) => normalizeBrandBrain(b))
     .sort((a, b) => b.updated_at - a.updated_at);
 }
 
 export async function getBrain(id: string): Promise<BrandBrain | undefined> {
-  return db().brains.get(id);
+  const row = await db().brains.get(id);
+  return row ? normalizeBrandBrain(row) : undefined;
 }
 
 export async function saveAd(ad: GeneratedAd): Promise<void> {

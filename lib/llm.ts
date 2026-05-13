@@ -3,6 +3,7 @@ import {
   tryParseJson as _tryParseJson,
   estimateCostUsd as _estimateCostUsd,
   type LLMCallOptions,
+  type LLMMessage,
   type LLMResult,
   type StreamHandlers,
   type Provider,
@@ -20,7 +21,7 @@ export function getActiveProvider(): Provider | null {
 
 interface RunOptions {
   system?: string;
-  messages: { role: "user" | "assistant"; content: string }[];
+  messages: LLMMessage[];
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
@@ -98,7 +99,7 @@ interface LegacyOpts {
   apiKey: string;
   model?: string;
   system?: string;
-  messages: { role: "user" | "assistant"; content: string }[];
+  messages: LLMMessage[];
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
