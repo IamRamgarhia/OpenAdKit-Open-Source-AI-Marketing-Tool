@@ -33,7 +33,30 @@ echo
 npm install --no-audit --no-fund
 
 mkdir -p data
-chmod +x start.sh stop.sh scripts/set-domain.sh 2>/dev/null || true
+chmod +x AdForge.command scripts/start.sh scripts/stop.sh scripts/set-domain.sh 2>/dev/null || true
+
+# Try to create a Desktop shortcut so users can launch with one click.
+if [ -d "$HOME/Desktop" ]; then
+  if [ "$(uname)" = "Darwin" ]; then
+    # macOS: copy the .command (Finder runs .command files in Terminal)
+    cp -f AdForge.command "$HOME/Desktop/AdForge.command" 2>/dev/null && \
+      chmod +x "$HOME/Desktop/AdForge.command" 2>/dev/null && \
+      echo "Created Desktop shortcut: ~/Desktop/AdForge.command"
+  else
+    # Linux: write a .desktop entry
+    cat > "$HOME/Desktop/AdForge.desktop" <<DESK
+[Desktop Entry]
+Type=Application
+Name=AdForge
+Comment=Local AI ad operations cockpit
+Exec=bash $(pwd)/AdForge.command
+Terminal=true
+Categories=Office;Development;
+DESK
+    chmod +x "$HOME/Desktop/AdForge.desktop" 2>/dev/null
+    echo "Created Desktop shortcut: ~/Desktop/AdForge.desktop"
+  fi
+fi
 
 echo
 echo "=================================================="
@@ -86,11 +109,11 @@ echo " Install complete."
 echo "=================================================="
 echo
 echo "Next steps:"
-echo "  1. Run:  bash start.sh"
-echo "  2. Open one of these in your browser:"
+echo "  1. Double-click  AdForge  on your Desktop  (or run: bash AdForge.command)"
+echo "  2. Your browser opens to the AdForge launcher"
+echo "  3. Click the orange Start button to boot the web app at:"
 echo "       http://localhost:$PORT/"
 echo "       http://adforge.localhost:$PORT/    (zero setup, works in all modern browsers)"
-echo "  3. Follow the 5-step onboarding wizard"
 echo
 echo "Want a prettier URL like  http://adforge.local:$PORT/  ?"
 echo "  Run:  sudo bash scripts/set-domain.sh"

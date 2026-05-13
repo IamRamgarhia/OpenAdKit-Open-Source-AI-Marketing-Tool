@@ -94,19 +94,29 @@ if not exist data mkdir data
 echo.
 echo Saved PORT=!PORT! to .env.local
 echo.
+
+REM --- Create Desktop shortcut to AdForge.bat ---
+echo Creating Desktop shortcut...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$d = [Environment]::GetFolderPath('Desktop');" ^
+  "$t = Join-Path '%CD%' 'AdForge.bat';" ^
+  "$s = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'AdForge.lnk'));" ^
+  "$s.TargetPath = $t; $s.WorkingDirectory = '%CD%'; $s.Description = 'Launch AdForge'; $s.WindowStyle = 7; $s.Save();" ^
+  "Write-Host ('  -> ' + (Join-Path $d 'AdForge.lnk'))"
+
+echo.
 echo ==================================================
 echo  Install complete.
 echo ==================================================
 echo.
 echo Next steps:
-echo   1. Double-click  start.bat   to launch AdForge
-echo   2. Open one of these in your browser:
+echo   1. Double-click  AdForge  on your Desktop  ^(or AdForge.bat in this folder^)
+echo   2. Your browser opens to the AdForge launcher
+echo   3. Click the orange Start button to boot the web app
+echo.
+echo You can also open these directly in your browser once Start has been clicked:
 echo        http://localhost:!PORT!/
 echo        http://adforge.localhost:!PORT!/    ^(zero setup, works in all modern browsers^)
-echo   3. Follow the 5-step onboarding wizard
-echo.
-echo Want a prettier URL like  http://adforge.local:!PORT!/  ?
-echo   Right-click  scripts\set-domain.bat  and "Run as administrator".
 echo.
 echo Your data lives in:
 echo   %CD%\data\snapshot.json

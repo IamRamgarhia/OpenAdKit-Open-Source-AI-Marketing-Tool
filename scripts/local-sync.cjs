@@ -27,6 +27,7 @@
 const http = require("http");
 const fs = require("fs");
 const fsp = require("fs/promises");
+const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 
@@ -252,9 +253,36 @@ const server = http.createServer(async (req, res) => {
       setTimeout(() => startWeb(), 1200);
       return json(res, 200, { ok: true });
     }
+    if (req.method === "POST" && url === "/quit") {
+      // Stop the web child, ack to the caller, then exit the sidecar.
+      stopWeb();
+      json(res, 200, { ok: true, bye: true });
+      setTimeout(() => { try { server.close(); } catch {} process.exit(0); }, 250);
+      return;
+    }
 
     if (req.method === "GET" && url === "/config") {
       return json(res, 200, readEnvLocal());
+    }
+    if (req.method === "GET" && url === "/diagnostics") {
+      let pkgVersion = "unknown";
+      try { pkgVersion = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, "package.json"), "utf8")).version || "unknown"; } catch {}
+      return json(res, 200, {
+        adforge_version: pkgVersion,
+        node_version: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        os_release: os.release(),
+        os_type: os.type(),
+        web_status: webStatus,
+        web_port: webPort,
+        sync_port: PORT,
+        web_pid: webChild?.pid ?? null,
+        web_uptime_ms: webStartedAt ? Date.now() - webStartedAt : 0,
+        web_last_log: webLastLog,
+        cwd: PROJECT_ROOT,
+        timestamp: new Date().toISOString(),
+      });
     }
     if (req.method === "POST" && url === "/config") {
       const body = await readBody(req);

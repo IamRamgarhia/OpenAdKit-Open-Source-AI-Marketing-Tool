@@ -106,6 +106,10 @@
       <button id="btn-restart" style="display:none">⟳ Restart</button>
     </div>
     <div class="log" id="log"></div>
+    <div class="btns" id="trouble-row" style="display:none;margin-top:10px">
+      <button id="btn-report" class="btn">⚠ Report a problem on GitHub</button>
+      <a class="btn" href="https://github.com/IamRamgarhia/AdForge-#troubleshooting" target="_blank">📖 Troubleshooting guide</a>
+    </div>
   </div>
 
   <!-- Quick links once running -->
@@ -164,6 +168,8 @@
   const btnStop = $("btn-stop");
   const btnRestart = $("btn-restart");
   const btnSaveConfig = $("btn-save-config");
+  const btnReport = $("btn-report");
+  const troubleRow = $("trouble-row");
   const log = $("log");
   const linksCard = $("links-card");
   const urlList = $("url-list");
@@ -200,6 +206,9 @@
     lastStatus = s;
     dot.className = "dot " + s.web;
     meta.textContent = `web :${s.web_port}  ·  sync :${s.sync_port}`;
+    // Show the "Report a problem" row whenever the web app is not happily up.
+    const trouble = s.web === "down" || s.web === "stopping" || (s.web === "starting" && Date.now() - progressStart > 25000);
+    troubleRow.style.display = trouble ? "flex" : "none";
     if (s.web === "up") {
       label.textContent = "AdForge is running";
       progressWrap.style.display = "none";
@@ -246,9 +255,36 @@
       const s = await api("GET", "/status");
       applyStatus(s);
     } catch (e) {
-      label.textContent = "Sidecar unreachable — restart start.bat / start.sh";
+      label.textContent = "Sidecar unreachable — relaunch AdForge.bat / AdForge.command";
       dot.className = "dot down";
+      troubleRow.style.display = "flex";
     }
+  }
+
+  async function openGitHubIssue() {
+    let diag = null;
+    try { diag = await api("GET", "/diagnostics"); } catch {}
+    const lines = [
+      "## What were you trying to do?",
+      "",
+      "<!-- Describe what you were doing when the problem happened. -->",
+      "",
+      "## What happened instead?",
+      "",
+      "<!-- The error message, screenshot, or what went wrong. -->",
+      "",
+      "## Diagnostics",
+      "",
+      "```",
+      diag ? JSON.stringify(diag, null, 2) : "(launcher could not reach sidecar at " + SYNC + "/diagnostics)",
+      "```",
+      "",
+      "Browser: " + navigator.userAgent,
+    ];
+    const title = "Launcher issue — " + (diag ? diag.web_status : "sidecar unreachable");
+    const body = encodeURIComponent(lines.join("\n"));
+    const url = "https://github.com/IamRamgarhia/AdForge-/issues/new?labels=bug&title=" + encodeURIComponent(title) + "&body=" + body;
+    window.open(url, "_blank");
   }
 
   async function loadConfig() {
@@ -290,6 +326,8 @@
   btnOpen.addEventListener("click", () => {
     if (lastStatus) window.open(`http://localhost:${lastStatus.web_port}/`, "_blank");
   });
+
+  btnReport.addEventListener("click", openGitHubIssue);
 
   btnSaveConfig.addEventListener("click", async () => {
     const PORT = portInput.value.trim();

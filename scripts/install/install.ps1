@@ -124,25 +124,34 @@ Set-Content -Path ".env.local" -Value $envBody -Encoding utf8
 if (-not (Test-Path "data")) { New-Item -ItemType Directory -Path "data" | Out-Null }
 Write-OK "Saved PORT=$port to .env.local"
 
-# --- Step 6: Launch ---
+# --- Step 6: Desktop shortcut ---
+Write-Step "Creating Desktop shortcut"
+$DesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "AdForge.lnk"
+$LaunchTarget = Join-Path $Target "AdForge.bat"
+try {
+    $Wsh = New-Object -ComObject WScript.Shell
+    $Shortcut = $Wsh.CreateShortcut($DesktopShortcut)
+    $Shortcut.TargetPath = $LaunchTarget
+    $Shortcut.WorkingDirectory = $Target
+    $Shortcut.Description = "Launch AdForge"
+    # Hide the cmd flash by asking the shortcut to start minimized
+    $Shortcut.WindowStyle = 7
+    $Shortcut.Save()
+    Write-OK "Desktop shortcut: $DesktopShortcut"
+} catch {
+    Write-Warn "Could not create Desktop shortcut: $_"
+    Write-Host "  You can open the launcher directly: $LaunchTarget"
+}
+
+# --- Step 7: Open the launcher right now ---
 Write-Host ""
 Write-Host "==================================================" -ForegroundColor Green
-Write-Host " Install complete - launching AdForge..." -ForegroundColor Green
+Write-Host " Install complete - opening AdForge in your browser..." -ForegroundColor Green
 Write-Host "==================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Launcher (control panel): http://127.0.0.1:3006/"
-Write-Host "  Web app (after Start):    http://localhost:$port/"
-Write-Host ""
-Write-Host "  Click 'Start AdForge' in the launcher when it opens."
-Write-Host "  Close this window or run  stop.bat  to shut down."
+Write-Host "  From now on, double-click  AdForge  on your Desktop to launch."
+Write-Host "  The control panel opens as an HTML page in your default browser."
+Write-Host "  Click the orange Start button to boot the web app."
 Write-Host ""
 
-# Open launcher in default browser after a short delay
-Start-Job -ScriptBlock {
-    Start-Sleep -Seconds 2
-    Start-Process "http://127.0.0.1:3006/"
-} | Out-Null
-
-# Run sidecar in foreground so Ctrl+C cleanly stops it
-$env:ADFORGE_SYNC_PORT = "3006"
-& node "scripts\local-sync.cjs"
+Start-Process -FilePath $LaunchTarget -WorkingDirectory $Target -WindowStyle Hidden

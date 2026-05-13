@@ -62,32 +62,32 @@ You need **Node.js 20+** ([download here](https://nodejs.org/en/download)). That
 
 **Windows** (PowerShell):
 ```powershell
-iwr -useb https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/scripts/install/install.ps1 | iex
 ```
 
 **macOS / Linux / WSL**:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/install-online.sh | bash
+curl -fsSL https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/scripts/install/install.sh | bash
 ```
 
 That single command: installs Node + git if missing (Windows uses winget), clones the repo into `~/AdForge`, runs `npm install`, asks for a port, then opens the launcher control panel in your browser. Click **▶ Start AdForge** and you're live.
 
 ### Manual · Windows · 3 double-clicks
 1. **Download** this repo (green "Code" button → "Download ZIP" → extract)
-2. **Double-click `install.bat`** · waits for dependencies, asks for a port
-3. **Double-click `start.bat`** · opens the **AdForge launcher** in your browser
+2. **Double-click `install.bat`** · waits for dependencies, asks for a port, creates an **AdForge** shortcut on your Desktop
+3. **Double-click the new `AdForge` icon on your Desktop** *(or `AdForge.bat` in the folder)* · your default browser opens to the AdForge launcher
 
 The launcher is a control panel: hit **▶ Start AdForge**, watch the progress bar, then click **↗ Open AdForge** when it's up. From the launcher you can also stop, restart, change ports, and open three different local URLs.
 
-To shut everything down: **double-click `stop.bat`** (or close the launcher's terminal window).
+To shut everything down: close the launcher tab and run `scripts\stop.bat` (or just close the hidden sidecar via Task Manager).
 
 ### Manual · Mac / Linux · 3 commands
 ```bash
 git clone https://github.com/IamRamgarhia/AdForge-.git adforge
 cd adforge
-bash install.sh        # one-time setup
-bash start.sh          # launches everything · open http://localhost:3005
-# bash stop.sh         # to shut down later
+bash install.sh                  # one-time setup · creates ~/Desktop/AdForge shortcut
+bash AdForge.command             # or double-click AdForge on your Desktop
+# bash scripts/stop.sh           # to force-stop later
 ```
 
 ### Cross-platform · one command (after clone)
@@ -298,11 +298,12 @@ adforge/
 │   └── refresh_knowledge.py     Optional maintainer tool
 │
 ├── data/                        Your snapshot lives here (gitignored)
-├── install.ps1                  One-line online installer (Windows · PowerShell)
-├── install-online.sh            One-line online installer (Mac / Linux / WSL)
-├── install.bat / install.sh     Manual installer (after you clone/unzip)
-├── start.bat / start.sh         Launches web + sync sidecar
-├── stop.bat / stop.sh           Clean shutdown
+├── AdForge.bat / AdForge.command  Click-to-launch (Desktop shortcut points here)
+├── install.bat / install.sh       Manual installer (after you clone/unzip)
+├── scripts/install/install.ps1    One-line online bootstrap (Windows · PowerShell)
+├── scripts/install/install.sh     One-line online bootstrap (Mac / Linux / WSL)
+├── scripts/start.bat / start.sh    Manual sidecar runner (advanced)
+├── scripts/stop.bat / stop.sh      Force shutdown
 └── package.json
 ```
 
@@ -329,14 +330,76 @@ Production build: 56 statically prerendered routes · 87 KB shared JS · 130-160
 | Action | Windows | Mac / Linux | Cross-platform |
 |---|---|---|---|
 | Install (one-time) | double-click `install.bat` | `bash install.sh` | `npm install` |
-| **Start** (web + sync) | double-click `start.bat` | `bash start.sh` | `npm run start:all` |
-| **Stop** | double-click `stop.bat` | `bash stop.sh` | Ctrl+C |
+| **Launch** | double-click `AdForge` on Desktop *(or `AdForge.bat`)* | double-click `AdForge` on Desktop *(or `bash AdForge.command`)* | — |
+| Force-stop everything | `scripts\stop.bat` | `bash scripts/stop.sh` | Ctrl+C in the sidecar window |
+| Manual sidecar (visible log) | `scripts\start.bat` | `bash scripts/start.sh` | `npm run start:all` |
 | Web only | `npm run dev` | `npm run dev` | `npm run dev` |
 | Sync sidecar only | `npm run sync` | `npm run sync` | `npm run sync` |
 | Typecheck | `npm run typecheck` | — | — |
 | Production build | `npm run build` | — | — |
 
 Ports: web app **3005** · sync sidecar **3006** (both localhost-only).
+
+---
+
+## Troubleshooting
+
+Most problems come down to one of four things: a port already in use, Node missing or too old, Windows Defender blocking a script, or `.env.local` pointing at the wrong port. The launcher's **⚠ Report a problem on GitHub** button auto-fills an issue with your exact Node/OS/port state — use it if any of these don't help.
+
+### Sidecar won't start
+
+**Symptom:** Double-clicking `AdForge` does nothing, or the cmd window flashes and disappears.
+
+1. Open a terminal in the install folder and run `node --version`. If it reports anything below **v20.0.0** or "command not found," install Node 20+ from <https://nodejs.org/en/download>.
+2. Run `scripts\start.bat` (Windows) or `bash scripts/start.sh` (Mac/Linux) directly — the window stays open and prints the real error.
+3. If you see `Input Error: There is no script engine for file extension ".vbs"`, your Windows Script Host is disabled. The current `AdForge.bat` uses PowerShell instead — make sure you have the latest version from this repo.
+
+### Port already in use
+
+**Symptom:** Sidecar starts but `/status` returns `web: starting` forever, or the launcher says "EADDRINUSE 3005."
+
+- The web app defaults to port 3005, sidecar to 3006. Open the launcher → **Settings** → change to anything 1024–65535. Save, then Stop + Start.
+- On Windows, find who owns the port: `netstat -ano | findstr :3005` then `taskkill /PID <pid> /F`.
+- On Mac/Linux: `lsof -iTCP:3005 -sTCP:LISTEN`.
+
+### Port mismatch between `.env.local` and the launcher
+
+**Symptom:** Launcher's "Open AdForge" button points at the wrong port.
+
+- Open `.env.local` in the install folder. It should have two lines: `PORT=3005` and `ADFORGE_SYNC_PORT=3006` (use whatever values you picked at install).
+- If both ports match what the launcher shows, you're fine. If they don't, save the correct values in `.env.local` and force-stop everything (`scripts\stop.bat` or `bash scripts/stop.sh`), then relaunch.
+
+### Windows Defender / SmartScreen warning
+
+**Symptom:** "Windows protected your PC" dialog when running `install.bat` or `AdForge.bat`.
+
+- Click **More info → Run anyway**. The warning appears for any unsigned script downloaded from the internet — AdForge is open source and reviewable.
+- For zero warnings: clone the repo with `git clone` instead of downloading the ZIP. Files created locally don't carry the "mark of the web."
+
+### Web app stays on "Starting…" past 30 seconds
+
+**Symptom:** Launcher shows "Starting AdForge…" with progress bar that never completes.
+
+- First boot compiles 56 routes; this can take 15-30 seconds on slow disks. Wait a full minute.
+- If it's still stuck, click **⚠ Report a problem** in the launcher — the GitHub issue will include `web_last_log` which usually shows the exact compile error.
+- Workaround: stop the launcher, delete `.next/` in the install folder, restart.
+
+### Browser says "site can't be reached"
+
+**Symptom:** Clicking "Open AdForge" shows `ERR_CONNECTION_REFUSED`.
+
+- The web app isn't running. Go back to the launcher and check the status dot — orange means starting, gray means stopped. Click **Start**.
+- If the dot is green but the page still fails, your browser may have cached an old port. Try `http://127.0.0.1:<port>/` directly with the port shown in the launcher.
+
+### Where do I find the logs?
+
+- **Launcher (sidecar) logs:** the launcher page shows the last 3 lines of the Next.js output in the gray log box. For full logs, run `scripts\start.bat` / `bash scripts/start.sh` in a visible window instead of `AdForge.bat`.
+- **Web app errors in the browser:** open DevTools (F12) → Console.
+- **Data file:** `data/snapshot.json` in the install folder is everything AdForge has saved.
+
+### Reporting a bug
+
+Click **⚠ Report a problem on GitHub** in the launcher — it pre-fills [github.com/IamRamgarhia/AdForge-/issues/new](https://github.com/IamRamgarhia/AdForge-/issues/new) with your platform, Node version, port config, and recent log lines. Add what you were trying to do and submit.
 
 ---
 

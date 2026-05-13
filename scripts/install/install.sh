@@ -141,7 +141,7 @@ echo "  Launcher (control panel): http://127.0.0.1:3006/"
 echo "  Web app (after Start):    http://localhost:$PORT/"
 echo
 echo "  Click 'Start AdForge' in the launcher when it opens."
-echo "  Press Ctrl+C in this window or run  bash stop.sh  to shut down."
+echo "  Press Ctrl+C in this window or run  bash scripts/stop.sh  to shut down."
 echo
 
 open_url() {
