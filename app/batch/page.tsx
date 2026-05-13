@@ -9,7 +9,7 @@ import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { listBrains, saveAd, type GeneratedAd } from "@/lib/storage";
 import { type BrandBrain, buildBrandSystemPrompt } from "@/lib/brand-brain";
-import { llmCall, estimateCostUsd, tryParseJson } from "@/lib/llm";
+import { llmStream, estimateCostUsd, tryParseJson } from "@/lib/llm";
 import { addUsage, getLanguage, getToneOverride } from "@/lib/settings";
 import { buildContentCalendarPrompt } from "@/lib/prompts/content-calendar";
 import { buildHashtagPrompt } from "@/lib/prompts/hashtags";
@@ -166,16 +166,25 @@ function Inner() {
     // one failure doesn't drop the rest.
     await Promise.allSettled(
       chosen.map(async (brain, i) => {
-        setResults((cur) => cur.map((r, idx) => (idx === i ? { ...r, status: "running" } : r)));
+        setResults((cur) => cur.map((r, idx) => (idx === i ? { ...r, status: "running", text: "" } : r)));
         try {
           const built = buildPromptFor(assetKind, brain);
           const system = buildBrandSystemPrompt(brain, { language: getLanguage(), tone_override: getToneOverride() });
-          const res = await llmCall({
-            system,
-            messages: [{ role: "user", content: built.prompt }],
-            maxTokens: built.max,
-            temperature: 0.75,
-          });
+          let accumulated = "";
+          const res = await llmStream(
+            {
+              system,
+              messages: [{ role: "user", content: built.prompt }],
+              maxTokens: built.max,
+              temperature: 0.75,
+            },
+            {
+              onDelta: (delta) => {
+                accumulated += delta;
+                setResults((cur) => cur.map((r, idx) => (idx === i ? { ...r, text: accumulated } : r)));
+              },
+            }
+          );
           const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
           addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
           const json = tryParseJson<any>(res.text);
@@ -433,13 +442,16 @@ function Inner() {
 }
 
 function BatchRow({ r }: { r: RunResult }) {
-  const [open, setOpen] = useState(false);
-  const Icon = r.status === "done" ? Check : r.status === "running" ? Loader2 : r.status === "error" ? X : ChevronRight;
+  // Auto-expand while running so the user sees text streaming. Stay expanded
+  // once done; user can collapse manually.
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const open = manualOpen ?? (r.status === "running" || r.status === "done");
+  const interactive = r.status === "done" || r.status === "running";
   return (
     <li className="border border-base-700 bg-base-900/30">
       <button
-        onClick={() => setOpen(!open)}
-        disabled={r.status !== "done"}
+        onClick={() => setManualOpen(!open)}
+        disabled={!interactive}
         className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-base-800/40 transition disabled:cursor-default"
       >
         <span
@@ -454,22 +466,26 @@ function BatchRow({ r }: { r: RunResult }) {
             <Pill text="done" tone="pos" />
           </>
         ) : r.status === "running" ? (
-          <Pill text="running" tone="live" />
+          <>
+            {open ? <ChevronDown size={12} className="text-ink-faint" /> : <ChevronRight size={12} className="text-ink-faint" />}
+            <Pill text="streaming" tone="live" />
+          </>
         ) : r.status === "error" ? (
           <Pill text="failed" tone="neg" />
         ) : (
           <Pill text="queued" />
         )}
       </button>
-      {open && r.status === "done" && r.text ? (
+      {open && (r.status === "done" || r.status === "running") && r.text ? (
         <div className="border-t border-base-700 px-3 py-2 space-y-2">
           <div className="flex justify-end">
             <CopyButton text={r.text} />
           </div>
           <pre className="text-[11px] whitespace-pre-wrap font-mono leading-relaxed text-ink max-h-[300px] overflow-auto border border-base-700 bg-base-900/50 p-3 rounded-sm">
             {r.text}
+            {r.status === "running" ? <span className="text-live">▌</span> : null}
           </pre>
-          {r.ad_id ? (
+          {r.status === "done" && r.ad_id ? (
             <Link href={`/history?focus=${r.ad_id}`} className="text-[11px] text-live hover:underline">
               Open in History →
             </Link>

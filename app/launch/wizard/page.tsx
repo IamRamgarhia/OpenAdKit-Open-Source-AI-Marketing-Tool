@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { getActiveBrainId, addUsage, getLanguage, getToneOverride } from "@/lib/settings";
-import { llmCall, estimateCostUsd, tryParseJson } from "@/lib/llm";
+import { llmStream, estimateCostUsd, tryParseJson } from "@/lib/llm";
 import { getBrain, saveAd, saveCampaign, type Campaign, type GeneratedAd } from "@/lib/storage";
 import { buildBrandSystemPrompt, type BrandBrain } from "@/lib/brand-brain";
 import { buildCampaignKitPrompt } from "@/lib/prompts/campaign-kit";
@@ -113,16 +113,28 @@ function Inner() {
     expectJson?: boolean;
     signal?: AbortSignal;
   }): Promise<any> {
-    updatePhase(args.key, { status: "running" });
+    updatePhase(args.key, { status: "running", text: "" });
     const system = buildBrandSystemPrompt(brain, { language: getLanguage(), tone_override: getToneOverride() });
+    let accumulated = "";
     try {
-      const res = await llmCall({
-        system,
-        messages: [{ role: "user", content: args.prompt }],
-        maxTokens: args.maxTokens,
-        temperature: 0.7,
-        signal: args.signal,
-      });
+      const res = await llmStream(
+        {
+          system,
+          messages: [{ role: "user", content: args.prompt }],
+          maxTokens: args.maxTokens,
+          temperature: 0.7,
+          signal: args.signal,
+        },
+        {
+          onDelta: (delta) => {
+            accumulated += delta;
+            // Throttle setPhases updates to ~every 200ms equivalent — render
+            // the latest accumulated text via functional update so it doesn't
+            // stall the UI on every token.
+            updatePhase(args.key, { text: accumulated });
+          },
+        }
+      );
       const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
       addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
       const json = args.expectJson === false ? null : tryParseJson<any>(res.text);
@@ -500,7 +512,7 @@ function PhaseCard({ phase }: { phase: Phase }) {
     phase.status === "done" ? Check : phase.status === "running" ? Loader2 : phase.status === "error" ? X : null;
   return (
     <details
-      open={phase.status === "done" || phase.status === "error"}
+      open={phase.status === "running" || phase.status === "done" || phase.status === "error"}
       className="border border-base-700 bg-base-900/30"
     >
       <summary className="cursor-pointer list-none flex items-center gap-3 px-4 py-2.5 hover:bg-base-800/40 transition">
@@ -521,19 +533,18 @@ function PhaseCard({ phase }: { phase: Phase }) {
       <div className="px-4 pb-4 pt-2">
         {phase.status === "error" ? (
           <p className="text-xs text-neg">{phase.error}</p>
-        ) : phase.status === "done" ? (
-          phase.text ? (
-            <div className="space-y-2">
-              <div className="flex justify-end">
-                <CopyButton text={phase.text} />
-              </div>
-              <pre className="text-[11px] whitespace-pre-wrap font-mono leading-relaxed text-ink max-h-[280px] overflow-auto border border-base-700 bg-base-900/50 p-3 rounded-sm">
-                {phase.text}
-              </pre>
+        ) : phase.text ? (
+          <div className="space-y-2">
+            <div className="flex justify-end">
+              <CopyButton text={phase.text} />
             </div>
-          ) : null
+            <pre className="text-[11px] whitespace-pre-wrap font-mono leading-relaxed text-ink max-h-[280px] overflow-auto border border-base-700 bg-base-900/50 p-3 rounded-sm">
+              {phase.text}
+              {phase.status === "running" ? <span className="text-live">▌</span> : null}
+            </pre>
+          </div>
         ) : phase.status === "running" ? (
-          <p className="text-xs text-ink-muted">streaming…</p>
+          <p className="text-xs text-ink-muted">connecting to the model…</p>
         ) : (
           <p className="text-xs text-ink-subtle">queued</p>
         )}

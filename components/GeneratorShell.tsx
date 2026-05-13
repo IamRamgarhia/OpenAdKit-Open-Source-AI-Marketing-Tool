@@ -521,6 +521,40 @@ function ImageInput({
   );
 }
 
+/**
+ * Surfaces framework_meta the AI returns alongside structured JSON output.
+ * The framework stack in the system prompt asks for awareness_level /
+ * framework_used / u_scores — this component renders them as a tight pill row
+ * above the main output so users see why the AI made the calls it did.
+ *
+ * Looks for the metadata in two shapes: top-level `framework_meta` (added by
+ * the wizard-era prompts) OR top-level `awareness_level` (older direct shape).
+ */
+function FrameworkMetaPill({ json }: { json: any }) {
+  const meta = json?.framework_meta ?? json;
+  const aw = meta?.awareness_level;
+  const fw = meta?.framework_used;
+  const us = meta?.u_scores;
+  if (!aw && !fw && !us) return null;
+  const total = us ? (us.useful ?? 0) + (us.urgent ?? 0) + (us.unique ?? 0) + (us.ultra_specific ?? 0) : null;
+  return (
+    <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono uppercase tracking-ui-wide border border-base-700 bg-base-900/30 px-2 py-1.5">
+      <span className="text-ink-faint">framework:</span>
+      {aw ? <span className="text-info">{String(aw).replace(/_/g, " ")}</span> : null}
+      {aw && fw ? <span className="text-ink-faint">·</span> : null}
+      {fw ? <span className="text-live">{fw}</span> : null}
+      {total !== null ? (
+        <>
+          <span className="text-ink-faint">·</span>
+          <span className={total >= 12 ? "text-pos" : total >= 8 ? "text-live" : "text-neg"}>
+            U-score {total}/16
+          </span>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
   running,
   stream,
@@ -568,6 +602,7 @@ const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
   if (parsed && config.renderJson) {
     return (
       <div className="space-y-4 animate-fade-up">
+        <FrameworkMetaPill json={parsed} />
         {config.renderJson(parsed)}
         <div className="flex items-center justify-end gap-2">
           <CopyButton text={stream} label="copy raw output" />

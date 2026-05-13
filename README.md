@@ -114,20 +114,28 @@ After install, **everything you do** (brand brains, generated ads, campaigns, ch
 
 ## What's inside
 
-### 17 AI generators
+### Sidebar is grouped by platform
+Pick where you're running ads first ("I'm doing Meta this week"), then see every tool that applies. Cross-platform tools appear under each relevant group so discovery happens by *where* you ship, not by the action verb.
 
-| Platform | What |
-|---|---|
-| **Google** | Responsive Search Ad · Performance Max · Shopping · Display banners |
-| **Meta** | Feed · Stories · Reels · Carousel (3 angle-distinct variants per request) |
-| **TikTok** | 50 native hooks per click · UGC scripts · Spark Ads · Branded Hashtag Challenge |
-| **YouTube** | In-Stream (60s) · Bumpers (6s) · Discovery |
-| **LinkedIn** | Sponsored Content · Lead Gen Forms |
-| **Twitter / X** | Promoted Tweets · 6-tweet threads |
-| **Universal** | Full Campaign Kit · Hashtags (any language) · Email subjects · Lead forms · AI image/video prompts · Social content calendar |
+| Platform group | Generators | Optimizers in this group |
+|---|---|---|
+| **Meta · Facebook + Instagram** | Meta Ads · Reel Ideas · Lead Form · Hashtags · Content Calendar · Image / Video Prompts | CTR Optimizer (Meta-tuned) · Creative Score · Audience Targeting · Ad Fatigue · A/B Test · Landing Page · Bid Strategy |
+| **Google · Search + PMax + Shopping** | Google RSA · Performance Max · Shopping · Display Banners | Quality Score Improver · Keyword Builder · Bid Strategy · CTR Optimizer · Audience · Landing Page · A/B Test |
+| **TikTok** | TikTok In-Feed · Reel Ideas · Spark Ads · Branded Hashtag Challenge · Hashtags · Content Calendar · Image / Video Prompts | CTR Optimizer · Creative Score · Audience · Ad Fatigue |
+| **LinkedIn · B2B** | LinkedIn Sponsored · Lead Form | CTR Optimizer · Audience · Landing Page · A/B Test |
+| **YouTube** | YouTube TrueView Scripts · Shorts Ideas · Hashtags · Image / Video Prompts | Creative Score |
+| **X · Twitter** | Twitter Ads · Hashtags · Content Calendar | — |
+| **Email + Display** | Email Subjects · Display Banners | — |
 
-### 11 optimization tools
-**Creative Score** · **CTR Optimizer** · **Quality Score Improver** · **Budget Waste Analyzer** · **Budget Planner** · **Cost-Saving Tips** · **A/B Test Planner** · **Keyword Builder** · **Audience Targeting** · **Landing Page Grader** · **Bid Strategy Advisor** · **Ad Fatigue Detector**
+### Flagship features
+- **⚡ 10-Minute Launch Wizard** (`/launch/wizard`) — single click → strategy brief + cross-platform ad copy + content calendar + 3-email sequence + launch-day social posts. One Campaign, five chained AI calls, streaming live.
+- **Multi-Client Batch Mode** (`/batch`) — pick N clients → generate the same asset (Content Calendar / Hashtags / Reel Ideas / Campaign Kit) for all in parallel. Each output uses that client's own brand brain so voice is preserved per-client.
+- **Reel Idea Generator** (`/generate/reel-ideas`) — 10 proven hook formulas rotated across a batch (POV / Contradiction / Listicle / Number-Promise / Pattern-Interrupt / Before-After / Story / Demo / Controversy / Insider) with platform-native rules baked in for IG Reels / TikTok / Shorts / FB Reels.
+- **Competitor Reel Teardown** (`/research/reel-teardown`) — paste a competitor's captions → AI maps hook formulas, content pillars, format mix, weakness map → writes 5 "beat-their-reel" scripts citing the specific reels they respond to.
+- **Data-first optimizers** — every optimizer (CTR · Quality Score · Audience · Landing Page · Keywords · Bid Strategy · Ad Fatigue) requires real Google Ads / Meta / TikTok numbers, computes derived metrics, and cites specific values in its recommendations. Optional dashboard-screenshot upload on vision-capable providers (Claude / OpenAI 4.1+ / Gemini).
+
+### Universal tools (used across platforms)
+**Full Campaign Kit** · **Hashtags (any language)** · **Email Subjects** · **Lead Forms** · **AI Image/Video Prompts** · **Social Content Calendar** · **Steal & Beat** competitor ad teardown · **Compare 2 Ads** · **Budget Waste Analyzer** · **Budget Planner** · **A/B Test Planner**
 
 ### Multi-client management
 - Add a client by **pasting a website URL** — AdForge auto-extracts the Brand Brain (tone, audience, USP, VOC, words to use/avoid) using Jina Reader + your chosen LLM

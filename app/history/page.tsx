@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Trash2, Download, Search, Star, TrendingUp } from "lucide-react";
 import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
@@ -25,12 +26,16 @@ const statusTone: Record<GeneratedAd["status"], string> = {
 export default function HistoryPage() {
   return (
     <ApiKeyGate>
-      <HistoryInner />
+      <Suspense fallback={null}>
+        <HistoryInner />
+      </Suspense>
     </ApiKeyGate>
   );
 }
 
 function HistoryInner() {
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get("focus");
   const [ads, setAds] = useState<GeneratedAd[]>([]);
   const [brains, setBrains] = useState<BrandBrain[]>([]);
   const [q, setQ] = useState("");
@@ -54,6 +59,25 @@ function HistoryInner() {
     window.addEventListener("ados:brains-changed", h);
     return () => window.removeEventListener("ados:brains-changed", h);
   }, []);
+
+  // Deep-link support: /history?focus=<adId> expands the row and scrolls it
+  // into view. Wait until ads are loaded so the target element exists, then
+  // widen the scope to "all brands" if the focused ad isn't in the active one
+  // (otherwise the row may be filtered out).
+  useEffect(() => {
+    if (!focusId || ads.length === 0) return;
+    const target = ads.find((a) => a.id === focusId);
+    if (!target) return;
+    if (activeBrandId && target.brand_id !== activeBrandId) setScope("all_brands");
+    setExpanded(focusId);
+    // Wait one frame so the row is rendered before scrolling.
+    requestAnimationFrame(() => {
+      const el = document.getElementById(focusId);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.classList.add("ring-2", "ring-live");
+      setTimeout(() => el?.classList.remove("ring-2", "ring-live"), 2400);
+    });
+  }, [focusId, ads, activeBrandId]);
 
   const filtered = useMemo(() => {
     return ads.filter((a) => {
