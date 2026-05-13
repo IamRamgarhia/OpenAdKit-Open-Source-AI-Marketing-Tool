@@ -225,31 +225,33 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
               <span className="text-[11px] font-normal normal-case tracking-normal text-ink-muted">
                 {config.fields.filter(f => f.required).length} required
               </span>
-              {brain ? (
-                <button
-                  onClick={() => setInput((cur) => applySmartFill(config.fields, cur as any, brain) as I)}
-                  className="text-[12px] font-medium normal-case tracking-normal text-live hover:underline"
-                  title="Auto-fill empty fields from the active brand brain"
-                >
-                  ✨ smart-fill
-                </button>
-              ) : null}
             </div>
 
             {!brain ? (
               <div className="border border-live/30 bg-live/5 text-live text-[13px] px-3 py-2 flex gap-2 items-start">
                 <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                 <div>
-                  No active brand brain — copy will be generic + smart-fill disabled.{" "}
+                  No active brand brain — copy will be generic + auto-fill disabled.{" "}
                   <a href="/brand" className="underline font-medium">Create one</a>.
                 </div>
               </div>
             ) : (
-              <div className="border border-base-700 bg-base-900/30 text-[13px] px-3 py-2 flex items-center gap-2 text-ink-muted">
-                <span className="h-2 w-2 bg-pos rounded-full" />
-                <span>Active brand: <span className="text-pos font-medium">{brain.name || brain.business_name}</span></span>
-                <div className="flex-1" />
-                <span className="text-[11px] text-ink-faint hidden md:inline">Saved to history under this brand</span>
+              <div className="border border-live/30 bg-live/5 px-3 py-2.5 space-y-2">
+                <div className="flex items-center gap-2 text-[13px]">
+                  <span className="h-2 w-2 bg-pos rounded-full" />
+                  <span className="text-ink-muted">Active brand: <span className="text-pos font-medium">{brain.name || brain.business_name}</span></span>
+                  <div className="flex-1" />
+                  <span className="text-[11px] text-ink-faint hidden md:inline">Saved to history under this brand</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInput((cur) => applySmartFill(config.fields, cur as any, brain) as I)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-live text-base-950 font-semibold text-[13px] hover:bg-live/90 transition"
+                  title="Auto-fill empty fields from this client's brand brain"
+                >
+                  <Sparkles size={13} />
+                  <span>Auto-fill from {brain.name || brain.business_name}</span>
+                </button>
               </div>
             )}
 
