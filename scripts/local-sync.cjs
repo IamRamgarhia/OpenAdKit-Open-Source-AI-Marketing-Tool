@@ -1,45 +1,75 @@
 #!/usr/bin/env node
 /**
- * AdForge local-sync sidecar.
+ * AdForge local-sync + launcher sidecar.
  *
- * Tiny Node HTTP server (no dependencies — uses only built-ins) that exposes:
- *   GET  /snapshot           → returns data/snapshot.json (or {} if missing)
- *   POST /snapshot           → writes data/snapshot.json with the request body
- *   GET  /health             → liveness probe
+ * Tiny Node HTTP server (zero npm dependencies — only Node stdlib) that does two jobs:
  *
- * The Next.js web app probes for this sidecar on http://localhost:3006 and, when
- * available, auto-syncs brand brains + ads + campaigns + checklists into
- * `data/snapshot.json` in the project folder. Zip the folder, move to a new
- * machine, run again — all your work travels with you.
+ *   1. Folder-portable data persistence:
+ *      GET  /snapshot      → returns data/snapshot.json (or {} if missing)
+ *      POST /snapshot      → writes data/snapshot.json
  *
- * Notes:
- *   - API keys are NEVER synced by default (kept in browser localStorage only).
- *     User can opt-in to include keys via a Settings toggle (future work).
- *   - CORS is restricted to localhost.
- *   - Body size limit: 25 MB (plenty for the kind of data AdForge stores).
- *   - No auth — only binds to 127.0.0.1, so only the local machine can reach it.
+ *   2. Process manager + control-panel launcher:
+ *      GET  /              → serves public/launcher.html (the control panel)
+ *      GET  /status        → { web: 'down'|'starting'|'up', sync: 'up', web_port, sync_port }
+ *      POST /web/start     → spawns `next dev` as a child process
+ *      POST /web/stop      → kills the Next child process
+ *      POST /web/restart   → stop, wait, start
+ *      GET  /config        → returns current PORT + ADFORGE_SYNC_PORT from .env.local
+ *      POST /config        → updates .env.local (port + sync port)
+ *      GET  /health        → liveness probe
+ *
+ * Bound to 127.0.0.1 only — never network-reachable.
  *
  * Run:   node scripts/local-sync.cjs
- * Stop:  Ctrl+C   (or use the stop.bat / stop.sh in the repo root)
+ * Stop:  Ctrl+C
  */
 
 const http = require("http");
 const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
+const { spawn } = require("child_process");
 
-const PORT = Number(process.env.ADOS_SYNC_PORT || 3006);
-const ALLOWED_ORIGINS = new Set([
-  "http://localhost:3000",
-  "http://localhost:3005",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:3005",
-]);
-
+const PORT = Number(process.env.ADFORGE_SYNC_PORT || process.env.ADOS_SYNC_PORT || 3006);
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = path.join(PROJECT_ROOT, "data");
 const SNAPSHOT_PATH = path.join(DATA_DIR, "snapshot.json");
+const LAUNCHER_HTML = path.join(PROJECT_ROOT, "public", "launcher.html");
+const ENV_LOCAL = path.join(PROJECT_ROOT, ".env.local");
 const MAX_BODY = 25 * 1024 * 1024;
+
+// --- State ---
+let webChild = null;
+let webStatus = "down"; // 'down' | 'starting' | 'up' | 'stopping'
+let webPort = 3005;
+let webStartedAt = 0;
+let webLastLog = "";
+
+// --- Helpers ---
+function readEnvLocal() {
+  if (!fs.existsSync(ENV_LOCAL)) return { PORT: "3005", ADFORGE_SYNC_PORT: String(PORT) };
+  const out = {};
+  for (const line of fs.readFileSync(ENV_LOCAL, "utf8").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const eq = t.indexOf("=");
+    if (eq < 0) continue;
+    out[t.slice(0, eq).trim()] = t.slice(eq + 1).trim();
+  }
+  return { PORT: out.PORT || "3005", ADFORGE_SYNC_PORT: out.ADFORGE_SYNC_PORT || String(PORT) };
+}
+
+function writeEnvLocal(updates) {
+  const current = readEnvLocal();
+  const next = { ...current, ...updates };
+  const body = [
+    "# AdForge configuration (managed by the launcher)",
+    `PORT=${next.PORT}`,
+    `ADFORGE_SYNC_PORT=${next.ADFORGE_SYNC_PORT}`,
+  ].join("\n") + "\n";
+  fs.writeFileSync(ENV_LOCAL, body, "utf8");
+  return next;
+}
 
 async function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) await fsp.mkdir(DATA_DIR, { recursive: true });
@@ -47,13 +77,8 @@ async function ensureDataDir() {
 
 function setCors(req, res) {
   const origin = req.headers.origin || "";
-  if (ALLOWED_ORIGINS.has(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else if (origin && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else {
-    res.setHeader("Access-Control-Allow-Origin", "http://localhost:3005");
-  }
+  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
+  else res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Access-Control-Max-Age", "86400");
@@ -77,26 +102,163 @@ function readBody(req) {
   });
 }
 
+function json(res, status, body) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(body));
+}
+
+function tryProbeWeb(port, cb) {
+  const req = http.request(
+    { host: "127.0.0.1", port, path: "/", method: "GET", timeout: 1500 },
+    (resp) => {
+      resp.resume();
+      cb(resp.statusCode && resp.statusCode < 500);
+    }
+  );
+  req.on("error", () => cb(false));
+  req.on("timeout", () => { req.destroy(); cb(false); });
+  req.end();
+}
+
+function startWeb() {
+  if (webChild && !webChild.killed) {
+    return { ok: false, error: "already running" };
+  }
+  const env = readEnvLocal();
+  webPort = Number(env.PORT) || 3005;
+  webStatus = "starting";
+  webStartedAt = Date.now();
+  webLastLog = "";
+
+  const isWin = process.platform === "win32";
+  const npx = isWin ? "npx.cmd" : "npx";
+  webChild = spawn(npx, ["next", "dev", "-p", String(webPort)], {
+    cwd: PROJECT_ROOT,
+    env: { ...process.env, PORT: String(webPort) },
+    shell: isWin,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  webChild.stdout.on("data", (b) => {
+    const s = b.toString();
+    process.stdout.write(`[next] ${s}`);
+    webLastLog = s.trim().split("\n").slice(-3).join("\n");
+  });
+  webChild.stderr.on("data", (b) => {
+    const s = b.toString();
+    process.stderr.write(`[next-err] ${s}`);
+    webLastLog = s.trim().split("\n").slice(-3).join("\n");
+  });
+  webChild.on("exit", (code) => {
+    console.log(`[adforge] next dev exited with code ${code}`);
+    webChild = null;
+    webStatus = "down";
+  });
+
+  // Poll for "up"
+  const tick = () => {
+    if (!webChild || webChild.killed) return;
+    tryProbeWeb(webPort, (alive) => {
+      if (alive) { webStatus = "up"; return; }
+      if (Date.now() - webStartedAt < 60_000) setTimeout(tick, 800);
+      else webStatus = "down";
+    });
+  };
+  setTimeout(tick, 1500);
+
+  return { ok: true, pid: webChild.pid, port: webPort };
+}
+
+function stopWeb() {
+  if (!webChild || webChild.killed) {
+    webStatus = "down";
+    return { ok: true, was_running: false };
+  }
+  webStatus = "stopping";
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(webChild.pid), "/F", "/T"]);
+    } else {
+      webChild.kill("SIGTERM");
+      setTimeout(() => { try { webChild?.kill("SIGKILL"); } catch {} }, 2000);
+    }
+  } catch (e) { /* ignore */ }
+  return { ok: true, was_running: true };
+}
+
+// --- HTTP server ---
 const server = http.createServer(async (req, res) => {
   setCors(req, res);
-  if (req.method === "OPTIONS") {
-    res.statusCode = 204;
-    res.end();
-    return;
-  }
+  if (req.method === "OPTIONS") { res.statusCode = 204; res.end(); return; }
   try {
     const url = req.url || "/";
-    if (req.method === "GET" && url === "/health") {
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ ok: true, port: PORT, snapshot_path: SNAPSHOT_PATH }));
+
+    if (req.method === "GET" && (url === "/" || url === "/launcher" || url === "/launcher.html")) {
+      if (!fs.existsSync(LAUNCHER_HTML)) {
+        res.statusCode = 404;
+        res.setHeader("Content-Type", "text/plain");
+        res.end("launcher.html not found. Expected at: " + LAUNCHER_HTML);
+        return;
+      }
+      const html = await fsp.readFile(LAUNCHER_HTML, "utf8");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(html);
       return;
     }
+
+    if (req.method === "GET" && url === "/health") {
+      return json(res, 200, { ok: true, port: PORT });
+    }
+
+    if (req.method === "GET" && url === "/status") {
+      // Re-probe before returning so the launcher gets fresh data
+      tryProbeWeb(webPort, (alive) => {
+        if (alive) webStatus = "up";
+        else if (webStatus === "up") webStatus = "down";
+        json(res, 200, {
+          web: webStatus,
+          sync: "up",
+          web_port: webPort,
+          sync_port: PORT,
+          web_uptime_ms: webStartedAt ? Date.now() - webStartedAt : 0,
+          web_last_log: webLastLog,
+        });
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url === "/web/start") {
+      return json(res, 200, startWeb());
+    }
+    if (req.method === "POST" && url === "/web/stop") {
+      return json(res, 200, stopWeb());
+    }
+    if (req.method === "POST" && url === "/web/restart") {
+      stopWeb();
+      setTimeout(() => startWeb(), 1200);
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === "GET" && url === "/config") {
+      return json(res, 200, readEnvLocal());
+    }
+    if (req.method === "POST" && url === "/config") {
+      const body = await readBody(req);
+      let parsed;
+      try { parsed = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: "invalid json" }); }
+      const next = writeEnvLocal({
+        PORT: String(parsed.PORT || readEnvLocal().PORT),
+        ADFORGE_SYNC_PORT: String(parsed.ADFORGE_SYNC_PORT || readEnvLocal().ADFORGE_SYNC_PORT),
+      });
+      return json(res, 200, { ok: true, env: next, restart_required: true });
+    }
+
     if (req.method === "GET" && url === "/snapshot") {
       await ensureDataDir();
       let body = "{}";
-      if (fs.existsSync(SNAPSHOT_PATH)) {
-        body = await fsp.readFile(SNAPSHOT_PATH, "utf8");
-      }
+      if (fs.existsSync(SNAPSHOT_PATH)) body = await fsp.readFile(SNAPSHOT_PATH, "utf8");
       res.setHeader("Content-Type", "application/json");
       res.end(body || "{}");
       return;
@@ -104,39 +266,24 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url === "/snapshot") {
       await ensureDataDir();
       const body = await readBody(req);
-      // Validate it's JSON before writing
-      try {
-        JSON.parse(body);
-      } catch {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ ok: false, error: "invalid json" }));
-        return;
-      }
-      // Atomic-ish write: write to .tmp then rename
+      try { JSON.parse(body); } catch { return json(res, 400, { ok: false, error: "invalid json" }); }
       const tmp = SNAPSHOT_PATH + ".tmp";
       await fsp.writeFile(tmp, body, "utf8");
       await fsp.rename(tmp, SNAPSHOT_PATH);
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ ok: true, bytes: Buffer.byteLength(body) }));
-      return;
+      return json(res, 200, { ok: true, bytes: Buffer.byteLength(body) });
     }
-    res.statusCode = 404;
-    res.end(JSON.stringify({ ok: false, error: "not found" }));
+
+    return json(res, 404, { ok: false, error: "not found" });
   } catch (e) {
-    res.statusCode = 500;
-    res.end(JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }));
+    return json(res, 500, { ok: false, error: String(e?.message ?? e) });
   }
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`[adforge] local-sync listening on http://127.0.0.1:${PORT}`);
-  console.log(`[adforge] snapshot file: ${SNAPSHOT_PATH}`);
+  console.log(`[adforge] launcher + sync listening on http://127.0.0.1:${PORT}`);
+  console.log(`[adforge] open the launcher: http://127.0.0.1:${PORT}/`);
+  console.log(`[adforge] snapshot file:     ${SNAPSHOT_PATH}`);
 });
 
-process.on("SIGINT", () => {
-  console.log("[adforge] local-sync shutting down");
-  server.close(() => process.exit(0));
-});
-process.on("SIGTERM", () => {
-  server.close(() => process.exit(0));
-});
+process.on("SIGINT", () => { stopWeb(); console.log("[adforge] shutting down"); server.close(() => process.exit(0)); });
+process.on("SIGTERM", () => { stopWeb(); server.close(() => process.exit(0)); });

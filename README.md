@@ -60,10 +60,12 @@ You need **Node.js 20+** ([download here](https://nodejs.org/en/download)). That
 
 ### Windows · 3 double-clicks
 1. **Download** this repo (green "Code" button → "Download ZIP" → extract)
-2. **Double-click `install.bat`** · waits for dependencies
-3. **Double-click `start.bat`** · opens at **http://localhost:3005**
+2. **Double-click `install.bat`** · waits for dependencies, asks for a port
+3. **Double-click `start.bat`** · opens the **AdForge launcher** in your browser
 
-To stop: **double-click `stop.bat`** (or close the terminal window).
+The launcher is a control panel: hit **▶ Start AdForge**, watch the progress bar, then click **↗ Open AdForge** when it's up. From the launcher you can also stop, restart, change ports, and open three different local URLs.
+
+To shut everything down: **double-click `stop.bat`** (or close the launcher's terminal window).
 
 ### Mac / Linux · 3 commands
 ```bash

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# AdForge start — launches the local-sync sidecar + Next.js dev server.
-# Reads PORT + ADFORGE_SYNC_PORT from .env.local (configured by install.sh).
+# AdForge start — opens the launcher control panel in your browser.
+# From the launcher you click "Start AdForge" and watch progress.
 
 set -e
 cd "$(dirname "$0")"
@@ -12,36 +12,35 @@ fi
 
 mkdir -p data
 
-# Load env defaults
-PORT=3005
 SYNC_PORT=3006
-
 if [ -f .env.local ]; then
-  P=$(grep -E '^PORT=' .env.local | head -1 | cut -d= -f2)
-  [ -n "$P" ] && PORT="$P"
   SP=$(grep -E '^ADFORGE_SYNC_PORT=' .env.local | head -1 | cut -d= -f2)
   [ -n "$SP" ] && SYNC_PORT="$SP"
 fi
 
-echo "Starting AdForge..."
 echo
-echo "  Sidecar:  http://127.0.0.1:$SYNC_PORT             (local data sync to data/snapshot.json)"
-echo "  Web app:  http://localhost:$PORT                  (open this in your browser)"
-echo "            http://adforge.localhost:$PORT          (works in modern browsers, no setup)"
+echo "=================================================="
+echo " Opening AdForge launcher..."
+echo "=================================================="
+echo
+echo "  Launcher (control panel): http://127.0.0.1:$SYNC_PORT/"
+echo
+echo "  In the launcher, click 'Start AdForge' to launch the web app."
+echo "  Press Ctrl+C in this window or run  bash stop.sh  to shut down."
 echo
 
-# Start the sidecar in the background, capture PID
-ADFORGE_SYNC_PORT="$SYNC_PORT" node scripts/local-sync.cjs >data/sync.log 2>&1 &
-SYNC_PID=$!
-echo "$SYNC_PID" > .adforge-sync.pid
+# Cross-platform "open URL in default browser"
+open_url() {
+  local url="$1"
+  if   command -v open       >/dev/null 2>&1; then open "$url" &       # macOS
+  elif command -v xdg-open   >/dev/null 2>&1; then xdg-open "$url" &   # Linux
+  elif command -v wslview    >/dev/null 2>&1; then wslview "$url" &    # WSL
+  else echo "(open this URL manually: $url)"; fi
+}
 
-# Brief pause so the sidecar is up before the app probes it
-sleep 1
+# Open the launcher in the user's browser after a short delay
+( sleep 1.5 && open_url "http://127.0.0.1:$SYNC_PORT/" ) &
 
-trap 'echo; echo "Stopping AdForge..."; kill $SYNC_PID 2>/dev/null || true; rm -f .adforge-sync.pid; exit 0' INT TERM
-
-npx next dev -p "$PORT"
-
-# If next exits cleanly, also kill the sidecar
-kill $SYNC_PID 2>/dev/null || true
-rm -f .adforge-sync.pid
+# Run the sidecar in the foreground (it serves the launcher + manages Next)
+trap 'echo; echo "Stopping AdForge..."; exit 0' INT TERM
+ADFORGE_SYNC_PORT="$SYNC_PORT" node scripts/local-sync.cjs

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AdForge · Launcher</title>
+<style>
+  :root {
+    --bg: #08080a; --panel: #101013; --panel2: #16161b;
+    --border: #222229; --border2: #2a2a32;
+    --ink: #e7e7ea; --muted: #9a9aa3; --subtle: #6b6b74; --faint: #3f3f47;
+    --live: #ffb020; --pos: #5fdb9b; --neg: #ff5470; --info: #7aa2ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; min-height: 100vh; }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(255,176,32,0.05), transparent 40%),
+      radial-gradient(circle at 100% 100%, rgba(122,162,255,0.03), transparent 40%);
+  }
+  .wrap { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  header { display: flex; align-items: center; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+  .logo { width: 44px; height: 44px; background: var(--live); display: grid; place-items: center; color: var(--bg); font-family: Georgia, serif; font-style: italic; font-weight: 700; font-size: 28px; }
+  .brand { line-height: 1; }
+  .brand h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-style: italic; font-weight: 400; font-size: 32px; letter-spacing: -0.01em; }
+  .brand small { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+  .scope { margin-left: auto; font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--subtle); font-size: 12px; }
+
+  .card { border: 1px solid var(--border); background: var(--panel); padding: 22px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink); }
+  .card p { margin: 0 0 12px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+  .status-row { display: flex; align-items: center; gap: 14px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot.down { background: var(--neg); }
+  .dot.starting { background: var(--live); animation: pulse 1s ease-in-out infinite; }
+  .dot.up { background: var(--pos); box-shadow: 0 0 8px rgba(95,219,155,0.5); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .status-label { font-size: 18px; font-weight: 600; flex: 1; }
+  .status-meta { font-family: ui-monospace, monospace; font-size: 12px; color: var(--subtle); }
+
+  .progress { margin-top: 14px; height: 4px; background: var(--border); overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--live); width: 0; transition: width 250ms ease; }
+
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  button, .btn { font-family: inherit; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 12px 18px; border: 1px solid var(--border2); background: transparent; color: var(--ink); cursor: pointer; transition: all 150ms; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+  button:hover, .btn:hover { background: var(--panel2); border-color: var(--subtle); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .primary { background: var(--live); border-color: var(--live); color: var(--bg); }
+  .primary:hover { background: #e6a01d; border-color: #e6a01d; }
+  .danger { color: var(--neg); border-color: rgba(255,84,112,0.4); }
+  .danger:hover { background: rgba(255,84,112,0.08); border-color: var(--neg); }
+
+  .url-list { display: grid; gap: 8px; margin-top: 12px; }
+  .url-list a { display: flex; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--border); background: var(--panel2); color: var(--ink); text-decoration: none; font-family: ui-monospace, monospace; font-size: 13px; transition: all 120ms; }
+  .url-list a:hover { border-color: var(--live); color: var(--live); }
+  .url-list a small { color: var(--subtle); font-family: inherit; text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  .field input { width: 100%; padding: 10px 12px; background: var(--panel2); border: 1px solid var(--border2); color: var(--ink); font-family: ui-monospace, monospace; font-size: 13px; }
+  .field input:focus { outline: none; border-color: var(--live); }
+  .hint { font-size: 11px; color: var(--subtle); margin-top: 4px; }
+
+  .log { background: var(--bg); border: 1px solid var(--border); padding: 12px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); white-space: pre-wrap; max-height: 120px; overflow-y: auto; margin-top: 10px; }
+  .log:empty { display: none; }
+
+  footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--subtle); text-align: center; }
+  footer a { color: var(--live); text-decoration: none; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 18px; background: var(--panel); border: 1px solid var(--live); color: var(--ink); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 200ms; z-index: 100; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">A</div>
+    <div class="brand">
+      <h1>AdForge</h1>
+      <small>Control panel · by Dicecodes</small>
+    </div>
+    <div class="scope" id="scope">~/launcher</div>
+  </header>
+
+  <!-- Status + start/stop -->
+  <div class="card">
+    <h2>Service status</h2>
+    <div class="status-row">
+      <div class="dot" id="status-dot"></div>
+      <div class="status-label" id="status-label">Checking…</div>
+      <div class="status-meta" id="status-meta"></div>
+    </div>
+    <div class="progress" id="progress-wrap" style="display:none">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="btns">
+      <button id="btn-start" class="primary">▶ Start AdForge</button>
+      <button id="btn-open" class="btn" style="display:none">↗ Open AdForge</button>
+      <button id="btn-stop" class="danger" style="display:none">■ Stop</button>
+      <button id="btn-restart" style="display:none">⟳ Restart</button>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- Quick links once running -->
+  <div class="card" id="links-card" style="display:none">
+    <h2>Open in browser</h2>
+    <p>Pick whichever URL you like — they all point to the same app.</p>
+    <div class="url-list" id="url-list"></div>
+  </div>
+
+  <!-- Settings -->
+  <div class="card">
+    <h2>Settings</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="port">Web port</label>
+        <input id="port" type="number" min="1024" max="65535" />
+        <div class="hint">Default 3005. Stop + Start to apply.</div>
+      </div>
+      <div class="field">
+        <label for="sync-port">Sync sidecar port</label>
+        <input id="sync-port" type="number" min="1024" max="65535" />
+        <div class="hint">Default 3006. Changing this needs a manual sidecar restart.</div>
+      </div>
+    </div>
+    <div class="btns">
+      <button id="btn-save-config">Save settings</button>
+      <a class="btn" href="https://github.com/IamRamgarhia/AdForge/blob/main/docs/CUSTOM_DOMAIN.md" target="_blank">Set up pretty domain →</a>
+    </div>
+  </div>
+
+  <!-- Data -->
+  <div class="card">
+    <h2>Data</h2>
+    <p id="data-path" style="font-family:ui-monospace,monospace;font-size:12px;color:var(--subtle)">Your work is auto-saved to <code>data/snapshot.json</code> in this folder. Zip the folder, move anywhere — your data comes with it.</p>
+  </div>
+
+  <footer>
+    AdForge · MIT · <a href="https://dicecodes.com" target="_blank">Built by Dicecodes</a> · <a href="https://github.com/IamRamgarhia/AdForge" target="_blank">GitHub</a>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const SYNC = location.origin;
+  const $ = (id) => document.getElementById(id);
+
+  const dot = $("status-dot");
+  const label = $("status-label");
+  const meta = $("status-meta");
+  const progressWrap = $("progress-wrap");
+  const progressBar = $("progress-bar");
+  const btnStart = $("btn-start");
+  const btnOpen = $("btn-open");
+  const btnStop = $("btn-stop");
+  const btnRestart = $("btn-restart");
+  const btnSaveConfig = $("btn-save-config");
+  const log = $("log");
+  const linksCard = $("links-card");
+  const urlList = $("url-list");
+  const portInput = $("port");
+  const syncInput = $("sync-port");
+  const toast = $("toast");
+
+  let lastStatus = null;
+  let progressStart = 0;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 2200);
+  }
+
+  function api(method, path, body) {
+    return fetch(SYNC + path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    }).then((r) => r.json());
+  }
+
+  function renderUrls(port) {
+    urlList.innerHTML = `
+      <a href="http://localhost:${port}/" target="_blank">http://localhost:${port}/ <small>plain localhost</small></a>
+      <a href="http://adforge.localhost:${port}/" target="_blank">http://adforge.localhost:${port}/ <small>nice subdomain · zero setup</small></a>
+      <a href="http://127.0.0.1:${port}/" target="_blank">http://127.0.0.1:${port}/ <small>IP</small></a>
+    `;
+  }
+
+  function applyStatus(s) {
+    lastStatus = s;
+    dot.className = "dot " + s.web;
+    meta.textContent = `web :${s.web_port}  ·  sync :${s.sync_port}`;
+    if (s.web === "up") {
+      label.textContent = "AdForge is running";
+      progressWrap.style.display = "none";
+      btnStart.style.display = "none";
+      btnOpen.style.display = "inline-flex";
+      btnStop.style.display = "inline-flex";
+      btnRestart.style.display = "inline-flex";
+      linksCard.style.display = "block";
+      renderUrls(s.web_port);
+      log.textContent = "";
+    } else if (s.web === "starting") {
+      const elapsed = Date.now() - progressStart;
+      const pct = Math.min(95, (elapsed / 12000) * 100);
+      label.textContent = "Starting AdForge…";
+      progressWrap.style.display = "block";
+      progressBar.style.width = pct + "%";
+      btnStart.style.display = "none";
+      btnOpen.style.display = "none";
+      btnStop.style.display = "inline-flex";
+      btnRestart.style.display = "none";
+      linksCard.style.display = "none";
+      if (s.web_last_log) log.textContent = s.web_last_log;
+    } else if (s.web === "stopping") {
+      label.textContent = "Stopping…";
+      progressWrap.style.display = "none";
+      btnStart.style.display = "none";
+      btnOpen.style.display = "none";
+      btnStop.style.display = "inline-flex";
+      btnStop.disabled = true;
+    } else {
+      label.textContent = "AdForge is stopped";
+      progressWrap.style.display = "none";
+      btnStart.style.display = "inline-flex";
+      btnStart.disabled = false;
+      btnOpen.style.display = "none";
+      btnStop.style.display = "none";
+      btnRestart.style.display = "none";
+      linksCard.style.display = "none";
+    }
+  }
+
+  async function poll() {
+    try {
+      const s = await api("GET", "/status");
+      applyStatus(s);
+    } catch (e) {
+      label.textContent = "Sidecar unreachable — restart start.bat / start.sh";
+      dot.className = "dot down";
+    }
+  }
+
+  async function loadConfig() {
+    try {
+      const c = await api("GET", "/config");
+      portInput.value = c.PORT;
+      syncInput.value = c.ADFORGE_SYNC_PORT;
+    } catch {}
+  }
+
+  btnStart.addEventListener("click", async () => {
+    btnStart.disabled = true;
+    progressStart = Date.now();
+    progressBar.style.width = "0%";
+    try {
+      const r = await api("POST", "/web/start");
+      if (!r.ok) showToast(r.error || "Couldn't start");
+      else showToast("Starting AdForge…");
+    } catch (e) {
+      showToast("Couldn't reach the sidecar");
+    }
+    poll();
+  });
+
+  btnStop.addEventListener("click", async () => {
+    btnStop.disabled = true;
+    await api("POST", "/web/stop").catch(() => {});
+    showToast("Stopped");
+    setTimeout(() => { btnStop.disabled = false; poll(); }, 500);
+  });
+
+  btnRestart.addEventListener("click", async () => {
+    progressStart = Date.now();
+    await api("POST", "/web/restart").catch(() => {});
+    showToast("Restarting…");
+    setTimeout(poll, 500);
+  });
+
+  btnOpen.addEventListener("click", () => {
+    if (lastStatus) window.open(`http://localhost:${lastStatus.web_port}/`, "_blank");
+  });
+
+  btnSaveConfig.addEventListener("click", async () => {
+    const PORT = portInput.value.trim();
+    const SYNC_PORT = syncInput.value.trim();
+    if (!PORT || !SYNC_PORT) return showToast("Both ports required");
+    try {
+      const r = await api("POST", "/config", { PORT, ADFORGE_SYNC_PORT: SYNC_PORT });
+      if (r.ok) {
+        showToast("Saved. Restart AdForge to apply the new port.");
+        loadConfig();
+        poll();
+      } else {
+        showToast(r.error || "Couldn't save");
+      }
+    } catch (e) {
+      showToast("Couldn't reach the sidecar");
+    }
+  });
+
+  loadConfig();
+  poll();
+  setInterval(poll, 1500);
+})();
+</script>
+</body>
+</html>
