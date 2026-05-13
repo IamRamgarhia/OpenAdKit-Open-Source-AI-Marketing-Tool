@@ -56,9 +56,23 @@ You bring your own AI key — free tier (Groq · Gemini · Cerebras · OpenRoute
 
 ## Install in 60 seconds
 
-You need **Node.js 20+** ([download here](https://nodejs.org/en/download)). That's the only prerequisite.
+You need **Node.js 20+** ([download here](https://nodejs.org/en/download)). That's the only prerequisite — the one-liner below installs everything else.
 
-### Windows · 3 double-clicks
+### Fastest · one line, any OS
+
+**Windows** (PowerShell):
+```powershell
+iwr -useb https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/install.ps1 | iex
+```
+
+**macOS / Linux / WSL**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/IamRamgarhia/AdForge-/main/install-online.sh | bash
+```
+
+That single command: installs Node + git if missing (Windows uses winget), clones the repo into `~/AdForge`, runs `npm install`, asks for a port, then opens the launcher control panel in your browser. Click **▶ Start AdForge** and you're live.
+
+### Manual · Windows · 3 double-clicks
 1. **Download** this repo (green "Code" button → "Download ZIP" → extract)
 2. **Double-click `install.bat`** · waits for dependencies, asks for a port
 3. **Double-click `start.bat`** · opens the **AdForge launcher** in your browser
@@ -67,7 +81,7 @@ The launcher is a control panel: hit **▶ Start AdForge**, watch the progress b
 
 To shut everything down: **double-click `stop.bat`** (or close the launcher's terminal window).
 
-### Mac / Linux · 3 commands
+### Manual · Mac / Linux · 3 commands
 ```bash
 git clone https://github.com/IamRamgarhia/AdForge-.git adforge
 cd adforge
@@ -76,7 +90,7 @@ bash start.sh          # launches everything · open http://localhost:3005
 # bash stop.sh         # to shut down later
 ```
 
-### Cross-platform · one command
+### Cross-platform · one command (after clone)
 ```bash
 npm install
 npm run start:all      # web app + local-sync sidecar together
@@ -284,7 +298,9 @@ adforge/
 │   └── refresh_knowledge.py     Optional maintainer tool
 │
 ├── data/                        Your snapshot lives here (gitignored)
-├── install.bat / install.sh     One-click installer
+├── install.ps1                  One-line online installer (Windows · PowerShell)
+├── install-online.sh            One-line online installer (Mac / Linux / WSL)
+├── install.bat / install.sh     Manual installer (after you clone/unzip)
 ├── start.bat / start.sh         Launches web + sync sidecar
 ├── stop.bat / stop.sh           Clean shutdown
 └── package.json

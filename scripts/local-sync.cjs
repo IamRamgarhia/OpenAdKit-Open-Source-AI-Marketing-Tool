@@ -109,15 +109,22 @@ function json(res, status, body) {
 }
 
 function tryProbeWeb(port, cb) {
+  let done = false;
+  const finish = (alive) => {
+    if (done) return;
+    done = true;
+    cb(Boolean(alive));
+  };
   const req = http.request(
     { host: "127.0.0.1", port, path: "/", method: "GET", timeout: 1500 },
     (resp) => {
       resp.resume();
-      cb(resp.statusCode && resp.statusCode < 500);
+      finish(resp.statusCode && resp.statusCode < 500);
     }
   );
-  req.on("error", () => cb(false));
-  req.on("timeout", () => { req.destroy(); cb(false); });
+  req.on("error", () => finish(false));
+  req.on("timeout", () => { try { req.destroy(); } catch {} finish(false); });
+  req.on("close", () => finish(false));
   req.end();
 }
 
