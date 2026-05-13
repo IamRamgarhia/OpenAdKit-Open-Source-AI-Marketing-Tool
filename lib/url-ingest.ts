@@ -61,17 +61,30 @@ async function trySidecar(target: string, signal?: AbortSignal): Promise<IngestO
       `${sidecarOrigin()}/ingest?url=${encodeURIComponent(target)}`,
       { method: "GET", signal }
     );
+    // Specific case: sidecar is running but doesn't have /ingest (old version).
+    // Tell the user to restart the launcher so it picks up the new code.
+    if (res.status === 404) {
+      const body = await res.json().catch(() => ({}));
+      if (body?.error === "not found") {
+        return {
+          ok: false,
+          recoverable: true,
+          message:
+            "Sidecar is outdated (missing /ingest endpoint). Click 🧹 Clean rebuild in the launcher, OR close & relaunch via AdForge.bat / AdForge.command, to pick up new code.",
+        };
+      }
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       return {
         ok: false,
         recoverable: true,
-        message: `Sidecar fetch failed: ${body?.error ?? `HTTP ${res.status}`}.`,
+        message: `Sidecar HTTP ${res.status}: ${body?.error ?? res.statusText ?? "unknown"}`,
       };
     }
     const j = await res.json();
     if (!j.ok || !j.content || j.content.length < 50) {
-      return { ok: false, recoverable: true, message: "Sidecar returned almost no content. Trying Jina…" };
+      return { ok: false, recoverable: true, message: "Sidecar returned almost no content" };
     }
     return {
       ok: true,
@@ -82,7 +95,11 @@ async function trySidecar(target: string, signal?: AbortSignal): Promise<IngestO
     };
   } catch (e: any) {
     if (e?.name === "AbortError") return { ok: false, recoverable: false, message: "Cancelled." };
-    return { ok: false, recoverable: true, message: "Sidecar unreachable — is the launcher running on port 3006?" };
+    return {
+      ok: false,
+      recoverable: true,
+      message: "Sidecar unreachable on 127.0.0.1:3006 — is the launcher running?",
+    };
   }
 }
 
@@ -180,21 +197,32 @@ export async function ingestUrl(rawUrl: string, signal?: AbortSignal): Promise<I
   //   2. Jina Reader — best HTML→markdown extraction, occasional rate limits
   //   3. AllOrigins — last-resort CORS proxy when both above fail
   // Skip the sidecar for Jina-search URLs since we want Jina to do the search.
+  const errors: string[] = [];
+
   if (!isJinaSearch) {
     const sidecar = await trySidecar(target, signal);
     if (sidecar.ok) return sidecar;
+    errors.push(`Sidecar — ${sidecar.message}`);
   }
 
   const jina = await tryJina(target, signal);
   if (jina.ok) return jina;
+  errors.push(`Jina — ${jina.message}`);
 
   const ao = await tryAllOrigins(target, signal);
   if (ao.ok) return ao;
+  errors.push(`AllOrigins — ${ao.message}`);
 
+  // Build a diagnostic failure message that names what each reader actually
+  // returned, so the user can self-diagnose (stale sidecar, Jina rate limit,
+  // network offline) instead of guessing.
   return {
     ok: false,
     recoverable: true,
-    message: `All three readers failed (local sidecar, Jina, AllOrigins). The site may block scrapers, require login, or your network may be offline. Paste content below instead — open the URL in a new tab, select all (Ctrl+A / ⌘A), copy (Ctrl+C / ⌘C), and paste here.`,
+    message:
+      `Couldn't reach the URL via any reader. Each one returned:\n\n` +
+      errors.map((e) => `  • ${e}`).join("\n") +
+      `\n\nFix: open ${target} in a new tab, select all (Ctrl+A / ⌘A), copy (Ctrl+C / ⌘C), and paste into the box below.`,
   };
 }
 

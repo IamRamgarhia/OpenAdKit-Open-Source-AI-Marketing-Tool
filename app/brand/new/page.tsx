@@ -229,7 +229,7 @@ function Inner() {
               </button>
             </div>
             {quickStatus ? (
-              <p className="text-[11px] font-mono uppercase tracking-ui-wide text-neg mt-2">{quickStatus}</p>
+              <pre className="text-[11px] font-mono uppercase tracking-ui-wide text-neg mt-2 whitespace-pre-wrap leading-relaxed">{quickStatus}</pre>
             ) : (
               <p className="text-[11px] font-mono uppercase tracking-ui-wide text-ink-subtle mt-2">
                 tries jina reader → allorigins fallback · facebook/instagram block scrapers (use method 2 or 3 instead)
