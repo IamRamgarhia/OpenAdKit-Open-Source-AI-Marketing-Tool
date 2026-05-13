@@ -68,5 +68,30 @@ fi
 
 mkdir -p data
 
-# 5. Hand off to the launcher sidecar (visible log, Ctrl+C exits)
+# 5. If a stale sidecar is already running on the configured port, ask it to
+# quit before we hand off to start.sh. Otherwise we'd start a second sidecar
+# that fights for the port and loses, leaving the stale one in place.
+SYNC_PORT="${ADFORGE_SYNC_PORT:-3006}"
+if [ -f .env.local ]; then
+  SP=$(grep -E '^ADFORGE_SYNC_PORT=' .env.local | head -1 | cut -d= -f2 | tr -d '\r')
+  [ -n "$SP" ] && SYNC_PORT="$SP"
+fi
+if command -v curl >/dev/null 2>&1; then
+  CAPS=$(curl -fsS --max-time 2 "http://127.0.0.1:${SYNC_PORT}/health" 2>/dev/null | tr -d '\r\n')
+  if [ -n "$CAPS" ]; then
+    if echo "$CAPS" | grep -q '"ingest"'; then
+      echo "Sidecar already running on :${SYNC_PORT} (current version). Opening browser..."
+      if command -v open >/dev/null 2>&1; then open "http://127.0.0.1:${SYNC_PORT}/" &
+      elif command -v xdg-open >/dev/null 2>&1; then xdg-open "http://127.0.0.1:${SYNC_PORT}/" &
+      fi
+      exit 0
+    else
+      echo "Stale sidecar detected on :${SYNC_PORT} — asking it to quit before starting a fresh one..."
+      curl -fsS -X POST --max-time 3 "http://127.0.0.1:${SYNC_PORT}/quit" >/dev/null 2>&1 || true
+      sleep 1
+    fi
+  fi
+fi
+
+# 6. Hand off to the launcher sidecar (visible log, Ctrl+C exits)
 exec bash scripts/start.sh

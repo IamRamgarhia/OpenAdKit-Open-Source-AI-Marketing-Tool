@@ -22,12 +22,29 @@ if exist .env.local (
     for /f "tokens=2 delims==" %%a in ('findstr /b "ADFORGE_SYNC_PORT=" .env.local 2^>nul') do set "SYNC_PORT=%%a"
 )
 
-REM --- Already running? Just open the browser ---
-powershell -NoProfile -Command ^
-  "try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 -Uri 'http://127.0.0.1:!SYNC_PORT!/health' | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
-if not errorlevel 1 (
+REM --- Already running? Check whether it's CURRENT or STALE ---
+REM We check the /health endpoint's capabilities array: if "ingest" is missing
+REM the running sidecar predates the auto-ingest feature and needs replacement.
+REM Without this check, a stale hidden sidecar keeps responding forever and
+REM the user has no way to kill it (no visible window).
+set "SIDECAR_STATE=none"
+for /f %%S in ('powershell -NoProfile -Command ^
+  "try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Uri 'http://127.0.0.1:!SYNC_PORT!/health';" ^
+  "  $caps = (ConvertFrom-Json $r.Content).capabilities;" ^
+  "  if ($caps -contains 'ingest') { 'current' } else { 'stale' } }" ^
+  "catch { 'none' }" 2^>nul') do set "SIDECAR_STATE=%%S"
+
+if "!SIDECAR_STATE!"=="current" (
+    echo Sidecar already running on :!SYNC_PORT! (current version). Opening browser...
     start "" "http://127.0.0.1:!SYNC_PORT!/"
     exit /b 0
+)
+if "!SIDECAR_STATE!"=="stale" (
+    echo Stale sidecar detected on :!SYNC_PORT! - asking it to quit before starting a fresh one...
+    powershell -NoProfile -Command ^
+      "try { Invoke-WebRequest -UseBasicParsing -Method POST -TimeoutSec 3 -Uri 'http://127.0.0.1:!SYNC_PORT!/quit' | Out-Null } catch {}" >nul 2>&1
+    REM Wait a beat for the OS to release the port.
+    powershell -NoProfile -Command "Start-Sleep -Milliseconds 1500" >nul 2>&1
 )
 
 REM --- Sanity: Node installed? ---
