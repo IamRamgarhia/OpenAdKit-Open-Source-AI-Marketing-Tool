@@ -179,18 +179,30 @@ async function tryAllOrigins(target: string, signal?: AbortSignal): Promise<Inge
   }
 }
 
+/** Debug helper — every reader attempt logs to the browser console with a
+ *  consistent prefix. Open DevTools (F12) → Console tab to watch the ingest
+ *  pipeline live. Easy to grep, easy to disable later if it gets noisy. */
+function dbg(stage: string, payload?: unknown): void {
+  if (typeof window === "undefined") return;
+  // eslint-disable-next-line no-console
+  console.debug("[adforge:url-ingest]", stage, payload ?? "");
+}
+
 export async function ingestUrl(rawUrl: string, signal?: AbortSignal): Promise<IngestOutcome> {
+  dbg("ingest:start", { rawUrl });
   let target: string;
   try {
     target = normalize(rawUrl);
     new URL(target);
   } catch {
+    dbg("ingest:invalid-url");
     return { ok: false, recoverable: false, message: "That doesn't look like a valid URL." };
   }
 
   // Special case: Jina search URLs (s.jina.ai/<query>) — those have to go
   // through Jina, the sidecar can't replicate Google search.
   const isJinaSearch = /^https?:\/\/s\.jina\.ai\//i.test(target);
+  dbg("ingest:target-normalized", { target, isJinaSearch });
 
   // Strategy (most-reliable first):
   //   1. Local sidecar — no CORS, no quota, no third-party dependency
@@ -200,18 +212,28 @@ export async function ingestUrl(rawUrl: string, signal?: AbortSignal): Promise<I
   const errors: string[] = [];
 
   if (!isJinaSearch) {
+    dbg("ingest:try-sidecar");
     const sidecar = await trySidecar(target, signal);
+    dbg("ingest:sidecar-result", sidecar);
     if (sidecar.ok) return sidecar;
     errors.push(`Sidecar — ${sidecar.message}`);
+  } else {
+    dbg("ingest:skip-sidecar-jina-search");
   }
 
+  dbg("ingest:try-jina");
   const jina = await tryJina(target, signal);
+  dbg("ingest:jina-result", jina);
   if (jina.ok) return jina;
   errors.push(`Jina — ${jina.message}`);
 
+  dbg("ingest:try-allorigins");
   const ao = await tryAllOrigins(target, signal);
+  dbg("ingest:allorigins-result", ao);
   if (ao.ok) return ao;
   errors.push(`AllOrigins — ${ao.message}`);
+
+  dbg("ingest:all-failed", { errors });
 
   // Build a diagnostic failure message that names what each reader actually
   // returned, so the user can self-diagnose (stale sidecar, Jina rate limit,

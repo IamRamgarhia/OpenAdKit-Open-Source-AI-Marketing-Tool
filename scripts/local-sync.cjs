@@ -463,7 +463,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url === "/health") {
-      return json(res, 200, { ok: true, port: PORT });
+      // capabilities array lets the browser confirm which endpoints this
+      // sidecar supports — useful for diagnosing "stale sidecar" issues
+      // without having to grep the source.
+      return json(res, 200, {
+        ok: true,
+        port: PORT,
+        capabilities: ["status", "snapshot", "config", "web/start", "web/stop", "web/restart", "web/rebuild", "diagnostics", "update/check", "update/apply", "update/status", "ingest"],
+        sidecar_version: "2026.05.de6d6df+", // bump this when adding new endpoints
+      });
     }
 
     if (req.method === "GET" && url === "/status") {
