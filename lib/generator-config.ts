@@ -33,4 +33,8 @@ export interface GeneratorConfig<I extends Record<string, unknown>> {
   renderJson?: (json: any) => React.ReactNode;
   /** Optional renderer that runs against the streaming text BEFORE final JSON parse. */
   renderStreaming?: (text: string) => React.ReactNode;
+  /** Skip the (~1.1k-token) framework stack on short-form generators where the
+   *  framework doesn't apply (hashtags, email subjects, concept explainers,
+   *  framework lessons). Defaults to false — most generators benefit. */
+  skip_framework_stack?: boolean;
 }

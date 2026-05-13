@@ -13,6 +13,7 @@ const config: GeneratorConfig<EmailSubjectInput & Record<string, unknown>> = {
   platform: "google",
   campaign_type: "Email Subjects",
   maxTokens: 2500,
+  skip_framework_stack: true,
   fields: [
     {
       name: "campaign_type",

@@ -211,16 +211,37 @@ function SettingsInner() {
                       </div>
                     </div>
                     <div>
-                      <label className="label">model</label>
+                      <label className="label flex items-center gap-2">
+                        <span>model</span>
+                        {p.supports_vision ? (
+                          <span className="text-[9px] font-mono uppercase tracking-ui-wide text-live border border-live/40 px-1.5 py-0.5">
+                            👁 vision-capable
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-mono uppercase tracking-ui-wide text-ink-faint border border-base-700 px-1.5 py-0.5">
+                            text-only
+                          </span>
+                        )}
+                      </label>
                       <select
                         value={modelsByProvider[p.id] ?? p.default_model}
                         onChange={(e) => setModelsByProvider({ ...modelsByProvider, [p.id]: e.target.value })}
                         className="input-base"
                       >
-                        {p.models.map((m) => (
-                          <option key={m.id} value={m.id}>{m.label}</option>
-                        ))}
+                        {p.models.map((m) => {
+                          const vision = m.supports_vision ?? p.supports_vision;
+                          return (
+                            <option key={m.id} value={m.id}>
+                              {vision ? "👁 " : ""}{m.label}
+                            </option>
+                          );
+                        })}
                       </select>
+                      {!p.supports_vision ? (
+                        <p className="text-[10px] text-ink-subtle mt-1 font-mono uppercase tracking-ui-wide">
+                          image upload disabled on this provider — switch to Anthropic, OpenAI 4.1+, Gemini, or OpenRouter
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 

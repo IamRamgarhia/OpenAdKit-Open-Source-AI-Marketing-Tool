@@ -107,18 +107,21 @@ import { FRAMEWORK_STACK } from "./prompts/framework-stack";
 export interface SystemPromptOverrides {
   language?: string;
   tone_override?: string;
+  /** Suppress the 1.1k-token framework stack — used by short-form generators
+   *  (hashtags, email subjects, concept explainers) where the full strategic
+   *  framework would dwarf the actual output. */
+  skip_framework_stack?: boolean;
 }
 
 export function buildBrandSystemPrompt(brain: BrandBrain | null, overrides?: SystemPromptOverrides): string {
   const lang = overrides?.language && overrides.language !== "English" ? `\n\nLANGUAGE: Output ALL generated copy in ${overrides.language}. Variant labels, JSON field names, and metadata stay in English.` : "";
   const toneOverride = overrides?.tone_override ? `\n\nTONE OVERRIDE (replaces brand default): ${overrides.tone_override}` : "";
+  const framework = overrides?.skip_framework_stack ? "" : `\n${FRAMEWORK_STACK}\n`;
   if (!brain || !brain.business_name) {
     return `You are an expert direct-response copywriter and paid media specialist.
 The user has not configured a Brand Brain yet. Write professional, conversion-focused copy
 that respects all platform character limits given in the user prompt.
-
-${FRAMEWORK_STACK}
-
+${framework}
 HONESTY: Never fabricate stats, testimonials, named partnerships, awards, or certifications.
 AVOID: streamline, optimize, innovative, utilize, leverage, synergy, transform, "best", "#1", "leading" — unless verifiable.
 WEAK CTAs to replace: "Submit", "Sign Up", "Learn More", "Click Here", "Get Started" → use outcome-named action verbs ("Start My Free Trial", "Get the Checklist").${lang}${toneOverride}`;
@@ -174,9 +177,7 @@ PROVEN ANGLES: ${list(brain.best_performing_angles)}
 ANGLES TO AVOID: ${list(brain.failed_angles)}
 
 === END BRAND BRAIN ===
-
-${FRAMEWORK_STACK}
-
+${framework}
 RULES:
 1. Always write in the exact tone and style above.
 2. Use VOC phrases naturally — never force them.

@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, AlertTriangle, Check, X, ArrowRight } from "lucide-react";
+import { Loader2, Sparkles, AlertTriangle, Check, X, ArrowRight, StopCircle } from "lucide-react";
 import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
 import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { getActiveBrainId, addUsage, getLanguage, getToneOverride } from "@/lib/settings";
 import { llmCall, estimateCostUsd, tryParseJson } from "@/lib/llm";
-import { getBrain, saveBrain, saveAd, saveCampaign, type Campaign, type GeneratedAd } from "@/lib/storage";
+import { getBrain, saveAd, saveCampaign, type Campaign, type GeneratedAd } from "@/lib/storage";
 import { buildBrandSystemPrompt, type BrandBrain } from "@/lib/brand-brain";
 import { buildCampaignKitPrompt } from "@/lib/prompts/campaign-kit";
 import { buildContentCalendarPrompt } from "@/lib/prompts/content-calendar";
@@ -62,6 +62,14 @@ function Inner() {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [topError, setTopError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  function stopWizard() {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      setTopError("Wizard stopped. Completed phases are saved; the rest are dropped.");
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -103,6 +111,7 @@ function Inner() {
     prompt: string;
     maxTokens: number;
     expectJson?: boolean;
+    signal?: AbortSignal;
   }): Promise<any> {
     updatePhase(args.key, { status: "running" });
     const system = buildBrandSystemPrompt(brain, { language: getLanguage(), tone_override: getToneOverride() });
@@ -112,6 +121,7 @@ function Inner() {
         messages: [{ role: "user", content: args.prompt }],
         maxTokens: args.maxTokens,
         temperature: 0.7,
+        signal: args.signal,
       });
       const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
       addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
@@ -173,6 +183,8 @@ function Inner() {
     // Reset
     setRunning(true);
     setCampaignId(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     const phaseList: Phase[] = [
       { key: "strategy", label: "Strategy brief", status: "pending" },
@@ -213,6 +225,7 @@ function Inner() {
         label: "Strategy brief",
         prompt: buildStrategyBriefPrompt(common),
         maxTokens: 1200,
+        signal: controller.signal,
       });
       const strat = strategy.json ?? {};
       await persistAsAd({
@@ -248,6 +261,7 @@ function Inner() {
             budget_monthly: common.budget_total,
           } as any),
           maxTokens: 5500,
+          signal: controller.signal,
         }),
         runOnePhase({
           key: "calendar",
@@ -263,6 +277,7 @@ function Inner() {
             region_or_timezone: brain.audience_demographics || "(unspecified)",
           } as any),
           maxTokens: 6500,
+          signal: controller.signal,
         }),
         runOnePhase({
           key: "email",
@@ -274,6 +289,7 @@ function Inner() {
             primary_cta,
           }),
           maxTokens: 2500,
+          signal: controller.signal,
         }),
         runOnePhase({
           key: "social",
@@ -285,6 +301,7 @@ function Inner() {
             proof_points,
           }),
           maxTokens: 3500,
+          signal: controller.signal,
         }),
       ]);
 
@@ -327,9 +344,14 @@ function Inner() {
       });
       window.dispatchEvent(new Event("ados:usage"));
     } catch (e: any) {
-      setTopError(e?.message ?? "The wizard hit an error. Each completed phase is still saved.");
+      if (e?.name === "AbortError") {
+        // Already messaged by stopWizard().
+      } else {
+        setTopError(e?.message ?? "The wizard hit an error. Each completed phase is still saved.");
+      }
     } finally {
       setRunning(false);
+      abortRef.current = null;
     }
   }
 
@@ -429,14 +451,21 @@ function Inner() {
             <div className="border border-neg/40 bg-neg/5 text-neg text-[11px] px-3 py-2 font-mono uppercase tracking-ui-wide">{topError}</div>
           ) : null}
 
-          <button
-            onClick={runWizard}
-            disabled={running || !brain}
-            className="btn-primary w-full"
-          >
-            {running ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-            {running ? "Building your launch kit…" : "Build it · 10-min launch kit"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={runWizard}
+              disabled={running || !brain}
+              className="btn-primary flex-1"
+            >
+              {running ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {running ? "Building your launch kit…" : "Build it · 10-min launch kit"}
+            </button>
+            {running ? (
+              <button onClick={stopWizard} className="btn-ghost" title="Stop the wizard — finished phases stay saved">
+                <StopCircle size={12} />
+              </button>
+            ) : null}
+          </div>
 
           {campaignId ? (
             <div className="text-[10px] text-pos flex items-center gap-1.5 font-mono uppercase tracking-ui-mega">

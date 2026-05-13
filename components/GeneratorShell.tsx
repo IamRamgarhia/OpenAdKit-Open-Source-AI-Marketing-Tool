@@ -44,6 +44,7 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
   const [savedId, setSavedId] = useState<string | null>(null);
   const [hasRun, setHasRun] = useState(false);
   const [nextSteps, setNextSteps] = useState<NextStep[]>([]);
+  const [fillToast, setFillToast] = useState<string | null>(null);
   const stream = useThrottledStream();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -140,7 +141,11 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const system = buildBrandSystemPrompt(brain, { language: getLanguage(), tone_override: getToneOverride() });
+      const system = buildBrandSystemPrompt(brain, {
+        language: getLanguage(),
+        tone_override: getToneOverride(),
+        skip_framework_stack: config.skip_framework_stack,
+      });
       const prompt = config.buildPrompt(input, brain);
       // Build content. With no images, send a plain string for cheapest path.
       // With images, send the array of parts (images first → text last is the
@@ -245,13 +250,34 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setInput((cur) => applySmartFill(config.fields, cur as any, brain) as I)}
+                  onClick={() => {
+                    setInput((cur) => {
+                      const next = applySmartFill(config.fields, cur as any, brain) as I;
+                      // Count fields that actually changed so the user sees what happened.
+                      let filled = 0;
+                      for (const f of config.fields) {
+                        if ((cur as any)[f.name] !== (next as any)[f.name]) filled++;
+                      }
+                      if (filled === 0) {
+                        setFillToast("All fields already match — nothing to fill.");
+                      } else {
+                        setFillToast(`Filled ${filled} field${filled === 1 ? "" : "s"} from ${brain.name || brain.business_name}. Edit anything that looks off.`);
+                      }
+                      setTimeout(() => setFillToast(null), 3000);
+                      return next;
+                    });
+                  }}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-live text-base-950 font-semibold text-[13px] hover:bg-live/90 transition"
                   title="Auto-fill empty fields from this client's brand brain"
                 >
                   <Sparkles size={13} />
                   <span>Auto-fill from {brain.name || brain.business_name}</span>
                 </button>
+                {fillToast ? (
+                  <div className="text-[11px] text-pos font-mono uppercase tracking-ui-wide animate-fade-up">
+                    ✓ {fillToast}
+                  </div>
+                ) : null}
               </div>
             )}
 

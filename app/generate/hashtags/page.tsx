@@ -13,6 +13,7 @@ const config: GeneratorConfig<HashtagInput & Record<string, unknown>> = {
   campaign_type: "Hashtags",
   maxTokens: 2500,
   temperature: 0.6,
+  skip_framework_stack: true,
   fields: [
     { name: "title", label: "Title / topic", kind: "text", required: true, placeholder: "e.g. Best vegan recipes for beginners", span: 2 },
     {

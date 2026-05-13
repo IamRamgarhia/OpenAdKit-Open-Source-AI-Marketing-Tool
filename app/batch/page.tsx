@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2, Sparkles, Check, X, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { ApiKeyGate } from "@/components/ApiKeyGate";
