@@ -41,11 +41,16 @@ const MAX_BODY = 25 * 1024 * 1024;
 // --- State ---
 let webChild = null;
 let webStatus = "down"; // 'down' | 'starting' | 'up' | 'stopping'
-let webPort = 3005;
+let webPort = 3005; // overwritten from .env.local right below
 let webStartedAt = 0;
 let webLastLog = "";
 
 // --- Helpers ---
+function envPort(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 && n <= 65535 ? n : fallback;
+}
+
 function readEnvLocal() {
   if (!fs.existsSync(ENV_LOCAL)) return { PORT: "3005", ADFORGE_SYNC_PORT: String(PORT) };
   const out = {};
@@ -285,6 +290,10 @@ const server = http.createServer(async (req, res) => {
     return json(res, 500, { ok: false, error: String(e?.message ?? e) });
   }
 });
+
+// Pick up the configured web port at boot so /status is correct
+// before the user clicks Start.
+try { webPort = envPort(readEnvLocal().PORT, 3005); } catch {}
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`[adforge] launcher + sync listening on http://127.0.0.1:${PORT}`);
