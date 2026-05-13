@@ -49,7 +49,7 @@ RULES:
 
 6. **Products / offers should be a list of every named service, product, or package.** Look at navigation, service pages, pricing tables, features lists.
 
-7. **Platforms is for social-media presence.** Look for footer icons, "Follow us on X", `instagram.com/...`, `facebook.com/...` links. Use canonical names: Instagram, TikTok, YouTube, LinkedIn, X, Facebook, Pinterest, Threads. Empty array only if you find ZERO social links.
+7. **Platforms is for social-media presence.** Look for footer icons, "Follow us on X", links like instagram.com/X or facebook.com/X. Use canonical names: Instagram, TikTok, YouTube, LinkedIn, X, Facebook, Pinterest, Threads. Empty array only if you find ZERO social links.
 
 8. **Content pillars are themes the brand consistently talks about.** Infer from blog topics, hero copy, repeated buzzwords, customer testimonial themes.
 
