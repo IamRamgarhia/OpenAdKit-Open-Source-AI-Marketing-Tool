@@ -15,6 +15,7 @@ import { INDUSTRY_TEMPLATES } from "@/lib/industry-templates";
 import { llmCall, estimateCostUsd, tryParseJson } from "@/lib/llm";
 import { buildBrandExtractionPrompt } from "@/lib/prompts/brand-extraction";
 import { buildBrandGapFillPrompt } from "@/lib/prompts/brand-gap-fill";
+import { buildSearchAugmentedPrompt } from "@/lib/prompts/brand-search-augmented";
 import { deterministicFillFromMetadata } from "@/lib/deterministic-brand-fill";
 import { applyIndustryFallback } from "@/lib/industry-fallback";
 
@@ -290,7 +291,65 @@ function Inner() {
         }
       }
 
-      setQuickStatus("⑤ Merging metadata + AI results…");
+      // Pass 3 — auto Google search. The homepage rarely contains customer
+      // reviews, competitor mentions, or audience language; a Google search
+      // for the brand name pulls in review sites, forums, press — much
+      // richer signal for the inference fields. Only runs if pass 1 + gap-fill
+      // left something empty AND we have a usable brand name to search for.
+      const stillMissing = GAP_FILL_FIELDS.filter((f) => isEmptyField(parsed[f]));
+      const searchableName = deterministic.business_name || parsed.business_name;
+      if (stillMissing.length && searchableName && searchableName.length > 2) {
+        // Build a focused query: brand name + industry keyword to disambiguate
+        // and bias toward reviews / mentions.
+        const industryHint = (deterministic.industry || parsed.industry || "").split(/[|·,]/)[0].trim();
+        const baseQuery = industryHint
+          ? `${searchableName} ${industryHint} reviews competitors customers`
+          : `${searchableName} reviews competitors`;
+        setQuickStatus(`⑤ Auto-searching Google for "${searchableName}" to fill ${stillMissing.length} remaining gap${stillMissing.length === 1 ? "" : "s"}…`);
+        try {
+          const searchUrl = `https://s.jina.ai/${encodeURIComponent(baseQuery)}`;
+          const searchRes = await ingestUrl(searchUrl);
+          if (searchRes.ok && searchRes.content && searchRes.content.length > 500) {
+            dlog("[adforge:brand-extract] auto-search content (length):", searchRes.content.length);
+            const augRes = await llmCall({
+              messages: [{ role: "user", content: buildSearchAugmentedPrompt({
+                business_name: searchableName,
+                industry: deterministic.industry || parsed.industry,
+                niche: deterministic.niche || parsed.niche,
+                usp: deterministic.usp || parsed.usp,
+                search_content: searchRes.content,
+                missing_fields: stillMissing as unknown as string[],
+              }) }],
+              maxTokens: 2500,
+              temperature: 0.7,
+            });
+            dlog("[adforge:brand-extract] raw AI response text (search-augmented):", augRes.text);
+            const augCost = estimateCostUsd(augRes.providerId, augRes.modelId, augRes.usage);
+            addUsage(augCost, augRes.usage?.input_tokens ?? 0, augRes.usage?.output_tokens ?? 0);
+            window.dispatchEvent(new Event("ados:usage"));
+            const augParsed = tryParseJson<any>(augRes.text) ?? {};
+            dlog("[adforge:brand-extract] parsed AI JSON (search-augmented):", augParsed);
+            for (const f of stillMissing) {
+              const coerced = coerceFieldValue(f, augParsed[f]);
+              if (!isEmptyField(coerced)) parsed[f] = coerced;
+            }
+            // Re-pair objections / objection_handling after the search pass.
+            const objs2: unknown = parsed.objections;
+            const handles2: unknown = parsed.objection_handling;
+            if (Array.isArray(objs2) && Array.isArray(handles2)) {
+              const len = Math.min(objs2.length, handles2.length);
+              parsed.objections = objs2.slice(0, len);
+              parsed.objection_handling = handles2.slice(0, len);
+            }
+          } else {
+            dlog("[adforge:brand-extract] auto-search returned too little content; skipping");
+          }
+        } catch (searchErr) {
+          console.warn("[adforge:brand-extract] auto-search pass failed:", searchErr);
+        }
+      }
+
+      setQuickStatus("⑥ Merging metadata + AI results…");
       stageBrain(parsed, fallback, r.url, "url", sourceLabel, deterministic);
     } catch (e: any) {
       setQuickStatus(e?.message ?? "Failed");
