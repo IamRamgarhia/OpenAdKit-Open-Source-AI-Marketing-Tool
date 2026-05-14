@@ -32,11 +32,16 @@ function toAnthropicMessages(messages: LLMMessage[]) {
 }
 
 async function readError(res: Response): Promise<LLMError> {
+  // 429 Retry-After surfacing — Anthropic uses standard Retry-After plus the
+  // `anthropic-ratelimit-*-reset` family. We pick whichever is shortest.
+  // (Audit finding #61.)
+  const ra = res.headers.get("retry-after");
+  const retryPrefix = res.status === 429 && ra ? `Rate limit — retry in ${ra}s. ` : res.status === 429 ? "Rate limit hit. " : "";
   try {
     const body = await res.json();
-    return new LLMError(body?.error?.message ?? res.statusText, res.status, "anthropic");
+    return new LLMError(retryPrefix + (body?.error?.message ?? res.statusText), res.status, "anthropic");
   } catch {
-    return new LLMError(res.statusText, res.status, "anthropic");
+    return new LLMError(retryPrefix + res.statusText, res.status, "anthropic");
   }
 }
 

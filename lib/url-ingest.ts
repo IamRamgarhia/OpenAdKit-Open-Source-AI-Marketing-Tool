@@ -38,6 +38,11 @@ const MAX_CHARS = 40_000;
 
 function normalize(u: string): string {
   let url = u.trim();
+  // Reject any non-http(s) scheme up front so `javascript:alert(1)` doesn't get
+  // saved into brain.website_url. (Audit finding #53.)
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(url) && !/^https?:/i.test(url)) {
+    throw new Error("Only http(s) URLs are allowed.");
+  }
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
   return url;
 }
@@ -192,9 +197,11 @@ async function tryAllOrigins(target: string, signal?: AbortSignal): Promise<Inge
 
 /** Debug helper — every reader attempt logs to the browser console with a
  *  consistent prefix. Open DevTools (F12) → Console tab to watch the ingest
- *  pipeline live. Easy to grep, easy to disable later if it gets noisy. */
+ *  pipeline live. Gated to development builds so production users don't see
+ *  raw page-content fragments in their console. (Audit finding #52.) */
 function dbg(stage: string, payload?: unknown): void {
   if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV === "production") return;
   // eslint-disable-next-line no-console
   console.debug("[adforge:url-ingest]", stage, payload ?? "");
 }

@@ -348,6 +348,10 @@ function HistoryInner() {
                   <CopyButton text={a.output_text} />
                   <button
                     onClick={async () => {
+                      // Confirm dialog matches the brand-delete pattern in /brand —
+                      // single mis-click no longer triggers a delete. The 7-second
+                      // undo toast is the second safety net. (Audit finding #56.)
+                      if (!confirm(`Delete "${a.title.slice(0, 60)}"? You can undo from the toast for 7 seconds.`)) return;
                       await softDeleteAd(a.id);
                       refresh();
                       showUndoToast({

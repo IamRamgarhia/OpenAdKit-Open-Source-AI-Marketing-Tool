@@ -11,7 +11,10 @@
  * API keys are NOT synced by default (security). Toggle in Settings to include.
  */
 
-const SYNC_URL = "http://localhost:3006";
+// 127.0.0.1 instead of "localhost" so IPv6-preferring systems (some Windows
+// configs) don't resolve to ::1 while the sidecar listens on 127.0.0.1 only.
+// Matches url-ingest.ts. (Audit finding #49.)
+const SYNC_URL = "http://127.0.0.1:3006";
 const SYNC_DEBOUNCE_MS = 1500;
 const LS_INCLUDE_KEYS = "ados.sync_include_keys";
 const LS_LAST_SYNC = "ados.sync_last_at";

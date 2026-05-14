@@ -94,7 +94,16 @@ fi
 if [ "$ACTION" = "restart_stale" ]; then
   echo "Stale sidecar on :$SYNC_PORT — asking it to quit before starting fresh..."
   curl -fsS -X POST --max-time 3 "http://127.0.0.1:$SYNC_PORT/quit" >/dev/null 2>&1 || true
-  sleep 1
+  # Poll until the port frees. sleep 1 is not enough on macOS with open file
+  # handles; the new sidecar would otherwise fail to bind. (Audit finding #41.)
+  DEADLINE=$(( $(date +%s) + 10 ))
+  while [ $(date +%s) -lt $DEADLINE ]; do
+    # nc -z returns 0 if port is OPEN. We want it CLOSED (free).
+    if ! nc -z 127.0.0.1 "$SYNC_PORT" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.3
+  done
 fi
 
 if [ "$ACTION" = "shifted" ]; then

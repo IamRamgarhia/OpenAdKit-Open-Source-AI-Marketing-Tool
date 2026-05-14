@@ -30,6 +30,16 @@ const GAP_FILL_FIELDS = [
   "objections", "objection_handling",
 ] as const;
 
+// Gated console.log — kept in development for the ingest debug story, but
+// stripped in production so raw AI responses don't end up in user DevTools.
+// (Audit finding #52.)
+function dlog(...args: unknown[]) {
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+}
+
 function isEmptyField(v: unknown): boolean {
   if (v == null) return true;
   if (Array.isArray(v)) return v.length === 0;
@@ -184,8 +194,8 @@ function Inner() {
       }
       setQuickStatus("② Reading page metadata (title, OG tags, social links, schema)…");
       const deterministic = deterministicFillFromMetadata(r.metadata, r.url);
-      console.log("[adforge:brand-extract] deterministic fill:", deterministic);
-      console.log("[adforge:brand-extract] raw metadata:", r.metadata);
+      dlog("[adforge:brand-extract] deterministic fill:", deterministic);
+      dlog("[adforge:brand-extract] raw metadata:", r.metadata);
       const sourceLabel = `${r.url} (via ${
         r.source === "sidecar" ? "local sidecar" :
         r.source === "allorigins" ? "AllOrigins fallback" :
@@ -209,12 +219,12 @@ function Inner() {
         maxTokens: 3000,
         temperature: 0.7,
       });
-      console.log("[adforge:brand-extract] raw AI response text:", res.text);
+      dlog("[adforge:brand-extract] raw AI response text:", res.text);
       const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
       addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
       window.dispatchEvent(new Event("ados:usage"));
       const parsed = tryParseJson<any>(res.text) ?? {};
-      console.log("[adforge:brand-extract] parsed AI JSON (pass 1):", parsed);
+      dlog("[adforge:brand-extract] parsed AI JSON (pass 1):", parsed);
       const fallback = new URL(r.url).hostname.replace(/^www\./, "");
 
       // Pass 2 — gap-fill. Any inference field still empty gets a focused
@@ -226,7 +236,11 @@ function Inner() {
         if (typeof v === "string" && !v.trim()) continue;
         merged1[k] = v;
       }
-      const missing = GAP_FILL_FIELDS.filter((f) => isEmptyField(merged1[f]));
+      const missing: string[] = GAP_FILL_FIELDS.filter((f) => isEmptyField(merged1[f]));
+      // objections and objection_handling are paired arrays — if one is missing
+      // we must regenerate both together so the indices line up. (Audit finding #63.)
+      if (missing.includes("objections") && !missing.includes("objection_handling")) missing.push("objection_handling");
+      if (missing.includes("objection_handling") && !missing.includes("objections")) missing.push("objections");
       if (missing.length) {
         setQuickStatus(`④ Filling gaps — ${missing.length} field${missing.length === 1 ? "" : "s"} still empty. Re-asking AI to infer from content…`);
         try {
@@ -242,18 +256,26 @@ function Inner() {
             maxTokens: 2000,
             temperature: 0.8,
           });
-          console.log("[adforge:brand-extract] raw AI response text (gap-fill):", gapRes.text);
+          dlog("[adforge:brand-extract] raw AI response text (gap-fill):", gapRes.text);
           const gapCost = estimateCostUsd(gapRes.providerId, gapRes.modelId, gapRes.usage);
           addUsage(gapCost, gapRes.usage?.input_tokens ?? 0, gapRes.usage?.output_tokens ?? 0);
           window.dispatchEvent(new Event("ados:usage"));
           const gapParsed = tryParseJson<any>(gapRes.text) ?? {};
-          console.log("[adforge:brand-extract] parsed AI JSON (gap-fill):", gapParsed);
+          dlog("[adforge:brand-extract] parsed AI JSON (gap-fill):", gapParsed);
           // Coerce each gap-fill value to the BrandBrain schema's expected type.
           // The model often returns "Instagram, LinkedIn" (string) for an array
           // field; without coercion, brain.platforms.join(...) downstream throws.
           for (const f of missing) {
             const coerced = coerceFieldValue(f, gapParsed[f]);
             if (!isEmptyField(coerced)) parsed[f] = coerced;
+          }
+          // Trim the longer of objections / objection_handling so indices match.
+          const objs: unknown = parsed.objections;
+          const handles: unknown = parsed.objection_handling;
+          if (Array.isArray(objs) && Array.isArray(handles)) {
+            const len = Math.min(objs.length, handles.length);
+            parsed.objections = objs.slice(0, len);
+            parsed.objection_handling = handles.slice(0, len);
           }
         } catch (gapErr) {
           console.warn("[adforge:brand-extract] gap-fill pass failed:", gapErr);
@@ -287,12 +309,12 @@ function Inner() {
         maxTokens: 3000,
         temperature: 0.4,
       });
-      console.log("[adforge:brand-extract] raw AI response text (paste):", res.text);
+      dlog("[adforge:brand-extract] raw AI response text (paste):", res.text);
       const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
       addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
       window.dispatchEvent(new Event("ados:usage"));
       const parsed = tryParseJson<any>(res.text) ?? {};
-      console.log("[adforge:brand-extract] parsed AI JSON (paste):", parsed);
+      dlog("[adforge:brand-extract] parsed AI JSON (paste):", parsed);
       if (!parsed.business_name && !Object.keys(parsed).length) {
         setQuickStatus("AI returned no usable JSON. Check DevTools [adforge:brand-extract] logs and try again, or fall back to Method 3 / 4.");
         return;
@@ -326,12 +348,12 @@ function Inner() {
         maxTokens: 3000,
         temperature: 0.4,
       });
-      console.log("[adforge:brand-extract] raw AI response text (google):", res.text);
+      dlog("[adforge:brand-extract] raw AI response text (google):", res.text);
       const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
       addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
       window.dispatchEvent(new Event("ados:usage"));
       const parsed = tryParseJson<any>(res.text) ?? {};
-      console.log("[adforge:brand-extract] parsed AI JSON (google):", parsed);
+      dlog("[adforge:brand-extract] parsed AI JSON (google):", parsed);
       if (!parsed.business_name && !Object.keys(parsed).length) {
         setQuickStatus("AI returned no usable JSON from search results. Try a more specific query or fall back to Method 3 / 4.");
         return;
@@ -505,8 +527,11 @@ function Inner() {
                   key={t.slug}
                   onClick={async () => {
                     const b = t.apply({ business_name: "" });
+                    // Save the skeleton but DON'T activate it yet — if the user
+                    // abandons the form their other tools would all run against
+                    // an empty brain. Activation happens when BrandBrainForm's
+                    // own save action fires. (Audit finding #62.)
                     await saveBrain(b);
-                    setActiveBrainId(b.id);
                     window.dispatchEvent(new Event("ados:brains-changed"));
                     setEditing(b);
                   }}

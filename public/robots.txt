@@ -1,0 +1,30 @@
+# AdForge — open-source AI ad ops cockpit
+# Gated app routes redirect to /setup before they render anything useful, so
+# letting crawlers index them produces low-value pages. Surface only the
+# evergreen pages (landing, about, benchmarks, platform hubs, learn content)
+# to search engines.
+
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /benchmarks
+Allow: /platforms
+Allow: /platforms/
+Allow: /learn
+Allow: /learn/
+Allow: /launch-guide
+Disallow: /api/
+Disallow: /brand
+Disallow: /generate/
+Disallow: /optimize/
+Disallow: /research/
+Disallow: /launch/wizard
+Disallow: /settings
+Disallow: /setup
+Disallow: /history
+Disallow: /suggestions
+Disallow: /report
+Disallow: /strategy
+Disallow: /campaigns
+
+Sitemap: https://adforge.dicecodes.com/sitemap.xml

@@ -70,7 +70,20 @@ export default function Dashboard() {
     };
   }, [router]);
 
-  if (loading) return null;
+  // Skeleton instead of `return null` to avoid the blank-flash + layout shift
+  // when the user returns to the dashboard. (Audit finding #54.)
+  if (loading) {
+    return (
+      <div className="animate-pulse">
+        <div className="h-16 mb-6 border-b border-base-700/40" />
+        <div className="grid md:grid-cols-3 gap-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-32 border border-base-700 bg-base-900/40" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

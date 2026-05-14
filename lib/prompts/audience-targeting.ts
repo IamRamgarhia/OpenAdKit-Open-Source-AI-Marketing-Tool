@@ -10,6 +10,10 @@ export interface AudienceTargetingInput {
   current_aov_or_ltv?: string;
   existing_audiences?: string;
   best_creator_audience?: string;
+  /** Screenshot of the Audiences tab — when present, vision-capable providers
+   *  read it. When absent, the "IF AN IMAGE IS ATTACHED" block is stripped so
+   *  the AI doesn't hallucinate audience data. (Audit finding #45.) */
+  audience_screenshot?: unknown;
 }
 
 import { RETARGETING_MATRIX, MANDATORY_EXCLUSIONS } from "./common-rules";
@@ -43,12 +47,12 @@ INPUT — audiences currently running (name · monthly spend · CPA, one per lin
 ${input.existing_audiences || "(none provided — treat the plan as a fresh launch)"}
 """
 
-IF AN IMAGE IS ATTACHED:
-The user has dropped a screenshot of their Audiences tab (Meta Ads Manager / Google Audiences /
+${input.audience_screenshot ? `IMAGE ATTACHED:
+The user dropped a screenshot of their Audiences tab (Meta Ads Manager / Google Audiences /
 LinkedIn). Extract for each visible row: audience name, audience size, spend, impressions, CPA,
 CVR. When typed fields and image conflict, trust the image. When metrics only appear in the image,
 USE the image values. Cite "(from screenshot)" in audience_diagnosis when image-derived data drives
-a tier or budget recommendation.
+a tier or budget recommendation.` : ``}
 
 PHASE 1 — ANALYZE THE EXISTING SETUP:
 For each audience already running:

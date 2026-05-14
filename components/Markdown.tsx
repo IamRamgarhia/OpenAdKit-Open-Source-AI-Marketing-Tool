@@ -7,10 +7,16 @@ import { memo } from "react";
  * Handles: # headers, **bold**, lists, code blocks. No HTML passthrough.
  */
 function escape(s: string): string {
+  // Quote escape included for defense-in-depth — currently renderInline only
+  // emits <strong>/<em>/<code> with no attributes, but any future tag with
+  // attributes (e.g. <a href>) would otherwise be vulnerable to attribute
+  // injection via `**foo" onmouseover="alert(1)**`. (Audit finding #47.)
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function renderInline(s: string): string {

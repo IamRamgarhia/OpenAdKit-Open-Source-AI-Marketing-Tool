@@ -274,16 +274,19 @@ function extractMetadata(html, baseUrl) {
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   if (titleMatch) meta.title = titleMatch[1].trim();
 
-  // meta name=/property= with content=, both attribute orders
+  // meta name=/property= with content=, both attribute orders. Also handles
+  // unquoted attribute values that older WP/CMS templates sometimes emit.
+  // (Audit finding #59.)
   const metaTagRe = /<meta\b[^>]*>/gi;
   let m;
+  const ATTR_RE = (name) => new RegExp(`(?:${name})\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i");
   while ((m = metaTagRe.exec(html)) !== null) {
     const tag = m[0];
-    const nameMatch = tag.match(/(?:name|property)\s*=\s*["']([^"']+)["']/i);
-    const contentMatch = tag.match(/content\s*=\s*["']([^"']*)["']/i);
+    const nameMatch = tag.match(ATTR_RE("name|property"));
+    const contentMatch = tag.match(ATTR_RE("content"));
     if (!nameMatch || !contentMatch) continue;
-    const key = nameMatch[1].toLowerCase();
-    const val = contentMatch[1];
+    const key = (nameMatch[1] || nameMatch[2] || nameMatch[3] || "").toLowerCase();
+    const val = contentMatch[1] || contentMatch[2] || contentMatch[3] || "";
     if (key === "description" && !meta.description) meta.description = val;
     if (key.startsWith("og:")) meta.og[key.slice(3)] = val;
     if (key === "twitter:title" && !meta.og.title) meta.og.title = val;
@@ -920,6 +923,19 @@ const server = http.createServer(async (req, res) => {
 // before the user clicks Start.
 try { webPort = envPort(readEnvLocal().PORT, 3005); } catch {}
 
+// Surface EADDRINUSE clearly — resolve-ports.cjs has a TOCTOU window between
+// the port-free probe and listen(). If another process grabs the port in that
+// window, this is the only place the user gets a clear message. (Audit finding #42.)
+server.on("error", (err) => {
+  if (err && err.code === "EADDRINUSE") {
+    console.error(`[adforge] FATAL: port ${PORT} is already in use.`);
+    console.error("[adforge] Another AdForge install or process bound it between the launcher's port-free check and this listen() call.");
+    console.error("[adforge] Re-run AdForge.bat / AdForge.command — resolve-ports.cjs will pick a fresh free pair on the next try.");
+    process.exit(1);
+  }
+  console.error("[adforge] server error:", err);
+  process.exit(1);
+});
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`[adforge] launcher + sync listening on http://127.0.0.1:${PORT}`);
   console.log(`[adforge] open the launcher: http://127.0.0.1:${PORT}/`);

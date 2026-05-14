@@ -23,11 +23,20 @@ function headers(apiKey: string, extra?: Record<string, string>): HeadersInit {
 }
 
 async function readError(res: Response, providerId: string): Promise<LLMError> {
+  // Surface Retry-After to the user for 429s — free-tier rate limits on Groq /
+  // Cerebras / OpenRouter are common and a clear "retry in Ns" beats an opaque
+  // "Rate limit exceeded". (Audit finding #61.)
+  const retryAfter = res.headers.get("retry-after");
+  const retryPrefix = res.status === 429 && retryAfter
+    ? `Rate limit — retry in ${retryAfter}s. `
+    : res.status === 429
+      ? "Rate limit hit. "
+      : "";
   try {
     const body = await res.json();
-    return new LLMError(body?.error?.message ?? body?.message ?? res.statusText, res.status, providerId);
+    return new LLMError(retryPrefix + (body?.error?.message ?? body?.message ?? res.statusText), res.status, providerId);
   } catch {
-    return new LLMError(res.statusText, res.status, providerId);
+    return new LLMError(retryPrefix + res.statusText, res.status, providerId);
   }
 }
 

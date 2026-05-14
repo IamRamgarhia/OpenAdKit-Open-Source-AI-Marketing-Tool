@@ -20,28 +20,33 @@ export function showUndoToast(detail: UndoEvent) {
 }
 
 export function UndoToast() {
-  const [evt, setEvt] = useState<UndoEvent | null>(null);
+  // Queue of pending undo events. A rapid double-delete used to silently drop
+  // the first one because we only held a single slot. Now the second event
+  // joins the queue and surfaces when the first dismisses / times out.
+  // (Audit finding #43.)
+  const [queue, setQueue] = useState<UndoEvent[]>([]);
   const [remaining, setRemaining] = useState(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const evt = queue[0] ?? null;
 
   useEffect(() => {
     const onUndo = (e: CustomEvent<UndoEvent>) => {
-      setEvt(e.detail);
-      setRemaining(e.detail.timeoutMs ?? 7000);
+      setQueue((q) => [...q, e.detail]);
     };
     window.addEventListener("ados:undo", onUndo);
     return () => window.removeEventListener("ados:undo", onUndo);
   }, []);
 
   useEffect(() => {
-    if (!evt) return;
+    if (!evt) { setRemaining(0); return; }
+    setRemaining(evt.timeoutMs ?? 7000);
     if (tickRef.current) clearInterval(tickRef.current);
     tickRef.current = setInterval(() => {
       setRemaining((r) => {
         const next = r - 100;
         if (next <= 0) {
           if (tickRef.current) clearInterval(tickRef.current);
-          setEvt(null);
+          setQueue((q) => q.slice(1));
           return 0;
         }
         return next;
@@ -64,13 +69,13 @@ export function UndoToast() {
           <button
             onClick={async () => {
               await evt.undo();
-              setEvt(null);
+              setQueue((q) => q.slice(1));
             }}
             className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-live hover:bg-live/10 px-2 py-1"
           >
             <Undo2 size={12} /> Undo
           </button>
-          <button onClick={() => setEvt(null)} className="text-ink-faint hover:text-ink" aria-label="Dismiss">
+          <button onClick={() => setQueue((q) => q.slice(1))} className="text-ink-faint hover:text-ink" aria-label="Dismiss">
             <X size={14} />
           </button>
         </div>
