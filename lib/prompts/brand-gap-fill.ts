@@ -91,29 +91,38 @@ export function buildBrandGapFillPrompt(input: BrandGapFillInput): string {
     .map((f) => `- ${f}: ${FIELD_GUIDANCE[f] ?? "Fill based on the content."}`)
     .join("\n");
 
-  return `You are a senior brand strategist. You already know these facts about a brand:
+  return `You are a senior brand strategist filling out a brand profile worksheet.
+
+WHAT YOU KNOW about the brand:
 
 ${ctx}
 
-WEBSITE CONTENT (raw, partial):
+OPTIONAL — page content for additional signal:
 """
-${(input.website_content ?? "").slice(0, 12000)}
+${(input.website_content ?? "").slice(0, 8000)}
 """
 
-A previous extraction pass left these fields EMPTY. Fill them by READING the website content and INFERRING reasonable values. Inference is the point — these fields are rarely stated verbatim.
+YOUR JOB: complete the worksheet below. These are STRATEGIST INFERENCES — not factual claims requiring proof. Treat it like a creative director sketching a brand brief: make reasonable, opinionated guesses based on what brands in this industry typically look like.
 
-FIELD GUIDANCE:
+Empty fields are unacceptable. If the page content doesn't tell you, INFER FROM INDUSTRY NORMS. Examples:
+- "Web agency in Punjab" → tone is "Professional, regional-pride, partnership-oriented"; pain points include "Working with overseas devs who disappear", "Cheap freelancers who deliver garbage", "Big-city agency prices"; competitors include "Freelance marketplaces", "Other local digital agencies".
+- "Cricket equipment brand" → tone is "Passionate, performance-focused, club-friendly"; pain points include "Cheap imports that break in one season", "Sizing inconsistency", "Pro-grade gear is overpriced"; competitors include "SS", "SG", "Kookaburra".
+- "Bootstrapped SaaS" → tone is "Direct, anti-fluff, founder-voice"; pain points include "Bigger competitors with VC budgets", "Trust signals are limited", "Demos vs free trial debate".
+
+The point: never return empty arrays. Reasonable industry-norm inference is the EXPECTED behavior, not fabrication.
+
+FIELD-BY-FIELD GUIDANCE:
 ${guidance}
 
-Return ONLY a JSON object with EXACTLY these keys, in EXACTLY this shape (no markdown fences, no prose). The values below are EXAMPLES showing the type and depth expected — REPLACE every value with this brand's actual data:
+Return ONLY valid JSON in EXACTLY this shape (no markdown fences, no prose around it). The values below are EXAMPLES from a different industry — REPLACE every value with this brand's specifics. Match the SHAPE: arrays stay arrays with multiple entries, strings stay non-empty.
 
 {
 ${schema}
 }
 
-Rules:
-- Match each value's TYPE to the example: arrays stay arrays (multiple entries), strings stay strings (non-empty).
-- Empty arrays / empty strings count as a FAILED extraction.
-- Match objections[i] to objection_handling[i] by array index — same length.
-- Never invent specific numbers, named customers, awards, or testimonials. Inference about traits, audience, pillars is fine and required.`;
+Hard rules:
+- Arrays must contain at least 2 entries (3+ where guidance says so).
+- Strings must be non-empty (a single sentence minimum).
+- Match objections[i] to objection_handling[i] by index — same length.
+- The ONLY thing you may NOT invent: specific numbers (e.g. "10,000 customers"), real testimonial quotes, real customer names, certifications, awards. Inference about audience traits, pain points, competitors, tone, words = expected and required.`;
 }

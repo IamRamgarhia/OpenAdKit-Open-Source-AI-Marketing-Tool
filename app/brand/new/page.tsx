@@ -16,6 +16,7 @@ import { llmCall, estimateCostUsd, tryParseJson } from "@/lib/llm";
 import { buildBrandExtractionPrompt } from "@/lib/prompts/brand-extraction";
 import { buildBrandGapFillPrompt } from "@/lib/prompts/brand-gap-fill";
 import { deterministicFillFromMetadata } from "@/lib/deterministic-brand-fill";
+import { applyIndustryFallback } from "@/lib/industry-fallback";
 
 // Fields the gap-fill second pass is allowed to attempt. Excludes deterministic
 // fields (business_name, industry, etc.) and the no-fabrication fields
@@ -143,7 +144,14 @@ function Inner() {
     merged.website_url = sourceUrl;
     merged.favicon_url = deterministic?.favicon_url || "";
 
-    setPendingExtraction({ brain: merged as BrandBrain, source, sourceLabel });
+    // Final fallback: if the AI left inference fields empty (common with
+    // Gemini Flash + other light models), backfill from the closest industry
+    // template so the user never sees a half-empty cross-check screen. The
+    // user can edit anything before saving.
+    const { brain: fallbackBrain, filled, templateSlug } = applyIndustryFallback(merged as BrandBrain);
+    dlog("[adforge:brand-extract] industry-fallback:", { templateSlug, filledCount: filled.length, filled });
+
+    setPendingExtraction({ brain: fallbackBrain, source, sourceLabel });
     setQuickStatus(null);
   }
 

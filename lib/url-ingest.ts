@@ -217,27 +217,24 @@ export async function ingestUrl(rawUrl: string, signal?: AbortSignal): Promise<I
     return { ok: false, recoverable: false, message: "That doesn't look like a valid URL." };
   }
 
-  // Special case: Jina search URLs (s.jina.ai/<query>) — those have to go
-  // through Jina, the sidecar can't replicate Google search.
-  const isJinaSearch = /^https?:\/\/s\.jina\.ai\//i.test(target);
-  dbg("ingest:target-normalized", { target, isJinaSearch });
+  dbg("ingest:target-normalized", { target });
 
   // Strategy (most-reliable first):
-  //   1. Local sidecar — no CORS, no quota, no third-party dependency
+  //   1. Local sidecar — no CORS, no quota, no third-party dependency.
+  //      Works for both regular URLs AND Jina search URLs (s.jina.ai/<query>).
+  //      Previously we skipped sidecar for Jina-search, but that left users
+  //      with no fallback when the browser hit Jina's 401 + AllOrigins was
+  //      adblocker-blocked. Sidecar can fetch s.jina.ai server-side fine —
+  //      bypasses both CORS and adblockers.
   //   2. Jina Reader — best HTML→markdown extraction, occasional rate limits
   //   3. AllOrigins — last-resort CORS proxy when both above fail
-  // Skip the sidecar for Jina-search URLs since we want Jina to do the search.
   const errors: string[] = [];
 
-  if (!isJinaSearch) {
-    dbg("ingest:try-sidecar");
-    const sidecar = await trySidecar(target, signal);
-    dbg("ingest:sidecar-result", sidecar);
-    if (sidecar.ok) return sidecar;
-    errors.push(`Sidecar — ${sidecar.message}`);
-  } else {
-    dbg("ingest:skip-sidecar-jina-search");
-  }
+  dbg("ingest:try-sidecar");
+  const sidecar = await trySidecar(target, signal);
+  dbg("ingest:sidecar-result", sidecar);
+  if (sidecar.ok) return sidecar;
+  errors.push(`Sidecar — ${sidecar.message}`);
 
   dbg("ingest:try-jina");
   const jina = await tryJina(target, signal);
