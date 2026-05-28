@@ -36,6 +36,7 @@
     "postbuild": "node scripts/sw-stamp.cjs",
     "og:render": "node scripts/render-og.cjs",
     "screenshots": "node scripts/capture-screenshots.cjs",
+    "setup:github": "node scripts/setup-github.cjs",
     "start": "next start -p 3005",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

@@ -24,6 +24,7 @@
 
 [Use it now — two paths](#use-it-now--two-paths) ·
 [Screenshots](#screenshots) ·
+[How to use it — step-by-step](#how-to-use-openadkit--step-by-step) ·
 [Who's it for](#whos-it-for) ·
 [What's inside](#whats-inside) ·
 [vs Jasper / AdCreative / Anyword / Copy.ai](#openadkit-vs-jasper-adcreative-anyword-copyai--feature-comparison) ·
@@ -114,6 +115,95 @@ You **bring your own AI key** — free-tier (Groq · Gemini · Cerebras · OpenR
 ### Launch guide — step-by-step Facebook / Google UI walkthroughs
 
 <img src="public/screenshots/07-launch-guide-walkthrough.png" alt="OpenAdKit step-by-step launch guide walking through the Facebook Ads Manager and Google Ads UI from campaign creation to publish — for first-time advertisers learning paid media" width="100%" />
+
+---
+
+## How to use OpenAdKit — step-by-step
+
+> Your first 10 minutes from install to your first AI-generated ad. Follow these five sections in order; total time is about 10 minutes.
+
+### Step 1 · Get OpenAdKit running (30 seconds — 5 minutes)
+
+**Pick one of the two install paths:**
+
+- **Path A — Hosted (recommended for non-developers).** Click the **Deploy with Vercel** or **Deploy to Cloudflare** button in the [Install in 60 seconds](#install-in-60-seconds) section above. Sign in to Vercel/Cloudflare with GitHub, confirm, get your own URL in 30 seconds. Open the URL in your browser. **Done.**
+- **Path B — Local install.** Download the repo as a ZIP (green "Code" button → "Download ZIP") and extract it. On Windows double-click **`OpenAdKit.bat`**; on Mac/Linux double-click **`OpenAdKit.command`**. First run installs dependencies (one-time, ~2 minutes), drops a desktop shortcut, and opens the app in your default browser. From the second launch onwards it's a single double-click → browser opens to the app.
+
+**You'll know it worked** when the OpenAdKit setup wizard loads in your browser (see screenshot #1 above).
+
+### Step 2 · Pick an AI provider + paste a key (2 minutes)
+
+This is the **only paid thing** in OpenAdKit, and it can be $0 if you pick a free tier.
+
+1. The setup wizard shows all 9 supported AI providers grouped by **Free** (Groq, Gemini, Cerebras, OpenRouter) and **Paid** (Anthropic Claude, OpenAI GPT, DeepSeek, Mistral, Together AI).
+2. **Recommended for first-timers:**
+   - **Groq** (free, fastest) — sign up at [console.groq.com](https://console.groq.com), copy your API key (starts with `gsk_…`), paste in OpenAdKit.
+   - **Gemini** (free, great quality) — get a key at [aistudio.google.com](https://aistudio.google.com/app/apikey), paste it.
+   - **Claude** (best quality, paid) — get a key at [console.anthropic.com](https://console.anthropic.com), starts with `sk-ant-…`.
+3. Click **Verify** — OpenAdKit makes one tiny test call to confirm the key works.
+4. Pick a model from the dropdown (defaults are sensible). Click **Continue**.
+
+> 💡 You can add multiple provider keys and switch between them anytime in [Settings](#) — useful when you hit a free-tier rate limit, just one-click swap to another provider.
+
+### Step 3 · Add your first brand (3 minutes)
+
+This is OpenAdKit's killer feature. **You paste one URL, the AI extracts a complete brand profile in 30 seconds.**
+
+1. The setup wizard's last step asks for a **website URL**. Paste the URL of any brand you want to generate ads for — could be your own brand, a client's, or a competitor's you're studying.
+2. Click **Extract**. OpenAdKit:
+   - Reads the homepage (and 2–3 key subpages like /about, /pricing)
+   - Pulls Open Graph data, JSON-LD schema, and social links automatically
+   - Asks the AI to fill 30+ brand fields: business name, industry, niche, USP, tone, audience pain points, audience desires, key benefits, brand voice, words to use, words to avoid, competitors, and more
+3. Review the populated **Brand Brain**. Edit anything that looks off. Hit **Save**.
+
+> 💡 **Agencies:** repeat Step 3 for each client. Switch the "active client" from the top-bar dropdown anytime; every generator and optimizer automatically uses the active client's Brand Brain to keep the voice consistent.
+
+### Step 4 · Generate your first ad (1 minute)
+
+1. From the dashboard (cockpit), pick a generator. For your first time, try **Meta · Facebook + Instagram Ads** — it's fast, visual, and gives three angle-distinct variants per click.
+2. Fill the form:
+   - **Objective** — what's the campaign goal (sales, leads, awareness)?
+   - **Format** — Feed / Reels / Stories / Carousel
+   - **Product / offer** — what are you advertising? (Pre-filled from your Brand Brain.)
+   - **Promotion** — any offer like "20% off" or "free trial"
+3. Click **Generate**. Watch the AI stream the output in real time.
+4. You get **3 variants** anchored to different psychological angles (pain, desire, social proof), each with:
+   - Primary text (front-loaded for Meta's 125-char mobile preview)
+   - Headline (≤27 chars mobile / ≤40 desktop)
+   - Description
+   - CTA button suggestion
+   - Character count validation per field (the schema retry layer catches AI mistakes)
+   - For video formats: hook 0–3s, value 3–15s, CTA 5s with b-roll suggestions and on-screen text
+
+> 💡 Hit ⌘+↵ (Mac) or Ctrl+↵ (Windows) anywhere in the generator to regenerate without touching the mouse.
+
+### Step 5 · Score, optimize, and ship (3–5 minutes)
+
+You've generated copy. Now use the optimizers to make sure it's actually good.
+
+1. Copy one of your variants. Open **Optimize → Creative Score** from the sidebar.
+2. Paste the ad copy. Pick the platform you wrote it for. Click **Score**.
+3. You get a **brutal 5-lever score** (hook strength, specificity, urgency, brand fit, conversion potential), a **tier verdict** (scale / iterate / rewrite / kill), a **predicted CTR band**, and **3 named fixes** — each fix names the exact phrase to change and the replacement.
+4. Apply the fixes. Re-score. Repeat until your tier reads "scale" or "iterate".
+5. Optionally run other optimizers before launch:
+   - **CTR Optimizer** — lever-by-lever rewrites to lift click-through
+   - **Budget Waste** — audit where ad spend is leaking before it does
+   - **Audience Targeting** — turn brand brain + budget into a cold/warm/hot tier plan
+   - **Quality Score** (Google) — surface relevance issues before they tank your QS
+6. Export the campaign as **Markdown** or **JSON** for client handoff via the History page.
+
+> 💡 Use **Launch Guide** in the sidebar for step-by-step screenshots walking you through Facebook Ads Manager or Google Ads from campaign creation to publish — useful if you're new to paid media.
+
+---
+
+### What to try next
+
+- **Research → Steal & Beat** — paste competitor ads from the Meta Ads Library / Google Transparency Center, get a teardown plus 3 beat-their-ad variants.
+- **Generate → Content Calendar** — one click for a per-day social calendar with captions, hashtags, and visual briefs across multiple platforms.
+- **Generate → Campaign Kit** — one brief becomes message-matched copy across Google + Meta + TikTok + LinkedIn + YouTube + X + email in a single generation.
+- **Learn → Frameworks Trainer** — interactive lessons in PAS, AIDA, BAB, the 4 U's, and the Schwartz awareness ladder. Free, ad-free, no signup.
+
+A full step-by-step usage guide also lives at **`/how-to-use`** on the hosted app — same content, hyperlinked navigation, easier to skim on mobile.
 
 ---
 

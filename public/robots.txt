@@ -14,6 +14,7 @@ Allow: /learn
 Allow: /learn/
 Allow: /launch-guide
 Allow: /alternatives
+Allow: /how-to-use
 Disallow: /api/
 Disallow: /brand
 Disallow: /generate/

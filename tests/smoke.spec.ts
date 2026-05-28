@@ -18,6 +18,7 @@ const PUBLIC_ROUTES = [
   "/",
   "/about",
   "/alternatives",
+  "/how-to-use",
   "/setup",
   "/benchmarks",
   "/platforms",
