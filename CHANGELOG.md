@@ -1,8 +1,10 @@
 # Changelog
 
-All notable changes to AdForge are tracked here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [1.0.0] — 2026-07-03
 
 ### Added — generators
 - Google Performance Max asset generator (`/generate/google-pmax`)
@@ -116,5 +118,6 @@ All notable changes to AdForge are tracked here. Format loosely follows [Keep a 
 - README with 4 install paths (npm, Vercel, Docker, static export)
 - CONTRIBUTING.md with prompt-engineering conventions
 
-[Unreleased]: https://github.com/YOUR_GITHUB/adOS/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/YOUR_GITHUB/adOS/releases/tag/v0.1.0
+[Unreleased]: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/compare/v0.1.0...v1.0.0
+[0.1.0]: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/releases/tag/v0.1.0

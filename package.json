@@ -1,6 +1,6 @@
 {
   "name": "openadkit",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "OpenAdKit — open source AI marketing tool. Every ad platform, every AI provider (BYOK), runs in your browser, zero subscriptions. Built by Dicecodes.",
   "license": "MIT",
