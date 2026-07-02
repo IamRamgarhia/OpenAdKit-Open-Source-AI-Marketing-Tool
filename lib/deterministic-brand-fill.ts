@@ -126,8 +126,8 @@ export function deterministicFillFromMetadata(meta: IngestMetadata | undefined, 
     if (platforms.length) out.platforms = platforms;
   }
 
-  // 9. Favicon
-  if (meta.favicon) out.favicon_url = meta.favicon;
+  // 9. Favicon — only when we don't already have a (higher-quality) logo.
+  if (meta.favicon && !out.favicon_url) out.favicon_url = meta.favicon;
 
   return out;
 }
@@ -147,7 +147,7 @@ function extractOrganizations(ld: any, depth = 0): ParsedOrganization[] {
   const out: ParsedOrganization[] = [];
   if (!ld || depth > 10) return out; // guard against malformed nested @graph (audit finding #19)
   if (Array.isArray(ld)) { for (const x of ld) out.push(...extractOrganizations(x, depth + 1)); return out; }
-  if (ld["@graph"]) { for (const x of ld["@graph"]) out.push(...extractOrganizations(x, depth + 1)); }
+  if (Array.isArray(ld["@graph"])) { for (const x of ld["@graph"]) out.push(...extractOrganizations(x, depth + 1)); }
   const types = Array.isArray(ld["@type"]) ? ld["@type"] : [ld["@type"]];
   if (types.some((t: any) => typeof t === "string" && /Organization|LocalBusiness|Corporation|Person/i.test(t))) {
     const logo = typeof ld.logo === "string" ? ld.logo : ld.logo?.url || ld.logo?.contentUrl;
@@ -185,7 +185,7 @@ function extractFAQs(ld: any, depth = 0): Array<{ question: string; answer: stri
   const out: Array<{ question: string; answer: string }> = [];
   if (!ld || depth > 10) return out;
   if (Array.isArray(ld)) { for (const x of ld) out.push(...extractFAQs(x, depth + 1)); return out; }
-  if (ld["@graph"]) { for (const x of ld["@graph"]) out.push(...extractFAQs(x, depth + 1)); }
+  if (Array.isArray(ld["@graph"])) { for (const x of ld["@graph"]) out.push(...extractFAQs(x, depth + 1)); }
   const types = Array.isArray(ld["@type"]) ? ld["@type"] : [ld["@type"]];
   if (types.some((t: any) => typeof t === "string" && /FAQPage/i.test(t)) && Array.isArray(ld.mainEntity)) {
     for (const q of ld.mainEntity) {

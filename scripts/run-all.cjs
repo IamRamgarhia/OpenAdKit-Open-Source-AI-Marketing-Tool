@@ -46,7 +46,10 @@ console.log(`[openadkit] starting local-sync sidecar on http://127.0.0.1:${SYNC_
 const sync = spawn(process.execPath, [path.join(__dirname, "local-sync.cjs")], {
   cwd: PROJECT_ROOT,
   stdio: ["ignore", "inherit", "inherit"],
-  env: { ...process.env, ADFORGE_SYNC_PORT: SYNC_PORT },
+  // run-all spawns Next itself (below), so tell the sidecar NOT to also
+  // auto-start its own `next dev` — otherwise two servers race for the same
+  // PORT and the second dies with EADDRINUSE. (Audit finding.)
+  env: { ...process.env, ADFORGE_SYNC_PORT: SYNC_PORT, ADFORGE_NO_AUTOSTART: "1" },
 });
 
 console.log(`[openadkit] starting Next.js dev server on http://localhost:${PORT}`);

@@ -80,6 +80,10 @@ function Inner({ scope }: Props) {
 
   async function removeCustom(id: string) {
     await db().custom_items.delete(id);
+    // Also drop the checklist state row keyed by this custom item — otherwise a
+    // checked-then-deleted item leaves an orphan "checked" row that still counts
+    // toward progress (which could push it past 100%). (Audit finding.)
+    await db().checklist.where("item_key").equals(id).delete();
     load();
   }
 

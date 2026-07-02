@@ -1,7 +1,22 @@
 import { makeOpenAICompatCall, makeOpenAICompatStream, makeOpenAICompatTestKey } from "./openai-compat";
 import type { Provider } from "./types";
 
-const openaiCfg = { baseUrl: "https://api.openai.com/v1", testModel: "gpt-4.1-mini" };
+// gpt-5 / o-series reject `max_tokens` (require `max_completion_tokens`) and reject
+// non-default `temperature` with HTTP 400. Rewrite the body for those models only.
+const openaiCfg = {
+  baseUrl: "https://api.openai.com/v1",
+  testModel: "gpt-4.1-mini",
+  bodyTransform: (body: any) => {
+    if (/^(gpt-5|o\d)/i.test(body.model)) {
+      if ("max_tokens" in body) {
+        body.max_completion_tokens = body.max_tokens;
+        delete body.max_tokens;
+      }
+      delete body.temperature;
+    }
+    return body;
+  },
+};
 const groqCfg = { baseUrl: "https://api.groq.com/openai/v1", testModel: "llama-3.3-70b-versatile" };
 // Cerebras silently ignores `stream_options` — leaving it on returns null usage. (Audit #24.)
 const cerebrasCfg = { baseUrl: "https://api.cerebras.ai/v1", testModel: "llama-3.3-70b", supportsStreamUsage: false };

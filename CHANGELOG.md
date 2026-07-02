@@ -43,6 +43,28 @@ All notable changes to AdForge are tracked here. Format loosely follows [Keep a 
 - `SECURITY.md` with threat model + responsible disclosure flow
 - This `CHANGELOG.md`
 
+### Security — audit pass
+- Local sidecar CSRF: all state-changing requests (`POST /snapshot`, `/update/apply`, `/quit`, `/web/*`, `/config`) now reject cross-origin callers (403). The previous guard only reflected CORS headers and never blocked the side effect, so any open browser tab could wipe saved data or trigger `git pull` + `npm install`. Same-origin app/launcher calls and non-browser callers (no `Origin` header) are unaffected.
+- URL-ingest SSRF hardening (`app/api/ingest/route.ts`, sidecar `/ingest`, `lib/server/url-helpers.ts`): the private-host guard now strips IPv6 brackets and unwraps IPv4-mapped addresses (`[::1]`, `::ffff:169.254.169.254` were bypassing it), and both fetch paths resolve the hostname via DNS and reject any private / loopback / link-local result on the initial URL and every redirect hop — closing decimal/hex IP encodings and DNS-rebinding. Added regression tests for the bracketed forms.
+- Self-hosted / Docker deployments now emit the security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, CSP `frame-ancestors`) via `next.config.mjs`, not just `vercel.json`.
+
+### Fixed — audit pass
+- Streaming: never save a blank generation — the generator now reads the accumulated buffer via `useThrottledStream().getText()` instead of a stale closure value (empty output on providers like Gemini that return an empty final `text`).
+- Streaming: surface mid-stream provider `error` events (OpenAI-compatible + Google) instead of silently returning truncated output; stream readers release their lock on error; tolerate `data:` frames with no trailing space.
+- OpenAI: `gpt-5` / `gpt-5-mini` (and o-series) now send `max_completion_tokens` and omit `temperature`, which those models reject with HTTP 400.
+- JSON parsing: `tryParseJson` recovers top-level arrays wrapped in prose, not just objects.
+- Gemini: include `thoughtsTokenCount` in output tokens (cost was under-reported for 2.5 thinking models); send the API key via the `x-goog-api-key` header instead of the URL query string.
+- SEO: removed the root-layout blanket `canonical: "/"` that made every page a declared duplicate of the homepage (defeating `sitemap.ts`).
+- Cost display: fixed a hydration mismatch for non-USD users (`formatCost` renders USD on the server and first client paint, then converts).
+- Storage/state: usage counters guard against `NaN`; the daily quota resets on the UTC calendar day instead of a rolling 24h window; `logPerformance` writes atomically; backup/brain import raises a friendly error on malformed JSON instead of a raw parser exception.
+- Brand Brain: a `null` array field in a stored/imported brain no longer throws and breaks every generation for that brain.
+- Local sync: a sidecar started after page load is now detected (probe no longer caches a permanent "unavailable"); boot no longer double-registers listeners/intervals under React StrictMode.
+- Creative Score: schema accepts stringified scores / mixed-case tier / missing reason instead of rejecting valid model output; the Google RSA renderer no longer crashes on a headline missing `text`.
+- Brand extraction: a high-quality Organization logo is no longer clobbered by a tiny favicon; a non-array JSON-LD `@graph` no longer aborts extraction; industry-template matching uses word boundaries (a "coffee shop" no longer gets fashion-DTC defaults).
+- Launcher: `.env.local` writes preserve user keys (API keys, flags) instead of rewriting the file with only the two ports; `npm run start:all` no longer spawns a duplicate Next server; `stop.sh` / `stop.bat` kill the actual resolved ports instead of hardcoded 3005/3006; the GitHub setup script sends a valid topics payload.
+- UI/a11y: real focus management + Escape-to-close for the command palette and feature tour; `fillEmptyWithAi` is cancelable on unmount; undo toasts survive a failing undo and no longer drop queued toasts on a race; deleting a checked custom checklist item no longer pushes progress past 100%; inline code no longer double-escapes.
+- Docker: `EXPOSE 3005` (the port the app binds), `npm ci` for reproducible builds, and a non-root `USER`.
+
 ## [0.1.0] — Initial public release
 
 ### Added — foundation

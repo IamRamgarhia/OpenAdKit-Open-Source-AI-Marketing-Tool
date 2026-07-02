@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { X, Sparkles, Brain, Activity, ClipboardList, BookOpen, FileBarChart } from "lucide-react";
 import { hasSeenTour, markTourSeen, isOnboarded } from "@/lib/settings";
@@ -47,6 +47,8 @@ const SLIDES: Slide[] = [
 export function FeatureTour() {
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -55,6 +57,21 @@ export function FeatureTour() {
     const t = setTimeout(() => setOpen(true), 400);
     return () => clearTimeout(t);
   }, []);
+
+  // Escape-to-close + focus management, matching the app's other dialogs.
+  useEffect(() => {
+    if (!open) return;
+    prevFocusRef.current = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      prevFocusRef.current?.focus?.();
+    };
+  }, [open]);
 
   function dismiss() {
     markTourSeen();
@@ -68,7 +85,7 @@ export function FeatureTour() {
 
   return (
     <div className="fixed inset-0 z-50 bg-base-950/80 backdrop-blur grid place-items-center p-4">
-      <div className="border border-live/40 bg-base-900 w-full max-w-lg animate-fade-up">
+      <div ref={dialogRef} tabIndex={-1} className="border border-live/40 bg-base-900 w-full max-w-lg animate-fade-up outline-none">
         <div className="flex items-center justify-between border-b border-base-600 px-5 py-3">
           <span className="text-[10px] font-mono uppercase tracking-ui-mega text-live">{slide.label}</span>
           <button onClick={dismiss} className="text-ink-subtle hover:text-ink" aria-label="Close tour">

@@ -129,33 +129,45 @@ export function makeOpenAICompatStream(cfg: OpenAICompatConfig, providerId: stri
     let full = "";
     let usage: LLMUsage | null = null;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const events = buffer.split("\n\n");
-      buffer = events.pop() ?? "";
-      for (const ev of events) {
-        const dataLines = ev.split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6));
-        for (const line of dataLines) {
-          if (!line || line === "[DONE]") continue;
-          try {
-            const evt = JSON.parse(line);
-            const delta = evt?.choices?.[0]?.delta?.content;
-            if (typeof delta === "string" && delta) {
-              full += delta;
-              handlers.onDelta?.(delta);
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        for (const ev of events) {
+          const dataLines = ev.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).replace(/^ /, ""));
+          for (const raw of dataLines) {
+            const line = raw.trim();
+            if (!line || line === "[DONE]") continue;
+            try {
+              const evt = JSON.parse(line);
+              // Mid-stream error events must surface as a real failure, not a
+              // silently-truncated result. (Matches anthropic.ts error branch.)
+              if (evt?.error) {
+                throw new LLMError(evt.error?.message ?? "stream error", undefined, providerId);
+              }
+              const delta = evt?.choices?.[0]?.delta?.content;
+              if (typeof delta === "string" && delta) {
+                full += delta;
+                handlers.onDelta?.(delta);
+              }
+              if (evt?.usage) {
+                usage = {
+                  input_tokens: evt.usage.prompt_tokens ?? 0,
+                  output_tokens: evt.usage.completion_tokens ?? 0,
+                };
+                handlers.onUsage?.(usage);
+              }
+            } catch (err) {
+              if (err instanceof LLMError) throw err;
             }
-            if (evt?.usage) {
-              usage = {
-                input_tokens: evt.usage.prompt_tokens ?? 0,
-                output_tokens: evt.usage.completion_tokens ?? 0,
-              };
-              handlers.onUsage?.(usage);
-            }
-          } catch {}
+          }
         }
       }
+    } finally {
+      try { await reader.cancel(); } catch {}
     }
     handlers.onDone?.(full);
     return { text: full, usage, modelId: opts.model };

@@ -106,10 +106,28 @@ export function emptyBrandBrain(): BrandBrain {
  * IndexedDB doesn't enforce missing properties.
  */
 export function normalizeBrandBrain(b: any): BrandBrain {
-  return { ...emptyBrandBrain(), ...(b ?? {}) };
+  const merged = { ...emptyBrandBrain(), ...(b ?? {}) };
+  // Shallow-merge lets an explicit `null` array field survive the `[]` default,
+  // which then crashes any `.length`/`.map` downstream. Coerce every array-typed
+  // field back to `[]` when it isn't an array.
+  const ARRAY_FIELDS: (keyof BrandBrain)[] = [
+    "products", "platforms", "content_pillars",
+    "personality_traits", "words_to_use", "words_to_avoid",
+    "audience_pain_points", "audience_desires",
+    "key_benefits", "key_messages",
+    "objections", "objection_handling",
+    "competitors", "differentiators",
+    "voc_phrases", "voc_pain_quotes", "voc_success_quotes",
+    "best_performing_angles", "failed_angles",
+    "pending_user_input",
+  ];
+  for (const f of ARRAY_FIELDS) {
+    if (!Array.isArray((merged as any)[f])) (merged as any)[f] = [];
+  }
+  return merged;
 }
 
-const list = (arr: string[]) => (arr.length ? arr.join(" | ") : "(none specified)");
+const list = (arr: string[] | null | undefined) => (arr && arr.length ? arr.join(" | ") : "(none specified)");
 
 import { FRAMEWORK_STACK } from "./prompts/framework-stack";
 
@@ -135,7 +153,7 @@ HONESTY: Never fabricate stats, testimonials, named partnerships, awards, or cer
 AVOID: streamline, optimize, innovative, utilize, leverage, synergy, transform, "best", "#1", "leading" — unless verifiable.
 WEAK CTAs to replace: "Submit", "Sign Up", "Learn More", "Click Here", "Get Started" → use outcome-named action verbs ("Start My Free Trial", "Get the Checklist").${lang}${toneOverride}`;
   }
-  const objectionBlock = brain.objections.length
+  const objectionBlock = brain.objections?.length
     ? brain.objections
         .map((o, i) => `- ${o} → ${brain.objection_handling[i] ?? "(handle thoughtfully)"}`)
         .join("\n")

@@ -141,11 +141,13 @@ function main() {
   // gh accepts repeated --add-topic flags. Clear first by reading current
   // and using --remove-topic, but the simpler approach is to set all topics
   // in one call via the REST API.
+  // The topics REST endpoint expects an array (`names[]`). Sending a scalar
+  // `names=<comma-joined>` alongside it makes GitHub 422 the whole request
+  // (which aborts one-shot setup). Send ONLY the array form. (Audit finding.)
   gh([
     "api", `repos/${repo}/topics`,
     "--method", "PUT",
     "-H", "Accept: application/vnd.github.mercy-preview+json",
-    "-f", `names=${TOPICS.join(",")}`,
   ].concat(TOPICS.flatMap((t) => ["-f", `names[]=${t}`])));
 
   // Note: GitHub does NOT expose social preview image upload via the REST API

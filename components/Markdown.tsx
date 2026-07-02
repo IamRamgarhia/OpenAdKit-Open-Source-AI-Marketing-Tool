@@ -21,7 +21,7 @@ function escape(s: string): string {
 
 function renderInline(s: string): string {
   return s
-    .replace(/`([^`]+)`/g, (_, c) => `<code class="px-1 py-0.5 rounded bg-zinc-800 text-[11px]">${escape(c)}</code>`)
+    .replace(/`([^`]+)`/g, (_, c) => `<code class="px-1 py-0.5 rounded bg-zinc-800 text-[11px]">${c}</code>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>");
 }

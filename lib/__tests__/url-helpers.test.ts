@@ -61,6 +61,27 @@ describe("isPrivateOrLoopbackHost — SSRF guard", () => {
     expect(isPrivateOrLoopbackHost("fd00::1")).toBe(true);
   });
 
+  it("blocks bracketed IPv6 literals (the REAL URL.hostname production inputs)", () => {
+    // new URL("http://[::1]/").hostname === "[::1]" — WITH brackets. The bare
+    // "::1" cases above never occur in production; these are what route.ts sees.
+    expect(isPrivateOrLoopbackHost("[::1]")).toBe(true);
+    expect(isPrivateOrLoopbackHost("[::]")).toBe(true);
+    expect(isPrivateOrLoopbackHost("[fe80::1]")).toBe(true);
+    expect(isPrivateOrLoopbackHost("[fc00::1]")).toBe(true);
+    expect(isPrivateOrLoopbackHost("[fd00::1]")).toBe(true);
+  });
+
+  it("blocks IPv4-mapped IPv6 (::ffff:*) — dotted + hex-compressed forms", () => {
+    // ::ffff:169.254.169.254 is AWS IMDS wearing an IPv6 costume.
+    expect(isPrivateOrLoopbackHost("[::ffff:127.0.0.1]")).toBe(true);
+    expect(isPrivateOrLoopbackHost("[::ffff:169.254.169.254]")).toBe(true);
+    expect(isPrivateOrLoopbackHost("::ffff:127.0.0.1")).toBe(true);
+    expect(isPrivateOrLoopbackHost("::ffff:169.254.169.254")).toBe(true);
+    // Hex-compressed: 7f00:1 → 127.0.0.1, a9fe:a9fe → 169.254.169.254.
+    expect(isPrivateOrLoopbackHost("::ffff:7f00:1")).toBe(true);
+    expect(isPrivateOrLoopbackHost("::ffff:a9fe:a9fe")).toBe(true);
+  });
+
   it("allows real public hostnames", () => {
     expect(isPrivateOrLoopbackHost("example.com")).toBe(false);
     expect(isPrivateOrLoopbackHost("api.openai.com")).toBe(false);

@@ -46,7 +46,7 @@ export function UndoToast() {
         const next = r - 100;
         if (next <= 0) {
           if (tickRef.current) clearInterval(tickRef.current);
-          setQueue((q) => q.slice(1));
+          setQueue((q) => q.filter((x) => x !== evt));
           return 0;
         }
         return next;
@@ -68,14 +68,20 @@ export function UndoToast() {
           <span className="text-sm text-ink flex-1">{evt.message}</span>
           <button
             onClick={async () => {
-              await evt.undo();
-              setQueue((q) => q.slice(1));
+              const target = evt;
+              try {
+                await target.undo();
+              } catch (err) {
+                console.error("Undo failed", err);
+              } finally {
+                setQueue((q) => q.filter((x) => x !== target));
+              }
             }}
             className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-live hover:bg-live/10 px-2 py-1"
           >
             <Undo2 size={12} /> Undo
           </button>
-          <button onClick={() => setQueue((q) => q.slice(1))} className="text-ink-faint hover:text-ink" aria-label="Dismiss">
+          <button onClick={() => setQueue((q) => q.filter((x) => x !== evt))} className="text-ink-faint hover:text-ink" aria-label="Dismiss">
             <X size={14} />
           </button>
         </div>

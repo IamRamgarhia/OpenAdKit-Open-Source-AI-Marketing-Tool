@@ -29,6 +29,7 @@ const fs = require("fs");
 const fsp = require("fs/promises");
 const os = require("os");
 const path = require("path");
+const dns = require("dns");
 const { spawn } = require("child_process");
 
 // Fallback port: 41574 is in IANA's "registered but rarely used" range.
@@ -161,12 +162,25 @@ function readEnvLocal() {
 function writeEnvLocal(updates) {
   const current = readEnvLocal();
   const next = { ...current, ...updates };
-  const body = [
-    "# OpenAdKit configuration (managed by the launcher)",
-    `PORT=${next.PORT}`,
-    `ADFORGE_SYNC_PORT=${next.ADFORGE_SYNC_PORT}`,
-  ].join("\n") + "\n";
-  fs.writeFileSync(ENV_LOCAL, body, "utf8");
+  // Preserve every other key the user added (API keys, ADFORGE_NO_AUTOSTART,
+  // feature flags, …) — only PORT / ADFORGE_SYNC_PORT are managed here. The old
+  // implementation rewrote the whole file with just those two keys, silently
+  // deleting everything else. (Audit finding.)
+  let lines = fs.existsSync(ENV_LOCAL)
+    ? fs.readFileSync(ENV_LOCAL, "utf8").split(/\r?\n/)
+    : ["# OpenAdKit configuration (managed by the launcher)"];
+  const setKey = (key, value) => {
+    const idx = lines.findIndex((l) => {
+      const t = l.trim();
+      return !t.startsWith("#") && t.slice(0, t.indexOf("=")).trim() === key;
+    });
+    if (idx >= 0) lines[idx] = `${key}=${value}`;
+    else lines.push(`${key}=${value}`);
+  };
+  setKey("PORT", next.PORT);
+  setKey("ADFORGE_SYNC_PORT", next.ADFORGE_SYNC_PORT);
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+  fs.writeFileSync(ENV_LOCAL, lines.join("\n") + "\n", "utf8");
   return next;
 }
 
@@ -216,8 +230,29 @@ function setCors(req, res) {
 // either on the initial URL or on any redirect target. (Audit finding #13.)
 function isPrivateOrLoopbackHost(hostname) {
   if (!hostname) return true;
-  const h = String(hostname).toLowerCase();
+  // URL.hostname returns IPv6 literals wrapped in brackets ("[::1]") — strip
+  // them so the IPv6 checks below actually match (previously they never did,
+  // so every IPv6 loopback/link-local address bypassed the guard). (Audit.)
+  let h = String(hostname).toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
   if (h === "localhost" || h === "ip6-localhost" || h === "ip6-loopback") return true;
+  // IPv4-mapped IPv6 (::ffff:127.0.0.1 or ::ffff:7f00:1) — unwrap to the
+  // embedded IPv4 and re-check so a mapped loopback/metadata address is caught.
+  const mapped = h.match(/^::ffff:(.+)$/i);
+  if (mapped) {
+    const inner = mapped[1];
+    if (inner.includes(".")) {
+      h = inner;
+    } else {
+      const parts = inner.split(":");
+      if (parts.length === 2) {
+        const hi = parseInt(parts[0], 16);
+        const lo = parseInt(parts[1], 16);
+        if (Number.isFinite(hi) && Number.isFinite(lo)) {
+          h = `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
+        }
+      }
+    }
+  }
   // IPv4 loopback / private RFC1918 / link-local
   if (/^127\./.test(h)) return true;
   if (/^10\./.test(h)) return true;
@@ -661,6 +696,19 @@ function stopWeb() {
 const server = http.createServer(async (req, res) => {
   setCors(req, res);
   if (req.method === "OPTIONS") { res.statusCode = 204; res.end(); return; }
+  // CSRF enforcement (Critical): every state-changing endpoint here is a POST.
+  // Browsers attach an Origin header to all non-GET/HEAD requests, so an
+  // attacker's page can trigger the request but its Origin won't match. Reject
+  // cross-origin writes; requests with no Origin (curl / start scripts) are
+  // non-browser callers and are allowed. Without this, any open browser tab
+  // could POST /snapshot (wipe data), /update/apply (git pull + npm install),
+  // /quit, /web/rebuild, /config, etc.
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    const origin = req.headers.origin;
+    if (origin && !isAllowedOrigin(origin)) {
+      return json(res, 403, { ok: false, error: "Cross-origin request blocked." });
+    }
+  }
   try {
     const url = req.url || "/";
 
@@ -831,6 +879,12 @@ const server = http.createServer(async (req, res) => {
         try { u = new URL(targetUrl); } catch { return reject(new Error("Invalid redirect target")); }
         if (u.protocol !== "http:" && u.protocol !== "https:") return reject(new Error("Non-http(s) redirect blocked"));
         if (isPrivateOrLoopbackHost(u.hostname)) return reject(new Error("Redirect to private host blocked"));
+        // DNS-level SSRF guard: resolve the host and reject if ANY resolved
+        // address is private/loopback/link-local. Closes decimal/hex IP
+        // encodings and DNS-rebinding that the hostname-string check can't see.
+        return dns.lookup(u.hostname, { all: true }, (dnsErr, addresses) => {
+        if (dnsErr || !addresses || !addresses.length) return reject(new Error("DNS resolution failed for target host"));
+        if (addresses.some((a) => isPrivateOrLoopbackHost(a.address))) return reject(new Error("Target host resolves to a private / loopback address"));
         const lib = u.protocol === "https:" ? require("https") : require("http");
         const opts = {
           headers: {
@@ -865,6 +919,7 @@ const server = http.createServer(async (req, res) => {
         });
         r.on("error", reject);
         r.on("timeout", () => { r.destroy(); reject(new Error("Timeout after 15s")); });
+        });
       });
       try {
         body = await fetchOnce(target);

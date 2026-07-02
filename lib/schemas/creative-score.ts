@@ -10,8 +10,9 @@
 import { z } from "zod";
 
 const LeverScore = z.object({
-  score: z.number(),
-  reason: z.string(),
+  // Models sometimes return "7.5" as a string; the renderer coerces, so accept both.
+  score: z.union([z.number(), z.string()]),
+  reason: z.string().optional(),
 });
 
 const Fix = z.object({
@@ -23,8 +24,11 @@ const Fix = z.object({
 
 export const CreativeScoreSchema = z
   .object({
-    overall_score: z.number(),
-    tier: z.enum(["scale", "iterate", "rewrite", "kill"]),
+    // Accept string scores ("7.5") — the renderer coerces via Number().
+    overall_score: z.union([z.number(), z.string()]),
+    // Plain string, not a strict enum: "Iterate" casing / novel tiers shouldn't
+    // burn a retry. The renderer null-coalesces and lowercases for tone lookup.
+    tier: z.string(),
     scores: z
       .object({
         hook_strength: LeverScore,

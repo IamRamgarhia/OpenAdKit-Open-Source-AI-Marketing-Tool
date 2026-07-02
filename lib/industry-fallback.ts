@@ -50,7 +50,7 @@ interface TemplateSignal {
 }
 
 const TEMPLATE_KEYWORDS: TemplateSignal[] = [
-  { slug: "local_restaurant", keywords: ["restaurant", "cafe", "café", "bakery", "bar", "kitchen", "bistro", "diner", "eatery", "food", "menu", "chef", "dining"] },
+  { slug: "local_restaurant", keywords: ["restaurant", "cafe", "café", "coffee", "coffee shop", "espresso", "brewery", "bakery", "bar", "kitchen", "bistro", "diner", "eatery", "food", "menu", "chef", "dining"] },
   { slug: "b2b_saas", keywords: ["saas", "platform", "software", "api", "integration", "dashboard", "enterprise", "b2b", "workflow", "automation", "crm", "erp"] },
   { slug: "ecommerce_fashion", keywords: ["fashion", "apparel", "clothing", "shoes", "jewelry", "accessories", "boutique", "wardrobe", "outfit", "shop"] },
   { slug: "local_service", keywords: ["plumber", "plumbing", "dentist", "dental", "lawyer", "attorney", "electrician", "hvac", "contractor", "repair", "clinic", "law firm", "service", "local"] },
@@ -62,6 +62,13 @@ const TEMPLATE_KEYWORDS: TemplateSignal[] = [
   { slug: "real_estate", keywords: ["real estate", "realtor", "broker", "property", "listing", "homes", "houses", "apartment", "rent", "buy", "mls"] },
 ];
 
+/** Word-boundary keyword match so short signals ("app", "bar", "shop", "local")
+ *  don't match inside unrelated words. `haystack` is already lowercased. */
+function matchesKeyword(haystack: string, kw: string): boolean {
+  const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`, "i").test(haystack);
+}
+
 export function pickClosestTemplate(industry: string, niche: string): string | null {
   const haystack = `${industry} ${niche}`.toLowerCase();
   let bestSlug: string | null = null;
@@ -69,7 +76,7 @@ export function pickClosestTemplate(industry: string, niche: string): string | n
   for (const sig of TEMPLATE_KEYWORDS) {
     let score = 0;
     for (const kw of sig.keywords) {
-      if (haystack.includes(kw)) score += kw.length;
+      if (matchesKeyword(haystack, kw)) score += kw.length;
     }
     if (score > bestScore) {
       bestScore = score;

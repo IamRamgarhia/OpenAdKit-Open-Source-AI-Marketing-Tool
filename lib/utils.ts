@@ -5,11 +5,21 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
+// Server and first client render both emit USD so React hydration matches;
+// only after the first paint do we flip to the user's chosen currency, which
+// re-renders (StatusBar, /history) then pick up. (Hydration-mismatch fix.)
+let hydrated = false;
+if (typeof window !== "undefined") {
+  requestAnimationFrame(() => {
+    hydrated = true;
+  });
+}
+
 export function formatCost(usd: number): string {
   // Routes through the currency setting so /history, StatusBar, and any other
   // cost-display surface honor the user's chosen currency.
-  if (typeof window === "undefined") {
-    // SSR fallback to USD.
+  if (typeof window === "undefined" || !hydrated) {
+    // SSR + first client render fall back to USD so markup agrees on hydration.
     if (usd < 0.01) return `$${usd.toFixed(4)}`;
     return `$${usd.toFixed(2)}`;
   }
