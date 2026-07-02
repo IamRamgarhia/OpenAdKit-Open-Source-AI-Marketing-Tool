@@ -209,10 +209,14 @@ export async function getCampaign(id: string): Promise<Campaign | undefined> {
 
 // --- Performance ---
 export async function logPerformance(ad_id: string, p: Partial<AdPerformance>): Promise<void> {
-  const ad = await db().ads.get(ad_id);
-  if (!ad) return;
-  const merged: AdPerformance = { ...(ad.performance ?? { updated_at: 0 }), ...p, updated_at: Date.now() };
-  await db().ads.update(ad_id, { performance: merged });
+  // Read-merge-update must be atomic — concurrent calls would otherwise read the
+  // same base row and clobber each other's partial performance updates.
+  await db().transaction("rw", db().ads, async () => {
+    const ad = await db().ads.get(ad_id);
+    if (!ad) return;
+    const merged: AdPerformance = { ...(ad.performance ?? { updated_at: 0 }), ...p, updated_at: Date.now() };
+    await db().ads.update(ad_id, { performance: merged });
+  });
 }
 
 // --- Generator templates ---
@@ -267,7 +271,12 @@ export async function exportBrain(id: string): Promise<string> {
 }
 
 export async function importBrain(json: string): Promise<BrandBrain> {
-  const data = JSON.parse(json);
+  let data: any;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    throw new Error("Invalid brain JSON");
+  }
   const raw = data?.brain ?? data;
   if (!raw?.business_name) throw new Error("Invalid brain JSON");
   // Normalize first so any old-schema brain gets every field (favicon_url, website_url,
@@ -297,7 +306,12 @@ export async function exportAll(): Promise<string> {
 }
 
 export async function importAll(json: string): Promise<{ brains: number; ads: number; campaigns: number; templates: number }> {
-  const data = JSON.parse(json);
+  let data: any;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    throw new Error("Invalid backup file");
+  }
   if (!data || typeof data !== "object") throw new Error("Invalid backup file");
   await db().transaction(
     "rw",

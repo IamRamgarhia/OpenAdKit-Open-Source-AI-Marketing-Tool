@@ -54,7 +54,10 @@ const tierTone: Record<string, "pos" | "live" | "neg" | "default"> = {
 };
 
 function ScoreOutput({ json }: { json: any }) {
-  const overall = json?.overall_score ?? 0;
+  // Schema now allows string scores ("7.5"); coerce so .toFixed / comparisons hold.
+  const overall = Number(json?.overall_score) || 0;
+  // tier may arrive with any casing ("Iterate"); lowercase for tone lookup + Pill.
+  const tier = typeof json?.tier === "string" ? json.tier.toLowerCase() : "";
   const overallColor = overall >= 8.5 ? "text-pos" : overall >= 7 ? "text-live" : overall >= 5.5 ? "text-neg" : "text-neg";
   return (
     <div className="space-y-4 stagger">
@@ -65,7 +68,7 @@ function ScoreOutput({ json }: { json: any }) {
             <div className={`font-display italic text-6xl tabular ${overallColor} leading-none`}>{overall.toFixed(1)}<span className="text-ink-subtle text-3xl">/10</span></div>
           </div>
           <div>
-            <Pill text={json?.tier ?? "—"} tone={tierTone[json?.tier] ?? "default"} />
+            <Pill text={json?.tier ?? "—"} tone={tierTone[tier] ?? "default"} />
             {json?.predicted_ctr_band ? (
               <div className="text-[11px] text-ink-muted mt-2 font-mono">predicted CTR: {json.predicted_ctr_band}</div>
             ) : null}
@@ -82,8 +85,8 @@ function ScoreOutput({ json }: { json: any }) {
             {Object.entries(json.scores).map(([k, v]: any) => (
               <li key={k} className="flex items-start gap-3 border border-base-700 px-3 py-2.5">
                 <span className="font-medium text-[13px] text-ink w-40 mt-1 capitalize">{k.replace(/_/g, " ")}</span>
-                <ScoreBar score={Math.round(v.score)} />
-                <span className="flex-1 text-[12px] text-ink-muted leading-relaxed">{v.reason}</span>
+                <ScoreBar score={Math.round(Number(v.score) || 0)} />
+                <span className="flex-1 text-[12px] text-ink-muted leading-relaxed">{v.reason ?? "—"}</span>
               </li>
             ))}
           </ul>

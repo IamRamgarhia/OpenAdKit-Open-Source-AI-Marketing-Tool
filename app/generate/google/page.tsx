@@ -81,7 +81,7 @@ function RsaOutput({ json }: { json: GoogleRsaOutput }) {
         <ul className="divide-y divide-base-700">
           {(json.headlines ?? []).map((h, i) => (
             <li key={i} className="flex items-center gap-2 py-1.5">
-              <CharBadge count={h.chars || h.text.length} max={GOOGLE_RSA_LIMITS.headline} />
+              <CharBadge count={h.chars || (h.text?.length ?? 0)} max={GOOGLE_RSA_LIMITS.headline} />
               <span className="w-20 text-[9px] font-mono uppercase tracking-ui-mega text-ink-faint">{h.angle}</span>
               <span className={`text-sm flex-1 truncate ${h.status === "over" ? "line-through text-ink-subtle" : "text-ink"}`}>
                 {h.text}
@@ -97,7 +97,7 @@ function RsaOutput({ json }: { json: GoogleRsaOutput }) {
         <ul className="space-y-1.5">
           {(json.descriptions ?? []).map((d, i) => (
             <li key={i} className="flex items-start gap-2 border border-base-700 bg-base-900/30 px-2 py-1.5">
-              <CharBadge count={d.chars || d.text.length} max={GOOGLE_RSA_LIMITS.description} />
+              <CharBadge count={d.chars || (d.text?.length ?? 0)} max={GOOGLE_RSA_LIMITS.description} />
               <span className="w-20 text-[9px] font-mono uppercase tracking-ui-mega text-ink-faint mt-0.5">{d.angle}</span>
               <span className={`text-sm flex-1 ${d.status === "over" ? "line-through text-ink-subtle" : "text-ink"}`}>{d.text}</span>
               <CopyButton text={d.trimmed_alt || d.text} label="" />

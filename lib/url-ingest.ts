@@ -345,7 +345,14 @@ export function ingestPasted(rawUrl: string, content: string): IngestOutcome {
   if (!content || content.trim().length < 50) {
     return { ok: false, recoverable: false, message: "Paste at least a couple paragraphs of content." };
   }
-  const target = rawUrl ? normalize(rawUrl) : "manual-paste";
+  // normalize() throws on non-http(s) schemes — return the IngestError shape this
+  // function promises instead of letting the throw escape to callers.
+  let target: string;
+  try {
+    target = rawUrl ? normalize(rawUrl) : "manual-paste";
+  } catch (e: any) {
+    return { ok: false, recoverable: false, message: e?.message ?? "Only http(s) URLs are allowed." };
+  }
   const trimmed = content.length > MAX_CHARS ? content.slice(0, MAX_CHARS) : content;
   return { ok: true, url: target, content: trimmed, truncated: content.length > MAX_CHARS, source: "jina" };
 }

@@ -95,35 +95,40 @@ async function stream(opts: LLMCallOptions, handlers: StreamHandlers): Promise<L
   let buffer = "";
   let full = "";
   let usage: LLMUsage | null = null;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split("\n\n");
-    buffer = events.pop() ?? "";
-    for (const ev of events) {
-      const dataLines = ev.split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6));
-      for (const line of dataLines) {
-        if (!line || line === "[DONE]") continue;
-        try {
-          const evt = JSON.parse(line);
-          if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
-            full += evt.delta.text;
-            handlers.onDelta?.(evt.delta.text);
-          } else if (evt.type === "message_delta" && evt.usage) {
-            const merged: LLMUsage = { ...(usage ?? { input_tokens: 0, output_tokens: 0 }), ...evt.usage };
-            usage = merged;
-            handlers.onUsage?.(merged);
-          } else if (evt.type === "message_start" && evt.message?.usage) {
-            usage = evt.message.usage;
-          } else if (evt.type === "error") {
-            throw new LLMError(evt.error?.message ?? "stream error", undefined, "anthropic");
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+      for (const ev of events) {
+        const dataLines = ev.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).replace(/^ /, ""));
+        for (const raw of dataLines) {
+          const line = raw.trim();
+          if (!line || line === "[DONE]") continue;
+          try {
+            const evt = JSON.parse(line);
+            if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+              full += evt.delta.text;
+              handlers.onDelta?.(evt.delta.text);
+            } else if (evt.type === "message_delta" && evt.usage) {
+              const merged: LLMUsage = { ...(usage ?? { input_tokens: 0, output_tokens: 0 }), ...evt.usage };
+              usage = merged;
+              handlers.onUsage?.(merged);
+            } else if (evt.type === "message_start" && evt.message?.usage) {
+              usage = evt.message.usage;
+            } else if (evt.type === "error") {
+              throw new LLMError(evt.error?.message ?? "stream error", undefined, "anthropic");
+            }
+          } catch (err) {
+            if (err instanceof LLMError) throw err;
           }
-        } catch (err) {
-          if (err instanceof LLMError) throw err;
         }
       }
     }
+  } finally {
+    try { await reader.cancel(); } catch {}
   }
   handlers.onDone?.(full);
   return { text: full, usage, modelId: opts.model };

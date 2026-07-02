@@ -16,8 +16,19 @@
 
 export function isPrivateOrLoopbackHost(hostname: string): boolean {
   if (!hostname) return true;
-  const h = hostname.toLowerCase();
+  let h = hostname.toLowerCase();
+  // URL.hostname returns IPv6 literals WITH brackets (e.g. "[::1]"). Strip a
+  // single surrounding pair so the IPv6 checks below actually match.
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
   if (h === "localhost" || h === "ip6-localhost" || h === "ip6-loopback") return true;
+  // IPv4-mapped IPv6 (::ffff:127.0.0.1 or hex-compressed ::ffff:7f00:1 /
+  // ::ffff:a9fe:a9fe). Unwrap the embedded IPv4 and validate it against the
+  // IPv4 rules below — otherwise ::ffff:169.254.169.254 (AWS IMDS) sails past.
+  const mapped = h.match(/^::ffff:([0-9a-f:.]+)$/i);
+  if (mapped) {
+    const v4 = mappedIPv6ToIPv4(mapped[1]);
+    if (v4) h = v4;
+  }
   if (/^127\./.test(h)) return true;
   if (/^10\./.test(h)) return true;
   if (/^192\.168\./.test(h)) return true;
@@ -31,6 +42,29 @@ export function isPrivateOrLoopbackHost(hostname: string): boolean {
   if (/^fe[89ab][0-9a-f]:/i.test(h)) return true;
   if (/^f[cd][0-9a-f]{2}:/i.test(h)) return true;
   return false;
+}
+
+/**
+ * Convert the tail of an IPv4-mapped IPv6 address (the part after "::ffff:")
+ * into dotted-quad IPv4. Accepts dotted form ("127.0.0.1") verbatim and the
+ * hex-compressed form ("7f00:1", "a9fe:a9fe" → "127.0.0.1", "169.254.169.254").
+ * Returns null if it can't be parsed as an embedded IPv4.
+ */
+function mappedIPv6ToIPv4(embedded: string): string | null {
+  if (embedded.includes(".")) return embedded;
+  const groups = embedded.split(":").filter((g) => g.length > 0);
+  if (groups.length === 0 || groups.length > 2) return null;
+  let value = 0;
+  for (const g of groups) {
+    if (!/^[0-9a-f]{1,4}$/i.test(g)) return null;
+    value = ((value << 16) | parseInt(g, 16)) >>> 0;
+  }
+  return [
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ].join(".");
 }
 
 export interface Metadata {

@@ -106,12 +106,12 @@ export interface QuotaSnapshot {
   providerId: string;
   /** Requests in the last 60 seconds. */
   minute_used: number;
-  /** Requests in the last 24 hours. */
+  /** Requests since the start of the current UTC day. */
   day_used: number;
   /** When the oldest entry in the minute window expires (ms). When `now` reaches
    *  this, that one slot frees up. Used to display "resets in Xs". */
   minute_resets_in_seconds: number | null;
-  /** Same for daily window. */
+  /** Seconds until the next UTC midnight, when the daily (RPD) bucket resets. */
   day_resets_in_seconds: number | null;
   /** If non-null, we know a 429 was returned with a retry-after — the provider
    *  has explicitly told us to wait this many seconds. Higher-priority signal
@@ -124,13 +124,18 @@ export function getQuotaSnapshot(providerId: string | undefined | null): QuotaSn
   const now = Date.now();
   const entries = readLog().filter((e) => e.pid === providerId);
   const minuteEntries = entries.filter((e) => now - e.ts < 60_000);
-  const dayEntries = entries.filter((e) => now - e.ts < 24 * 3600 * 1000);
+  // Provider RPD limits reset on the wall-clock UTC day boundary, not on a
+  // rolling 24h window — count requests since the start of the current UTC day.
+  const nowDate = new Date(now);
+  const startOfUtcDay = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate());
+  const nextUtcMidnight = startOfUtcDay + 24 * 3600 * 1000;
+  const dayEntries = entries.filter((e) => e.ts >= startOfUtcDay);
 
   const minute_resets_in_seconds = minuteEntries.length
     ? Math.max(0, Math.ceil((60_000 - (now - Math.min(...minuteEntries.map((e) => e.ts)))) / 1000))
     : null;
   const day_resets_in_seconds = dayEntries.length
-    ? Math.max(0, Math.ceil((24 * 3600_000 - (now - Math.min(...dayEntries.map((e) => e.ts)))) / 1000))
+    ? Math.max(0, Math.ceil((nextUtcMidnight - now) / 1000))
     : null;
 
   const blocked = readBlocked();

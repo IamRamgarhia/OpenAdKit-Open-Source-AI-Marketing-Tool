@@ -45,6 +45,9 @@ export function CommandPalette() {
   const [recent, setRecent] = useState<GeneratedAd[]>([]);
   const [activeBrainId, setActiveBrain] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Element that had focus before the palette opened, so we can hand focus back
+  // on close/unmount instead of dropping it to <body>.
+  const prevFocusRef = useRef<HTMLElement | null>(null);
 
   const refresh = useCallback(async () => {
     const [b, a] = await Promise.all([listBrains(), listAds()]);
@@ -72,17 +75,22 @@ export function CommandPalette() {
 
   useEffect(() => {
     if (open) {
+      // Save the currently-focused element so we can restore it on close.
+      prevFocusRef.current = (document.activeElement as HTMLElement) ?? null;
       refresh();
       setQ("");
       setIdx(0);
       setTimeout(() => inputRef.current?.focus(), 30);
       document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
+      return () => {
+        document.body.style.overflow = "";
+        // Restore focus to whatever had it before the palette opened.
+        const prev = prevFocusRef.current;
+        prevFocusRef.current = null;
+        if (prev && typeof prev.focus === "function") prev.focus();
+      };
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
+    document.body.style.overflow = "";
   }, [open, refresh]);
 
   const actions = useMemo<Action[]>(() => {
@@ -198,6 +206,11 @@ export function CommandPalette() {
     } else if (e.key === "Enter") {
       e.preventDefault();
       filtered[idx]?.run();
+    } else if (e.key === "Tab") {
+      // Option buttons are tabIndex={-1} and driven by arrow keys, so the input
+      // is the only tabbable node in the dialog. Swallow Tab/Shift+Tab to keep
+      // focus trapped inside the palette instead of escaping to the page behind.
+      e.preventDefault();
     }
   };
 
@@ -265,9 +278,9 @@ export function CommandPalette() {
                       aria-selected={isActive}
                       onMouseEnter={() => setIdx(myIdx)}
                       onClick={() => a.run()}
-                      // tabIndex=-1 traps Tab focus on the search input so
-                      // keyboard users can't escape the modal to the page
-                      // behind it. Arrow keys + Enter already drive selection.
+                      // tabIndex=-1 keeps these out of the tab order; Tab itself
+                      // is trapped in the input's onKeyDown so keyboard users
+                      // can't escape the modal. Arrow keys + Enter drive selection.
                       tabIndex={-1}
                       className={`w-full text-left flex items-center gap-3 px-4 py-2 text-[14px] ${
                         isActive ? "bg-base-800 text-ink" : "text-ink-muted hover:bg-base-800/50"

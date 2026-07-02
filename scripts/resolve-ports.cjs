@@ -65,14 +65,26 @@ function readEnv() {
 }
 
 function writeEnv(updates) {
-  const cur = readEnv();
-  const next = { ...cur, ...updates };
-  const body = [
-    "# OpenAdKit configuration (auto-resolved by scripts/resolve-ports.cjs)",
-    `PORT=${next.PORT}`,
-    `ADFORGE_SYNC_PORT=${next.ADFORGE_SYNC_PORT}`,
-  ].join("\n") + "\n";
-  fs.writeFileSync(ENV_LOCAL, body, "utf8");
+  const next = { ...readEnv(), ...updates };
+  // Preserve any other keys the user added to .env.local (API keys, feature
+  // flags, …) — only PORT / ADFORGE_SYNC_PORT are managed here. The old
+  // implementation rewrote the file with just those two, deleting the rest.
+  // (Audit finding.)
+  let lines = fs.existsSync(ENV_LOCAL)
+    ? fs.readFileSync(ENV_LOCAL, "utf8").split(/\r?\n/)
+    : ["# OpenAdKit configuration (auto-resolved by scripts/resolve-ports.cjs)"];
+  const setKey = (key, value) => {
+    const idx = lines.findIndex((l) => {
+      const t = l.trim();
+      return !t.startsWith("#") && t.slice(0, t.indexOf("=")).trim() === key;
+    });
+    if (idx >= 0) lines[idx] = `${key}=${value}`;
+    else lines.push(`${key}=${value}`);
+  };
+  setKey("PORT", next.PORT);
+  setKey("ADFORGE_SYNC_PORT", next.ADFORGE_SYNC_PORT);
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+  fs.writeFileSync(ENV_LOCAL, lines.join("\n") + "\n", "utf8");
 }
 
 function probeHealth(port) {
@@ -149,7 +161,11 @@ async function findFreePair(startFrom) {
 }
 
 function normalize(p) {
-  return path.normalize(p).replace(/\\/g, "/").toLowerCase().replace(/\/+$/, "");
+  const norm = path.normalize(p).replace(/\\/g, "/").replace(/\/+$/, "");
+  // Case-insensitive compare only on Windows (case-insensitive filesystem);
+  // keep case on Linux/macOS where two installs differing only by case are
+  // genuinely distinct. (Audit finding.)
+  return process.platform === "win32" ? norm.toLowerCase() : norm;
 }
 
 (async () => {

@@ -111,9 +111,11 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  alternates: {
-    canonical: "/",
-  },
+  // NOTE: no blanket `alternates.canonical` here. App Router inherits root
+  // metadata onto every sub-page, so a fixed canonical:"/" would make every
+  // route declare itself a duplicate of the homepage (defeating app/sitemap.ts).
+  // Each route self-canonicalizes against `metadataBase` instead; per-page
+  // canonicals can still be set in that page's own `metadata.alternates`.
 };
 
 // JSON-LD structured data. Three blocks emitted inline in the <head>:

@@ -40,5 +40,10 @@ export function useThrottledStream() {
     setText("");
   }, []);
 
-  return { text, append, reset };
+  // Synchronous read of the live buffer. `text` (state) lags behind by up to one
+  // rAF flush and is stale inside the closure that kicked off the stream, so
+  // callers needing the final accumulated text should read this instead.
+  const getText = useCallback(() => bufferRef.current, []);
+
+  return { text, append, reset, getText };
 }

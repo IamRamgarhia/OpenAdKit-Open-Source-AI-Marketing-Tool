@@ -249,9 +249,12 @@ export function BrandBrainForm({ initial }: Props) {
       return;
     }
     setExtracting(true);
+    // Mirror extract()/ingestFromUrl(): make this abortable so unmount cancels
+    // the in-flight passes instead of setState-ing on a dead component.
+    abortRef.current = new AbortController();
     try {
       // PASS 1: Homepage + subpages
-      const r = await ingestUrl(url);
+      const r = await ingestUrl(url, abortRef.current.signal);
       if (!r.ok) { setError(r.message); return; }
       let content = r.content;
       try {
@@ -272,6 +275,7 @@ export function BrandBrainForm({ initial }: Props) {
         }) }],
         maxTokens: 3000,
         temperature: 0.7,
+        signal: abortRef.current.signal,
       });
       addUsage(estimateCostUsd(res.providerId, res.modelId, res.usage), res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
       window.dispatchEvent(new Event("ados:usage"));
@@ -283,7 +287,7 @@ export function BrandBrainForm({ initial }: Props) {
         const industryHint = (brain.industry || parsed.industry || det.industry || "").split(/[|·,]/)[0].trim();
         const baseQuery = industryHint ? `${searchableName} ${industryHint} reviews competitors customers` : `${searchableName} reviews competitors`;
         try {
-          const searchRes = await ingestUrl(`https://s.jina.ai/${encodeURIComponent(baseQuery)}`);
+          const searchRes = await ingestUrl(`https://s.jina.ai/${encodeURIComponent(baseQuery)}`, abortRef.current.signal);
           if (searchRes.ok && searchRes.content && searchRes.content.length > 500) {
             const augRes = await llmCall({
               messages: [{ role: "user", content: buildSearchAugmentedPrompt({
@@ -296,6 +300,7 @@ export function BrandBrainForm({ initial }: Props) {
               }) }],
               maxTokens: 2500,
               temperature: 0.7,
+              signal: abortRef.current.signal,
             });
             addUsage(estimateCostUsd(augRes.providerId, augRes.modelId, augRes.usage), augRes.usage?.input_tokens ?? 0, augRes.usage?.output_tokens ?? 0);
             window.dispatchEvent(new Event("ados:usage"));
@@ -311,16 +316,21 @@ export function BrandBrainForm({ initial }: Props) {
         } catch {}
       }
 
-      // PASS 4: Merge into brain (fill-empty only) → industry fallback for anything still empty
+      // PASS 4: Merge into brain (fill-empty only) → industry fallback for anything still empty.
+      // Bail if we were aborted/unmounted mid-flight — the search-augmentation
+      // pass swallows its own errors, so an abort there wouldn't otherwise stop us
+      // from setState-ing on a dead component.
+      if (abortRef.current?.signal.aborted) return;
       setBrain((b) => {
         const merged = mergeFillEmpty(b, parsed as Partial<BrandBrain>, { url, deterministic: det });
         const { brain: withFallback } = applyIndustryFallback(merged);
         return withFallback;
       });
     } catch (e: any) {
-      setError(e?.message ?? "Fill failed");
+      if (e?.name !== "AbortError") setError(e?.message ?? "Fill failed");
     } finally {
       setExtracting(false);
+      abortRef.current = null;
     }
   }
 

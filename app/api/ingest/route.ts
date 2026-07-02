@@ -20,6 +20,7 @@
  * Mirrors the response shape of the sidecar (lib/url-ingest.ts uses both
  * interchangeably via serverProxyUrl()).
  */
+import dns from "node:dns";
 import { NextResponse } from "next/server";
 import {
   isPrivateOrLoopbackHost,
@@ -40,6 +41,24 @@ const OUTPUT_CAP = 40_000;
 const USER_AGENT =
   "Mozilla/5.0 (compatible; OpenAdKit/1.0; +https://github.com/IamRamgarhia/AdForge)";
 
+// Resolve the hostname and reject if ANY resolved address is private/loopback/
+// link-local. This defeats decimal/hex/octal IP encodings that slip past the
+// literal-string guard, plus DNS-rebinding (a public name pointing at an
+// internal IP). Resolution failure is treated as blocked — fail closed.
+async function assertResolvesPublic(hostname: string): Promise<void> {
+  let resolved: dns.LookupAddress[];
+  try {
+    resolved = await dns.promises.lookup(hostname, { all: true });
+  } catch {
+    throw new Error("Private / loopback / link-local host blocked");
+  }
+  for (const { address } of resolved) {
+    if (isPrivateOrLoopbackHost(address)) {
+      throw new Error("Private / loopback / link-local host blocked");
+    }
+  }
+}
+
 async function fetchWithRedirects(initialUrl: string): Promise<string> {
   let current = initialUrl;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -50,6 +69,8 @@ async function fetchWithRedirects(initialUrl: string): Promise<string> {
     if (isPrivateOrLoopbackHost(u.hostname)) {
       throw new Error("Private / loopback / link-local host blocked");
     }
+    // Re-checked on every hop (initial URL + each redirect target).
+    await assertResolvesPublic(u.hostname);
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
     let res: Response;

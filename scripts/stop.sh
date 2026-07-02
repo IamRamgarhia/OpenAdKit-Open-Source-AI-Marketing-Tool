@@ -30,7 +30,15 @@ kill_port() {
   done
 }
 
-kill_port 3005
-kill_port 3006
+# Read the ACTUAL ports from .env.local — the launcher/resolver writes these
+# and they are NOT 3005/3006 on most installs. (Audit finding.)
+if [ -f .env.local ]; then
+  WEB_PORT=$(grep -E '^PORT=' .env.local | tail -1 | cut -d= -f2 | tr -d '[:space:]')
+  SYNC_PORT=$(grep -E '^ADFORGE_SYNC_PORT=' .env.local | tail -1 | cut -d= -f2 | tr -d '[:space:]')
+  [ -n "$WEB_PORT" ] && kill_port "$WEB_PORT"
+  [ -n "$SYNC_PORT" ] && kill_port "$SYNC_PORT"
+else
+  echo "No .env.local found — nothing to stop (run the launcher first)."
+fi
 
 echo "Done."

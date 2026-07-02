@@ -31,14 +31,16 @@ function isBrowser(): boolean {
 
 export async function detectSync(): Promise<boolean> {
   if (!isBrowser()) return false;
-  if (_available !== null) return _available;
+  // Only cache a POSITIVE probe. A failed probe must not pin `false` forever —
+  // a sidecar started after page load should still be detectable on re-probe.
+  if (_available === true) return true;
   try {
     const r = await fetch(`${SYNC_URL}/health`, { method: "GET", cache: "no-store" });
-    _available = r.ok;
+    if (r.ok) _available = true;
+    return r.ok;
   } catch {
-    _available = false;
+    return false;
   }
-  return _available;
 }
 
 export function isSyncIncludingKeys(): boolean {
@@ -226,11 +228,14 @@ export async function bootLocalSync(): Promise<{ enabled: boolean; pulled: boole
   // sidecar can't exist when the app is served from a non-loopback origin,
   // so probing it is pure waste (~1 failed fetch per page load).
   if (isHostedMode()) return { enabled: false, pulled: false, reason: "hosted mode (no sidecar)" };
+  // Set synchronously BEFORE the first await so a second concurrent
+  // bootLocalSync() sees `_booted` and bails — otherwise the check-then-act gap
+  // lets both calls install duplicate listeners + intervals.
+  _booted = true;
   const ok = await detectSync();
   if (!ok) {
     return { enabled: false, pulled: false, reason: "sync sidecar not running" };
   }
-  _booted = true;
   const pull = await pullSnapshot();
   // Push on any state change
   const onChange = () => debouncedPush();

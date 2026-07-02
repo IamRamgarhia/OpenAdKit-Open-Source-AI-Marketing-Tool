@@ -152,6 +152,10 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
     const attachedImages: ImagePart[] = imageFields
       .map((f) => (input as any)[f.name])
       .filter((v): v is ImagePart => Boolean(v && (v as ImagePart).type === "image"));
+    // Vision fallback provider for THIS run only. Kept in a local variable rather
+    // than stashed on the `input` state object — mutating state directly caused
+    // stale routing and leaked the internal key into persisted ads. (Audit #.)
+    let visionFallbackId: string | undefined;
     if (attachedImages.length) {
       const providerId = getActiveProviderId() as any;
       if (!providerId || !providerSupportsVision(providerId, getModel())) {
@@ -163,7 +167,7 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
             `Active provider can't read images. Falling back to ${fallback} for this run only. Make it permanent in Settings.`
           );
           // Let the run continue — llmStream below will use providerOverride.
-          (input as any).__vision_provider_override = fallback;
+          visionFallbackId = fallback;
         } else {
           setError(
             "Active provider can't read images, and no vision-capable provider has a saved key. Add a key for Claude / OpenAI / Gemini / OpenRouter in Settings, or remove the screenshot."
@@ -194,7 +198,6 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
       // If the vision fallback was triggered above, pass the override down so
       // llmStream resolves the call against that provider instead of the
       // active one. The user-facing toast already explained the swap.
-      const visionFallbackId: string | undefined = (input as any).__vision_provider_override;
       const fallbackProvider: Provider | null = visionFallbackId ? getProvider(visionFallbackId) ?? null : null;
       const fallbackKey = fallbackProvider ? getProviderKey(fallbackProvider.id) : undefined;
 
@@ -233,7 +236,9 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
       // Some providers (Gemini in particular) occasionally return res.text empty
       // even when streaming deltas worked correctly. Fall back to the accumulated
       // streamed buffer so the user's output (and any auto-saved ad) is never blank.
-      const finalText = res.text || stream.text;
+      // getText() reads the live ref synchronously — the closure's stream.text is
+      // the stale pre-generation "" captured when run() started.
+      const finalText = res.text || stream.getText();
 
       let json: any = null;
       let finalTextOut = finalText;
@@ -318,13 +323,19 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
       }
 
       if (getAutoSave()) {
+        // Never persist internal, double-underscore-prefixed keys (e.g. a former
+        // vision-provider override). They're transient routing hints, not user
+        // input, and would produce stale routing if replayed from history.
+        const persistedInput = Object.fromEntries(
+          Object.entries(input as Record<string, unknown>).filter(([k]) => !k.startsWith("__"))
+        );
         const ad: GeneratedAd = {
           id: crypto.randomUUID(),
           brand_id: brain?.id ?? "",
           platform: config.platform,
           campaign_type: config.campaign_type,
           title: config.buildTitle(input),
-          input: input as unknown as Record<string, unknown>,
+          input: persistedInput,
           output_json: json,
           output_text: finalTextOut,
           model_id: res.modelId,

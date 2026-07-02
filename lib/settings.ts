@@ -150,26 +150,37 @@ export function setActiveBrainId(id: string | null): void {
 }
 
 // --- Usage ---
+// Coerce a parsed localStorage value to a finite number so a corrupt "NaN"
+// entry can't poison every downstream total. (Audit: NaN poisoning.)
+function finiteOrZero(v: string | null | undefined): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
 export function getUsage(): { cost: number; input: number; output: number } {
   const s = safeLocal();
   return {
-    cost: Number(s?.getItem(KEYS.totalCost) ?? 0),
-    input: Number(s?.getItem(KEYS.totalIn) ?? 0),
-    output: Number(s?.getItem(KEYS.totalOut) ?? 0),
+    cost: finiteOrZero(s?.getItem(KEYS.totalCost)),
+    input: finiteOrZero(s?.getItem(KEYS.totalIn)),
+    output: finiteOrZero(s?.getItem(KEYS.totalOut)),
   };
 }
 export function addUsage(cost: number, input: number, output: number): void {
   const s = safeLocal();
   if (!s) return;
   const cur = getUsage();
+  // Ignore a non-finite incoming delta so one bad estimate can't corrupt totals.
+  const nextCost = cur.cost + (Number.isFinite(cost) ? cost : 0);
+  const nextIn = cur.input + (Number.isFinite(input) ? input : 0);
+  const nextOut = cur.output + (Number.isFinite(output) ? output : 0);
   // Safari private mode throws QuotaExceededError synchronously on setItem.
   // Without this guard the exception propagates to every LLM call site and
   // crashes generation result-save. Usage tracking degrades gracefully.
   // (Audit finding #29.)
+  // Never persist a non-finite total — fall back to the previous finite value.
   try {
-    s.setItem(KEYS.totalCost, String(cur.cost + cost));
-    s.setItem(KEYS.totalIn, String(cur.input + input));
-    s.setItem(KEYS.totalOut, String(cur.output + output));
+    s.setItem(KEYS.totalCost, String(Number.isFinite(nextCost) ? nextCost : cur.cost));
+    s.setItem(KEYS.totalIn, String(Number.isFinite(nextIn) ? nextIn : cur.input));
+    s.setItem(KEYS.totalOut, String(Number.isFinite(nextOut) ? nextOut : cur.output));
   } catch {}
 }
 export function resetUsage(): void {

@@ -56,15 +56,16 @@ function usageFrom(body: any): LLMUsage | null {
   if (!body?.usageMetadata) return null;
   return {
     input_tokens: body.usageMetadata.promptTokenCount ?? 0,
-    output_tokens: body.usageMetadata.candidatesTokenCount ?? 0,
+    // 2.5 models bill thinking tokens separately; include them so output isn't undercounted.
+    output_tokens: (body.usageMetadata.candidatesTokenCount ?? 0) + (body.usageMetadata.thoughtsTokenCount ?? 0),
   };
 }
 
 async function call(opts: LLMCallOptions): Promise<LLMResult> {
-  const url = `${API_BASE}/models/${opts.model}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
+  const url = `${API_BASE}/models/${opts.model}:generateContent`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": opts.apiKey },
     body: JSON.stringify(toGeminiBody(opts)),
     signal: opts.signal,
   });
@@ -77,10 +78,10 @@ async function call(opts: LLMCallOptions): Promise<LLMResult> {
 }
 
 async function stream(opts: LLMCallOptions, handlers: StreamHandlers): Promise<LLMResult> {
-  const url = `${API_BASE}/models/${opts.model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(opts.apiKey)}`;
+  const url = `${API_BASE}/models/${opts.model}:streamGenerateContent?alt=sse`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": opts.apiKey },
     body: JSON.stringify(toGeminiBody(opts)),
     signal: opts.signal,
   });
@@ -93,35 +94,54 @@ async function stream(opts: LLMCallOptions, handlers: StreamHandlers): Promise<L
   let full = "";
   let usage: LLMUsage | null = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split("\n\n");
-    buffer = events.pop() ?? "";
-    for (const ev of events) {
-      const dataLines = ev.split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6));
-      for (const line of dataLines) {
-        if (!line) continue;
-        try {
-          const evt = JSON.parse(line);
-          const parts = evt?.candidates?.[0]?.content?.parts;
-          if (parts) {
-            for (const p of parts) {
-              if (typeof p?.text === "string" && p.text) {
-                full += p.text;
-                handlers.onDelta?.(p.text);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+      for (const ev of events) {
+        const dataLines = ev.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).replace(/^ /, ""));
+        for (const raw of dataLines) {
+          const line = raw.trim();
+          if (!line || line === "[DONE]") continue;
+          try {
+            const evt = JSON.parse(line);
+            // Surface mid-stream failures instead of returning a truncated result.
+            if (evt?.error) {
+              throw new LLMError(evt.error?.message ?? "stream error", undefined, "google");
+            }
+            const blockReason = evt?.promptFeedback?.blockReason;
+            if (blockReason) {
+              throw new LLMError(`Blocked by Gemini safety filter: ${blockReason}`, undefined, "google");
+            }
+            const finishReason = evt?.candidates?.[0]?.finishReason;
+            if (finishReason === "SAFETY" || finishReason === "RECITATION") {
+              throw new LLMError(`Generation stopped: ${finishReason}`, undefined, "google");
+            }
+            const parts = evt?.candidates?.[0]?.content?.parts;
+            if (parts) {
+              for (const p of parts) {
+                if (typeof p?.text === "string" && p.text) {
+                  full += p.text;
+                  handlers.onDelta?.(p.text);
+                }
               }
             }
+            const u = usageFrom(evt);
+            if (u) {
+              usage = u;
+              handlers.onUsage?.(u);
+            }
+          } catch (err) {
+            if (err instanceof LLMError) throw err;
           }
-          const u = usageFrom(evt);
-          if (u) {
-            usage = u;
-            handlers.onUsage?.(u);
-          }
-        } catch {}
+        }
       }
     }
+  } finally {
+    try { await reader.cancel(); } catch {}
   }
   handlers.onDone?.(full);
   return { text: full, usage, modelId: opts.model };

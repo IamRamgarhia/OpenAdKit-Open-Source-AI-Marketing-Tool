@@ -56,9 +56,16 @@ export function tryParseJson<T = unknown>(text: string): T | null {
     if (first >= 0 && last > first) {
       try {
         return JSON.parse(candidate.slice(first, last + 1)) as T;
-      } catch {
-        return null;
-      }
+      } catch {}
+    }
+    // Top-level array fallback: recover when the payload is a JSON array
+    // wrapped in prose (e.g. a bare list of hashtags/subjects).
+    const firstArr = candidate.indexOf("[");
+    const lastArr = candidate.lastIndexOf("]");
+    if (firstArr >= 0 && lastArr > firstArr) {
+      try {
+        return JSON.parse(candidate.slice(firstArr, lastArr + 1)) as T;
+      } catch {}
     }
     return null;
   }
