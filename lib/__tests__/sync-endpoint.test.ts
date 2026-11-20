@@ -64,7 +64,7 @@ describe("GET /api/runtime", () => {
     vi.resetModules();
     const { GET } = await import("@/app/api/runtime/route");
     const body = await GET().json();
-    expect(body).toEqual({ sync_port: 47002 });
+    expect(body).toMatchObject({ sync_port: 47002 });
   });
 
   it("returns null for a missing or malformed port", async () => {
@@ -72,6 +72,30 @@ describe("GET /api/runtime", () => {
     vi.stubEnv("ADFORGE_SYNC_PORT", "");
     vi.resetModules();
     const { GET } = await import("@/app/api/runtime/route");
-    expect(await GET().json()).toEqual({ sync_port: null });
+    expect(await GET().json()).toMatchObject({ sync_port: null });
+  });
+});
+
+describe("GET /api/runtime — MCP config", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("reports the install's node + MCP script when the sidecar provides them", async () => {
+    vi.stubEnv("OPENADKIT_MCP_SCRIPT", "C:/Programs/OpenAdKit/app/mcp/openadkit-mcp.mjs");
+    vi.stubEnv("OPENADKIT_NODE", "C:/Programs/OpenAdKit/node/node.exe");
+    vi.resetModules();
+    const { GET } = await import("@/app/api/runtime/route");
+    expect((await GET().json()).mcp).toEqual({
+      command: "C:/Programs/OpenAdKit/node/node.exe",
+      args: ["C:/Programs/OpenAdKit/app/mcp/openadkit-mcp.mjs"],
+    });
+  });
+
+  it("returns mcp: null when not available (e.g. hosted)", async () => {
+    vi.stubEnv("OPENADKIT_MCP_SCRIPT", "");
+    vi.resetModules();
+    const { GET } = await import("@/app/api/runtime/route");
+    expect((await GET().json()).mcp).toBeNull();
   });
 });

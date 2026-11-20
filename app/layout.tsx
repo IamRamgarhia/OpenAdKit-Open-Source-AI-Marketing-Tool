@@ -8,6 +8,7 @@ import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { CommandPalette } from "@/components/CommandPalette";
 import { UndoToast } from "@/components/UndoToast";
 import { LocalSyncBoot } from "@/components/LocalSyncBoot";
+import { UpdateNotice } from "@/components/UpdateNotice";
 import { VaultGate } from "@/components/VaultGate";
 
 const sans = Manrope({
@@ -308,6 +309,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <MobileNav />
           <ServiceWorkerRegister />
           <LocalSyncBoot />
+          <UpdateNotice />
           <CommandPalette />
           <UndoToast />
           <main id="main-content" className="flex-1 min-w-0 flex flex-col overflow-hidden">

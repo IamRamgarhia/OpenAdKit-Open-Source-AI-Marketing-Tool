@@ -39,6 +39,7 @@
  * Stop:  Ctrl+C
  */
 
+const releaseUpdate = require("./release-update.cjs");
 const http = require("http");
 const fs = require("fs");
 const fsp = require("fs/promises");
@@ -543,6 +544,17 @@ function tryProbeWeb(port, cb) {
  *   - Packaged installs: PROJECT_ROOT is the standalone payload → ./server.js
  *   - Git checkouts after `npm run build`: ./.next/standalone/server.js
  */
+/** Where this install's MCP server lives, so Settings can show the exact
+ *  Claude Desktop / Claude Code / Cursor config (via /api/runtime). */
+function mcpEnv() {
+  const candidates = [
+    path.join(PROJECT_ROOT, "mcp", "openadkit-mcp.mjs"), // installed app
+    path.join(PROJECT_ROOT, "mcp", "dist", "openadkit-mcp.mjs"), // source checkout after build:mcp
+  ];
+  const script = candidates.find((f) => fs.existsSync(f));
+  return script ? { OPENADKIT_MCP_SCRIPT: script, OPENADKIT_NODE: process.execPath } : {};
+}
+
 function resolveWebCommand(port) {
   const isWin = process.platform === "win32";
   const wantDev = String(process.env.OPENADKIT_WEB_MODE || "").toLowerCase() === "dev";
@@ -561,7 +573,7 @@ function resolveWebCommand(port) {
           shell: false,
           // OPENADKIT_SYNC_PORT lets the web server tell the browser where this
           // sidecar is (app/api/runtime), whatever port was baked in at build.
-          env: { NODE_ENV: "production", PORT: String(port), HOSTNAME: "127.0.0.1", OPENADKIT_SYNC_PORT: String(PORT) },
+          env: { NODE_ENV: "production", PORT: String(port), HOSTNAME: "127.0.0.1", OPENADKIT_SYNC_PORT: String(PORT), ...mcpEnv() },
         };
       }
     }
@@ -572,7 +584,7 @@ function resolveWebCommand(port) {
     args: ["next", "dev", "-p", String(port)],
     cwd: PROJECT_ROOT,
     shell: isWin,
-    env: { PORT: String(port), OPENADKIT_SYNC_PORT: String(PORT) },
+    env: { PORT: String(port), OPENADKIT_SYNC_PORT: String(PORT), ...mcpEnv() },
   };
 }
 let webMode = "down";
@@ -1148,6 +1160,32 @@ const server = http.createServer(async (req, res) => {
       stopWeb().then(() => startWeb());
       return json(res, 200, { ok: true });
     }
+    // --- Release updates (installed copies: Windows app, install.sh) ---
+    if (req.method === "GET" && url === "/release/check") {
+      return json(res, 200, await releaseUpdate.check({ projectRoot: PROJECT_ROOT }));
+    }
+    if (req.method === "POST" && url === "/release/apply") {
+      if (process.platform !== "win32" || process.env.OPENADKIT_PACKAGED !== "windows") {
+        return json(res, 400, {
+          ok: false,
+          error: "One-click update is for the Windows app. On macOS/Linux, run the install command again.",
+          command: releaseUpdate.INSTALL_SH,
+        });
+      }
+      const info = await releaseUpdate.check({ projectRoot: PROJECT_ROOT });
+      if (!info.can_apply) return json(res, 409, { ok: false, error: "No update to install.", ...info });
+      try {
+        await releaseUpdate.downloadWindowsSetup({ tag: info.tag, log: appendUpdateLog });
+      } catch (e) {
+        return json(res, 502, { ok: false, error: String(e?.message ?? e) });
+      }
+      // The desktop host sees this process exit, finds update/ready.json, runs
+      // the verified Setup silently and relaunches OpenAdKit.
+      json(res, 200, { ok: true, installing: info.latest });
+      setTimeout(shutdown, 300);
+      return;
+    }
+
     // --- Update endpoints (auto-update from GitHub main) ---
     if (req.method === "GET" && url === "/update/check") {
       // R3 + R4: read local sha + branch, refuse on non-main branches.

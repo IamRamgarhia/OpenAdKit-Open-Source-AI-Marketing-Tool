@@ -75,6 +75,13 @@ stop_running() {
 if [ "${1:-}" = "--uninstall" ]; then
   step "Uninstalling OpenAdKit"
   stop_running
+  # Remove the Claude Desktop MCP entry (if any) while node + the script still exist.
+  for n in "$APP_HOME/node/bin/node" "$(command -v node 2>/dev/null || true)"; do
+    if [ -n "$n" ] && [ -x "$n" ] && [ -f "$APP_HOME/app/scripts/register-mcp.cjs" ]; then
+      "$n" "$APP_HOME/app/scripts/register-mcp.cjs" --remove >/dev/null 2>&1 || true
+      break
+    fi
+  done
   rm -rf "$APP_HOME" "$MAC_APP" "$LINUX_DESKTOP" "$LINUX_BIN"
   ok "Removed the program. Your data was left in place."
   exit 0
@@ -280,6 +287,25 @@ EOF
   case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) warn "$HOME/.local/bin is not on your PATH; use $APP_HOME/openadkit directly." ;; esac
 fi
 
+# ---------------------------------------------------------------- Claude Desktop (MCP)
+MCP_SCRIPT="$APP_HOME/app/mcp/openadkit-mcp.mjs"
+if [ -f "$MCP_SCRIPT" ]; then
+  if "$NODE_BIN" "$APP_HOME/app/scripts/register-mcp.cjs" --detect >/dev/null 2>&1; then
+    answer="${OPENADKIT_CONNECT_CLAUDE:-}"
+    if [ -z "$answer" ] && [ -e /dev/tty ]; then
+      printf "\nClaude Desktop is installed. Connect OpenAdKit to it (adds the OpenAdKit MCP server)? [Y/n] "
+      read -r answer </dev/tty || answer="n"
+      [ -z "$answer" ] && answer="y"
+    fi
+    case "$answer" in
+      y|Y|yes|YES|1)
+        "$NODE_BIN" "$APP_HOME/app/scripts/register-mcp.cjs" --node "$NODE_BIN" --script "$MCP_SCRIPT" || warn "Could not update Claude Desktop's config."
+        ;;
+      *) echo "    Skipped. Connect later with: \"$NODE_BIN\" \"$APP_HOME/app/scripts/register-mcp.cjs\"" ;;
+    esac
+  fi
+fi
+
 # ---------------------------------------------------------------- start
 step "Starting OpenAdKit"
 "$APP_HOME/openadkit" start
@@ -290,5 +316,8 @@ else
   echo "  Open it any time from your app menu, or run: openadkit"
 fi
 echo "  Stop it:     \"$APP_HOME/openadkit\" stop"
+if [ -f "$MCP_SCRIPT" ]; then
+  echo "  MCP server:  \"$NODE_BIN\" \"$MCP_SCRIPT\"   (Claude Code: claude mcp add openadkit -- \"$NODE_BIN\" \"$MCP_SCRIPT\")"
+fi
 echo "  Update:      run this installer again"
 echo "  Uninstall:   curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | bash -s -- --uninstall"

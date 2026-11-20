@@ -337,12 +337,41 @@ namespace OpenAdKit
 
             node = new Process();
             node.StartInfo = psi;
+            node.EnableRaisingEvents = true;
+            node.Exited += OnNodeExited;
             node.OutputDataReceived += delegate (object s, DataReceivedEventArgs a) { WriteLog(a.Data); };
             node.ErrorDataReceived += delegate (object s, DataReceivedEventArgs a) { WriteLog(a.Data); };
             node.Start();
             Job.Add(node);
             node.BeginOutputReadLine();
             node.BeginErrorReadLine();
+        }
+
+        /// The sidecar exits after downloading a verified update (POST
+        /// /release/apply writes update/ready.json first). Run that Setup
+        /// silently and close, so Setup can replace this exe; Setup reopens
+        /// OpenAdKit when it finishes (/RELAUNCH).
+        void OnNodeExited(object sender, EventArgs e)
+        {
+            if (quitting) return;
+            string dir = Path.Combine(Program.DataDir, "update");
+            string ready = Path.Combine(dir, "ready.json");
+            string setup = Path.Combine(dir, "OpenAdKit-Windows-Setup.exe");
+            if (!File.Exists(ready) || !File.Exists(setup)) return;
+            try
+            {
+                File.Delete(ready);
+                ProcessStartInfo si = new ProcessStartInfo(setup, "/SILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH");
+                si.UseShellExecute = true;
+                Process.Start(si);
+                quitting = true;
+                BeginInvoke((MethodInvoker)delegate () { Application.Exit(); });
+            }
+            catch (Exception ex)
+            {
+                WriteLog("Could not start the update: " + ex.Message);
+                Status("The update could not start. Download it from github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/releases");
+            }
         }
 
         void WriteLog(string line)

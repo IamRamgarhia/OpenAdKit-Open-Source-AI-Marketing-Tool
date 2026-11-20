@@ -52,7 +52,14 @@ function main() {
   fs.mkdirSync(DIST, { recursive: true });
   fs.cpSync(STANDALONE, PAYLOAD, { recursive: true });
   fs.mkdirSync(path.join(PAYLOAD, "scripts"), { recursive: true });
-  fs.copyFileSync(path.join(ROOT, "scripts", "local-sync.cjs"), path.join(PAYLOAD, "scripts", "local-sync.cjs"));
+  for (const f of ["local-sync.cjs", "release-update.cjs", "register-mcp.cjs"]) {
+    fs.copyFileSync(path.join(ROOT, "scripts", f), path.join(PAYLOAD, "scripts", f));
+  }
+  // MCP server (single-file bundle from `npm run build:mcp`).
+  const mcp = path.join(ROOT, "mcp", "dist", "openadkit-mcp.mjs");
+  if (!fs.existsSync(mcp)) fail("mcp/dist/openadkit-mcp.mjs missing — run `npm run build:mcp` first.");
+  fs.mkdirSync(path.join(PAYLOAD, "mcp"), { recursive: true });
+  fs.copyFileSync(mcp, path.join(PAYLOAD, "mcp", "openadkit-mcp.mjs"));
   // App icon for the macOS .app bundle / Linux .desktop entry made by install.sh.
   fs.copyFileSync(path.join(ROOT, "installer", "art", "icon-512.png"), path.join(PAYLOAD, "icon.png"));
 
