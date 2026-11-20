@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.28.0.schema.json
+
+PackageIdentifier: DiceCodes.OpenAdKit
+PackageVersion: 2.0.0
+PackageLocale: en-US
+Publisher: DiceCodes
+PublisherUrl: https://dicecodes.com
+PublisherSupportUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/issues
+PackageName: OpenAdKit
+PackageUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool
+License: MIT
+LicenseUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/blob/main/LICENSE
+ShortDescription: Free, open source AI ad generator for Google, Meta, TikTok, LinkedIn, YouTube and X. Bring your own AI key.
+Description: |-
+  Write, score and plan ads for every platform: 18 generators (Google RSA, Performance Max, Shopping, Meta, TikTok, LinkedIn, YouTube, X, email subjects, hashtags and more) and 11 optimizers (CTR, Quality Score, budget waste, A/B test planner, creative score).
+  Works with your own key for Claude, OpenAI, Gemini, Groq, Cerebras, OpenRouter, Together, DeepSeek or Mistral. No subscription, no account; clients and history stay on your computer.
+  Includes an MCP server for Claude Desktop, Claude Code and Cursor.
+Moniker: openadkit
+Tags:
+- ads
+- advertising
+- ai
+- copywriting
+- facebook-ads
+- google-ads
+- marketing
+- mcp
+- open-source
+ReleaseNotesUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/releases/tag/v2.0.0
+Documentations:
+- DocumentLabel: README
+  DocumentUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool#readme
+- DocumentLabel: MCP setup
+  DocumentUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/blob/main/docs/MCP.md
+ManifestType: defaultLocale
+ManifestVersion: 1.28.0

@@ -13,6 +13,10 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 - **robots.txt is generated** (`app/robots.ts`) so its Sitemap line points at
   the deployment's own origin, like the sitemap; `/support` is crawlable.
 
+### Added
+- winget manifests for `DiceCodes.OpenAdKit` 2.0.0 (`packaging/winget/`,
+  validated with `winget validate`); submit after the release is published.
+
 ### Fixed
 - Returning users with a key no longer see the landing page flash before the
   dashboard on `/` (a pre-paint marker hides it; crawlers still get the
