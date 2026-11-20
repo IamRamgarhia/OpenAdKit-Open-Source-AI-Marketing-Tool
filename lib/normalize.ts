@@ -67,6 +67,8 @@ export function normalizeAd(a: any): GeneratedAd {
     ...(typeof a?.campaign_id === "string" ? { campaign_id: a.campaign_id } : {}),
     ...(typeof a?.prompt === "string" && a.prompt ? { prompt: a.prompt } : {}),
     ...(typeof a?.provider_id === "string" && a.provider_id ? { provider_id: a.provider_id } : {}),
+    ...(Number.isFinite(a?.max_tokens) && a.max_tokens > 0 ? { max_tokens: Number(a.max_tokens) } : {}),
+    ...(a?.has_image === true ? { has_image: true } : {}),
     ...(perf
       ? {
           performance: {

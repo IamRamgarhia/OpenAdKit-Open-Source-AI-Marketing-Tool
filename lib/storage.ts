@@ -53,6 +53,10 @@ export interface GeneratedAd {
   prompt?: string;
   /** Provider that produced this output, for display alongside model_id. */
   provider_id?: string;
+  /** Output budget used for this generation, so Regenerate doesn't truncate. */
+  max_tokens?: number;
+  /** True when the run included a screenshot (Regenerate can't re-send it). */
+  has_image?: boolean;
   /** Last local modification (ms). Drives last-write-wins sync merge. */
   updated_at?: number;
 }
@@ -294,6 +298,13 @@ async function hardDelete(table: SyncTable, id: string): Promise<void> {
     await d.table(table).delete(id);
     await d.tombstones.put({ id: `${table}:${id}`, table, row_id: id, deleted_at: Date.now() });
   });
+}
+
+/** Delete a custom checklist item (tombstoned so sync can't resurrect it)
+ *  and the checked-state rows keyed by it. */
+export async function deleteCustomItem(id: string): Promise<void> {
+  await hardDelete("custom_items", id);
+  await db().checklist.where("item_key").equals(id).delete();
 }
 
 export async function deleteBrain(id: string): Promise<void> {

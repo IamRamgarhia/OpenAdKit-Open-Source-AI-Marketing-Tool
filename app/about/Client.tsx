@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Globe, Mail, MessageCircle, Phone, ExternalLink, Sparkles, Code2, Palette, Search as SearchIcon, ShoppingCart, Smartphone, Megaphone } from "lucide-react";
+import { Globe, Mail, MessageCircle, Phone, ExternalLink, Sparkles, Code2, Palette, Search as SearchIcon, ShoppingCart, Smartphone, Megaphone, Heart, Bug, Code as Github } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { REPO_URL, REPO_NEW_ISSUE_URL } from "@/lib/repo";
 
 const SERVICES = [
   { icon: Code2, title: "Website Development", body: "WordPress, Shopify, fully custom. SEO-ready, fast, secure, optimized for conversion + UX." },
@@ -16,15 +17,15 @@ const SERVICES = [
 export default function AboutPage() {
   return (
     <div>
-      <PageHeader scope="about" title="About OpenAdKit" subtitle="Built by Dicecodes. Open source. Browser-only. BYOK." />
+      <PageHeader scope="about" title="About OpenAdKit" subtitle="Built by DiceCodes. Open source. Browser-only. BYOK." />
 
       <div className="space-y-8 stagger">
         <section className="border border-live/40 bg-live/5 p-6">
           <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-2">made by</div>
-          <h2 className="font-display italic text-5xl text-ink leading-tight">Dicecodes</h2>
+          <h2 className="font-display italic text-5xl text-ink leading-tight">DiceCodes</h2>
           <p className="font-display italic text-lg text-ink-muted mt-2">Transforming Vision into Virtual Reality — Your Digital Dream Team.</p>
           <p className="text-sm text-ink mt-5 leading-relaxed max-w-2xl">
-            Dicecodes is a digital studio that combines creative design with advanced technology to deliver measurable
+            DiceCodes is a digital studio that combines creative design with advanced technology to deliver measurable
             business growth. OpenAdKit is one of our open-source releases — the same ad-strategy + creative engine we use
             internally for client work, packaged so anyone with a Claude / Gemini / Groq key can use it for free.
           </p>
@@ -32,14 +33,23 @@ export default function AboutPage() {
             <a href="https://dicecodes.com" target="_blank" rel="noreferrer" className="btn-primary">
               <Globe size={11} /> dicecodes.com <ExternalLink size={10} />
             </a>
-            <a href="mailto:Contact@dicecodes.com" className="btn-ghost">
-              <Mail size={11} /> Contact@dicecodes.com
+            <a href="mailto:contact@dicecodes.com" className="btn-ghost">
+              <Mail size={11} /> contact@dicecodes.com
             </a>
             <a href="tel:+919888404991" className="btn-ghost">
               <Phone size={11} /> +91 98884 04991
             </a>
             <a href="https://wa.me/919888404991" target="_blank" rel="noreferrer" className="btn-ghost">
               <MessageCircle size={11} /> WhatsApp
+            </a>
+            <Link href="/support" className="btn-ghost">
+              <Heart size={11} /> Support OpenAdKit
+            </Link>
+            <a href={REPO_URL} target="_blank" rel="noreferrer" className="btn-ghost">
+              <Github size={11} /> Source · Star <ExternalLink size={10} />
+            </a>
+            <a href={REPO_NEW_ISSUE_URL} target="_blank" rel="noreferrer" className="btn-ghost">
+              <Bug size={11} /> Report a bug
             </a>
           </div>
         </section>
@@ -48,7 +58,7 @@ export default function AboutPage() {
           <h3 className="font-display italic text-3xl text-ink leading-tight">Need custom SaaS or web work?</h3>
           <p className="text-sm text-ink-muted mt-2 max-w-2xl leading-relaxed">
             OpenAdKit is free + MIT-licensed. But if you need a tailored version — a private fork with your data integrations,
-            a white-labeled agency edition, or something we haven&apos;t built yet — Dicecodes builds that.
+            a white-labeled agency edition, or something we haven&apos;t built yet — DiceCodes builds that.
           </p>
           <div className="grid md:grid-cols-3 gap-3 mt-6">
             {SERVICES.map((s) => {
@@ -66,7 +76,7 @@ export default function AboutPage() {
           </div>
           <div className="mt-6">
             <a href="https://dicecodes.com" target="_blank" rel="noreferrer" className="btn-primary">
-              <Sparkles size={11} /> Get your SaaS built by Dicecodes <ExternalLink size={10} />
+              <Sparkles size={11} /> Get your SaaS built by DiceCodes <ExternalLink size={10} />
             </a>
           </div>
         </section>
@@ -111,7 +121,7 @@ export default function AboutPage() {
         </section>
 
         <section className="text-center py-8 text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">
-          OpenAdKit · MIT-licensed · Built by Dicecodes · {new Date().getFullYear()}
+          OpenAdKit · MIT-licensed · Built by DiceCodes · {new Date().getFullYear()}
         </section>
       </div>
     </div>

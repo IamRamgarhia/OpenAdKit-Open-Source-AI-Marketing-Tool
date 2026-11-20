@@ -408,13 +408,24 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
               .join("\n");
             try {
               // Re-send the ORIGINAL content (incl. images), not just the text.
-              const retryMessages: LLMMessage[] = [
-                { role: "user", content },
-                { role: "assistant", content: (finalText || "").slice(0, 8000) },
-                {
-                  role: "user",
-                  content: `Your previous reply did not match the required JSON shape. Fix these issues and return ONLY the corrected JSON — no prose, no markdown, no code fences:\n\n${issues}`,
-                },
+              const fixHint = `Your previous reply did not match the required JSON shape. Fix these issues and return ONLY the corrected JSON — no prose, no markdown, no code fences:\n\n${issues}`;
+              // An empty assistant turn is rejected by Anthropic (HTTP 400), so
+              // when the first reply was blank fold the hint into the user turn.
+              const prevReply = (finalText || "").slice(0, 8000);
+              const retryMessages: LLMMessage[] = prevReply.trim()
+                ? [
+                    { role: "user", content },
+                    { role: "assistant", content: prevReply },
+                    { role: "user", content: fixHint },
+                  ]
+                : [
+                    {
+                      role: "user",
+                      content:
+                        typeof content === "string"
+                          ? `${content}\n\nYour previous reply was empty. ${fixHint}`
+                          : [...content, { type: "text" as const, text: `Your previous reply was empty. ${fixHint}` }],
+                    },
               ];
               const retry = await llmCall({
                 system,

@@ -74,9 +74,9 @@ export const metadata: Metadata = {
     "TikTok Ads AI",
     "free AI copywriting",
   ],
-  authors: [{ name: "Dicecodes", url: "https://dicecodes.com" }],
-  creator: "Dicecodes",
-  publisher: "Dicecodes",
+  authors: [{ name: "DiceCodes", url: "https://dicecodes.com" }],
+  creator: "DiceCodes",
+  publisher: "DiceCodes",
   category: "marketing",
   icons: {
     icon: [
@@ -141,7 +141,7 @@ export const metadata: Metadata = {
 // JSON-LD structured data. Three blocks emitted inline in the <head>:
 //   1. SoftwareApplication — surfaces in Google rich-results + AI Overviews
 //      when users search "free AI marketing tools" or "Jasper alternative"
-//   2. Organization — establishes Dicecodes as the publisher (E-E-A-T)
+//   2. Organization — establishes DiceCodes as the publisher (E-E-A-T)
 //   3. FAQPage — mirrors the README FAQ so AI Overviews / Perplexity /
 //      ChatGPT browse can cite passage-level answers directly
 //
@@ -178,14 +178,14 @@ const STRUCTURED_DATA = {
     ],
     author: {
       "@type": "Organization",
-      name: "Dicecodes",
+      name: "DiceCodes",
       url: "https://dicecodes.com",
     },
   },
   organization: {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "Dicecodes",
+    name: "DiceCodes",
     url: "https://dicecodes.com",
     logo: `${SITE_URL}/icon.svg`,
     sameAs: ["https://github.com/IamRamgarhia"],

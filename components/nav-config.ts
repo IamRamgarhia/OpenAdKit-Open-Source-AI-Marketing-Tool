@@ -185,7 +185,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/history", label: "History" },
       { href: "/campaigns", label: "Campaigns" },
       { href: "/settings", label: "Settings" },
-      { href: "/about", label: "About · Dicecodes" },
+      { href: "/about", label: "About · DiceCodes" },
+      { href: "/support", label: "♥ Support OpenAdKit" },
     ],
   },
 ];

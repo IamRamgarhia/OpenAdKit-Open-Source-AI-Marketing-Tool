@@ -417,7 +417,7 @@ export default function HowToUsePage() {
         <p className="text-[11px] font-mono uppercase tracking-ui-wide text-ink-faint">
           Last updated: May 2026 · Built by{" "}
           <a href="https://dicecodes.com" target="_blank" rel="noreferrer" className="hover:text-live">
-            Dicecodes
+            DiceCodes
           </a>
         </p>
       </footer>

@@ -208,6 +208,13 @@ function registerAiTool(server: McpServer, tool: AiTool, env: NodeJS.ProcessEnv)
         );
       }
 
+      let computed: unknown = undefined;
+      try {
+        computed = tool.computed ? tool.computed(input) : undefined;
+      } catch {
+        computed = undefined;
+      }
+
       if (!resolved) {
         const { system, prompt } = buildMessages(tool, input, opts);
         return text({
@@ -221,12 +228,18 @@ function registerAiTool(server: McpServer, tool: AiTool, env: NodeJS.ProcessEnv)
           system,
           user: prompt,
           output_schema: outputJsonSchema(tool),
+          ...(computed !== undefined ? { computed_in_code: computed } : {}),
         });
       }
 
       try {
         const result = await generate(tool, input, resolved, opts, extra.signal);
-        return text({ mode: "generate", tool: tool.name, ...result });
+        return text({
+          mode: "generate",
+          tool: tool.name,
+          ...result,
+          ...(computed !== undefined ? { computed_in_code: computed } : {}),
+        });
       } catch (e) {
         return text(`${tool.title} failed: ${(e as Error).message}`, true);
       }

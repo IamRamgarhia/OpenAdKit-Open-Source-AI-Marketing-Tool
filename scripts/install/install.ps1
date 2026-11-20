@@ -21,7 +21,7 @@ function Write-Err($msg)  { Write-Host "ERR $msg" -ForegroundColor Red }
 
 Write-Host ""
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host " OpenAdKit installer - by Dicecodes" -ForegroundColor Cyan
+Write-Host " OpenAdKit installer - by DiceCodes" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 
 # --- Defaults ---

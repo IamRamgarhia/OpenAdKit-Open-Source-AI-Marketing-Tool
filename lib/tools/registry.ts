@@ -35,10 +35,18 @@ import { buildBidStrategyPrompt } from "../prompts/bid-strategy";
 import { buildKeywordPrompt } from "../prompts/keyword-strategy";
 import { buildLandingPrompt } from "../prompts/landing-page";
 import { buildCompetitorStealPrompt } from "../prompts/competitor-steal";
+import { buildAbTestPrompt } from "../prompts/ab-test";
+import { buildBudgetPlannerPrompt } from "../prompts/budget-planner";
+import { buildCreativeScorePrompt } from "../prompts/creative-score";
+import { buildBudgetWastePrompt } from "../prompts/budget-waste";
+import { buildReelIdeasPrompt } from "../prompts/reel-ideas";
+import { planAbTest } from "../ab-math";
+import { estimateVolume } from "../budget-estimates";
 
 import * as G from "../schemas/generators";
 import { CampaignKitSchema } from "../schemas/campaign-kit";
 import { ContentCalendarSchema } from "../schemas/content-calendar";
+import { CreativeScoreSchema } from "../schemas/creative-score";
 
 export type ToolCategory = "generate" | "optimize" | "research";
 
@@ -57,6 +65,10 @@ export interface AiTool {
   maxTokens: number;
   temperature: number;
   skipFrameworkStack?: boolean;
+  /** Numbers computed in code from the inputs (never by the model), returned
+   *  next to the AI result so callers can show real math. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  computed?: (input: any) => unknown;
 }
 
 const s = (d: string) => z.string().describe(d);
@@ -388,6 +400,29 @@ export const AI_TOOLS: AiTool[] = [
     temperature: 0.85,
   },
 
+  {
+    name: "generate_reel_ideas",
+    title: "Reel / Short ideas",
+    description: "Hook-first short-video ideas for Instagram Reels, TikTok, YouTube Shorts or Facebook Reels, with scripts and on-screen text.",
+    category: "generate",
+    route: "/generate/reel-ideas",
+    input: {
+      platform: z.enum(["instagram_reels", "tiktok", "youtube_shorts", "facebook_reels"]).describe("Platform."),
+      reel_count: z.union([z.number(), z.string()]).describe("How many ideas (e.g. 12)."),
+      duration_seconds: z.union([z.number(), z.string()]).describe("Target length in seconds."),
+      goal: s("Goal, e.g. 'followers', 'leads', 'sales'."),
+      pillars: s("Content pillars (comma-separated); empty to use the brand's pillars."),
+      hook_seed: os("A hook or idea to riff on."),
+      competitor_pasted_content: os("Competitor captions/scripts pasted as text (fetch them yourself if you have a URL)."),
+      own_recent_reels: os("Your recent reels and how they did."),
+      must_avoid: os("Topics or styles to avoid."),
+    },
+    buildPrompt: buildReelIdeasPrompt,
+    schema: G.ReelIdeasSchema,
+    maxTokens: 7000,
+    temperature: 0.85,
+  },
+
   // ------------------------------------------------------------ optimizers
   {
     name: "optimize_ctr",
@@ -562,6 +597,101 @@ export const AI_TOOLS: AiTool[] = [
     buildPrompt: buildLandingPrompt,
     schema: G.LandingPageSchema,
     maxTokens: 4000,
+    temperature: 0.7,
+  },
+
+  {
+    name: "optimize_ab_test",
+    title: "A/B test planner",
+    description:
+      "Plan an ad A/B test. Sample size and duration are computed with the two-proportion formula (95% confidence, 80% power) from your baseline rate and minimum detectable effect; the AI writes the hypotheses and test design.",
+    category: "optimize",
+    route: "/optimize/ab-test",
+    input: {
+      platform: s("Platform."),
+      current_ad: s("The control ad."),
+      hypothesis_to_test: s("What you want to learn."),
+      baseline_rate_pct: s("Control's current rate in % (CTR or conversion rate), e.g. '2.5'."),
+      mde_pct: s("Minimum detectable effect, relative %, e.g. '20' to detect a +20% lift."),
+      daily_visitors_per_variant: s("Daily visitors / clicks / impressions per variant."),
+    },
+    buildPrompt: buildAbTestPrompt,
+    schema: G.AbTestSchema,
+    maxTokens: 2800,
+    temperature: 0.7,
+    computed: (i) => planAbTest(i.baseline_rate_pct, i.mde_pct, i.daily_visitors_per_variant),
+  },
+  {
+    name: "optimize_budget_planner",
+    title: "Budget planner",
+    description:
+      "Split a monthly ad budget across platforms. Clicks, conversions, CPA and ROAS projections are computed in code from your numbers (or clearly labelled benchmark midpoints), not invented by the model.",
+    category: "optimize",
+    route: "/optimize/budget-planner",
+    input: {
+      total_monthly: s("Total monthly budget (number; USD unless you say otherwise)."),
+      goal: s("Goal."),
+      business_type: s("Business type."),
+      current_aov_or_ltv: s("Average order value or LTV."),
+      current_cvr: s("Current conversion rate %."),
+      has_organic: s("Existing organic presence (yes/no + detail)."),
+      geo: s("Geography."),
+      primary_platform: os("Platform the projection is for, e.g. 'google_search', 'meta'."),
+      industry: os("Benchmark industry, e.g. 'ecommerce', 'b2b_saas'."),
+      avg_cpc: os("Your own average CPC, if known."),
+    },
+    buildPrompt: buildBudgetPlannerPrompt,
+    schema: G.BudgetPlannerSchema,
+    maxTokens: 3500,
+    temperature: 0.7,
+    computed: (i) =>
+      estimateVolume({
+        monthlyBudget: i.total_monthly,
+        platform: i.primary_platform || "google_search",
+        industry: i.industry,
+        cpc: i.avg_cpc,
+        cvrPct: i.current_cvr,
+        aov: i.current_aov_or_ltv,
+        currencyCode: "USD",
+      }),
+  },
+  {
+    name: "optimize_creative_score",
+    title: "Creative score",
+    description: "Score ad copy against proven creative principles and get specific rewrites. Any CTR band is a directional AI estimate.",
+    category: "optimize",
+    route: "/optimize/creative-score",
+    input: {
+      platform: s("Platform."),
+      ad_copy: s("The ad copy."),
+      audience_context: os("Who sees it."),
+    },
+    buildPrompt: buildCreativeScorePrompt,
+    schema: CreativeScoreSchema,
+    maxTokens: 2500,
+    temperature: 0.4,
+  },
+  {
+    name: "optimize_budget_waste",
+    title: "Budget waste finder",
+    description: "Find where ad spend leaks (match types, negatives, schedule, devices, geo, existing customers) and what to fix first.",
+    category: "optimize",
+    route: "/optimize/budget",
+    input: {
+      platform: s("Platform."),
+      monthly_spend: s("Monthly spend."),
+      campaign_summary: s("How the campaigns are set up."),
+      match_types: os("Match types in use."),
+      has_negatives: os("Negative keyword status."),
+      schedule: os("Ad schedule."),
+      device_targeting: os("Device targeting."),
+      geo_targeting: os("Geo targeting."),
+      excludes_customers: os("Whether existing customers are excluded."),
+      impression_share_pct: os("Search impression share % from the platform, if known."),
+    },
+    buildPrompt: buildBudgetWastePrompt,
+    schema: G.BudgetWasteSchema,
+    maxTokens: 3500,
     temperature: 0.7,
   },
 

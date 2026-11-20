@@ -161,3 +161,24 @@ describe("OpenAdKit MCP server (stdio)", () => {
     expect(res.isError).toBe(true);
   });
 });
+
+describe("OpenAdKit MCP server — numbers come from code, not the model", () => {
+  it("returns the two-proportion sample size computed in code for A/B plans", async () => {
+    const res = parse(
+      await client.callTool({
+        name: "optimize_ab_test",
+        arguments: {
+          platform: "Meta",
+          current_ad: "Control ad",
+          hypothesis_to_test: "Price anchor in headline",
+          baseline_rate_pct: "10",
+          mde_pct: "20",
+          daily_visitors_per_variant: "500",
+        },
+      }),
+    );
+    // 10% -> 12% at 95% confidence / 80% power needs 3,841 per variant.
+    expect(res.computed_in_code.perVariant).toBe(3841);
+    expect(res.computed_in_code.days).toBe(8);
+  });
+});

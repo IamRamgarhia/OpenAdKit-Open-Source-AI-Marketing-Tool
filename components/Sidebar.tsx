@@ -30,6 +30,8 @@ import { listBrains } from "@/lib/storage";
 import { getActiveBrainId, setActiveBrainId } from "@/lib/settings";
 import type { BrandBrain } from "@/lib/brand-brain";
 import { isNavItemActive } from "@/lib/nav-active";
+import { MAINTAINER } from "@/lib/maintainer";
+import { REPO_URL } from "@/lib/repo";
 
 // Lucide doesn't ship a Google-G icon by default; use SearchIcon as the closest
 // semantic fit (Google = search ads in this app). Same for TikTok → Music2.
@@ -172,9 +174,9 @@ function SidebarView({ search }: { search: string }) {
         <Link
           href="/about"
           className="ml-auto text-[10px] text-live hover:text-live/80 transition shrink-0 font-mono uppercase tracking-ui-wide"
-          aria-label="About Dicecodes"
+          aria-label="About DiceCodes"
         >
-          by Dicecodes
+          by DiceCodes
         </Link>
       </div>
 
@@ -399,6 +401,20 @@ function SidebarView({ search }: { search: string }) {
           <div className="text-ink">zero backend · zero telemetry</div>
           <div className="text-ink-subtle normal-case tracking-normal">Your key. Your data.</div>
         </div>
+      </div>
+      <div className="shrink-0 px-4 pb-3 -mt-1 text-[10px] font-mono text-ink-subtle flex flex-wrap items-center gap-x-1.5">
+        <span>Built by</span>
+        <a href={MAINTAINER.website} target="_blank" rel="noreferrer" className="text-live hover:underline">
+          {MAINTAINER.name}
+        </a>
+        <span aria-hidden>·</span>
+        <Link href="/support" className="hover:text-ink">
+          ♥ Support
+        </Link>
+        <span aria-hidden>·</span>
+        <a href={REPO_URL} target="_blank" rel="noreferrer" className="hover:text-ink">
+          ★ Star
+        </a>
       </div>
     </aside>
   );

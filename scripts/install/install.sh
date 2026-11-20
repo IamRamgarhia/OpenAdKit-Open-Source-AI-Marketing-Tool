@@ -23,7 +23,7 @@ err()   { printf "${c_red}ERR %s${c_reset}\n" "$1"; }
 
 echo
 echo "=================================================="
-echo " OpenAdKit installer - by Dicecodes"
+echo " OpenAdKit installer - by DiceCodes"
 echo "=================================================="
 
 # --- Detect OS for install hints ---

@@ -83,7 +83,6 @@ function SettingsInner() {
   const [charWarn, setCharWarnState] = useState(getCharWarn);
   const [autoSave, setAutoSaveState] = useState(getAutoSave);
   const [jina, setJinaState] = useState(getJinaKey);
-  const [syncKeys, setSyncKeysState] = useState(() => window.localStorage.getItem("ados.sync_include_keys") === "1");
   const [currency, setCurrencyState] = useState(getCurrencyCode);
   const [budget, setBudget] = useState(() => {
     const limit = getMonthlyBudgetUsd();
@@ -158,13 +157,6 @@ function SettingsInner() {
   }
 
   function persistJina(v: string) { setJinaState(v.trim()); setJinaKey(v.trim()); }
-  function persistSyncKeys(v: boolean) {
-    setSyncKeysState(v);
-    if (typeof window !== "undefined") {
-      if (v) window.localStorage.setItem("ados.sync_include_keys", "1");
-      else window.localStorage.removeItem("ados.sync_include_keys");
-    }
-  }
 
   async function saveProvider(p: Provider) {
     setError(null);
@@ -516,12 +508,10 @@ function SettingsInner() {
             {/* Folder-sync only exists when the local sidecar is running.
                 In hosted mode this toggle has nothing to act on. */}
             {!isHostedMode() ? (
-              <ToggleRow
-                label="include API keys in folder sync"
-                desc="off by default · turn ON to make the data/ folder fully portable across machines (security tradeoff)"
-                v={syncKeys}
-                on={persistSyncKeys}
-              />
+              <p className="text-[11px] text-ink-muted">
+                Folder sync saves clients, history and settings. API keys are never written to the sync file —
+                re-enter them on a new machine (or use an encrypted backup).
+              </p>
             ) : null}
             <div className="pt-3 border-t border-base-700">
               <label className="label">jina reader api key (optional)</label>
