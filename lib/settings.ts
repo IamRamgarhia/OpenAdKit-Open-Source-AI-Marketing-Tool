@@ -1,5 +1,5 @@
 import { getProvider } from "./providers";
-import { resolveStoredValue, prepareForStorage, isVaultEnabled, isCiphertext } from "./key-vault";
+import { resolveStoredValue, prepareForStorage, isVaultEnabled, isCiphertext, forgetPlaintext } from "./key-vault";
 
 const KEYS = {
   activeProvider: "ados.active_provider",
@@ -37,45 +37,70 @@ function providerModelName(providerId: string): string {
 
 /**
  * Model IDs that were removed from a provider's catalog, mapped to their
- * replacement. A saved selection pointing at a retired ID silently breaks cost
- * estimation (findModel returns null → every generation reports $0) and can
- * 404 at the provider, so we rewrite it on read. Add a row here whenever a
- * model is dropped from lib/providers/*.
+ * replacement IN THAT PROVIDER'S CATALOG. A saved selection pointing at a
+ * retired ID silently breaks cost estimation (findModel returns null → every
+ * generation reports $0) and can 404 at the provider, so we rewrite it on read.
+ *
+ * Keyed by provider: the same model string can mean different things on
+ * different hosts, and a global map once rewrote Cerebras' "llama-3.1-8b" to
+ * "gpt-oss-20b" — a model Cerebras doesn't serve. Add a row here whenever a
+ * model is dropped from lib/providers/*; settings-vault.test.ts asserts every
+ * target exists in its provider's catalog. Only list models that are actually
+ * retired/dropped — claude-opus-4-6 is still served and stays selectable.
  */
-const RETIRED_MODEL_IDS: Record<string, string> = {
-  // --- Anthropic ---
-  // Date-suffixed variants are not valid model IDs — use the bare alias.
-  "claude-haiku-4-5-20251001": "claude-haiku-4-5",
-  "claude-opus-4-6": "claude-opus-5",
-  "claude-opus-4-5": "claude-opus-5",
-  "claude-sonnet-4-5": "claude-sonnet-5",
-  // --- Google --- (2.0 Flash Lite withdrawn from the Gemini API)
-  "gemini-2.0-flash-lite": "gemini-3.5-flash-lite",
-  "gemini-1.5-flash": "gemini-3.6-flash",
-  "gemini-1.5-pro": "gemini-2.5-pro",
-  // --- Groq --- (Mixtral decommissioned)
-  "mixtral-8x7b-32768": "openai/gpt-oss-120b",
-  // --- Cerebras --- (no longer serves any Llama model)
-  "llama-3.3-70b": "gpt-oss-120b",
-  "llama-3.1-8b": "gpt-oss-20b",
-  // --- OpenRouter --- (both free models withdrawn from the catalog)
-  "meta-llama/llama-3.3-70b-instruct:free": "google/gemma-4-31b-it:free",
-  "deepseek/deepseek-chat-v3:free": "google/gemma-4-31b-it:free",
-  "anthropic/claude-sonnet-4-6": "anthropic/claude-sonnet-5",
-  "google/gemini-2.5-flash": "google/gemini-3.6-flash",
-  "openai/gpt-4.1-mini": "openai/gpt-5.6-luna",
-  // --- DeepSeek --- (V3/R1 era IDs superseded by V4)
-  "deepseek-chat": "deepseek-v4-flash",
-  "deepseek-reasoner": "deepseek-v4-pro",
-  // --- Mistral --- (moving off floating aliases to explicit dated IDs)
-  "mistral-large-latest": "mistral-large-3-25-12",
-  "mistral-small-latest": "mistral-small-4-0-26-03",
-  // --- OpenAI --- (kept serving upstream, but dropped from our catalog, so a
-  // saved selection would silently price at $0)
-  "gpt-5": "gpt-5.6-terra",
-  "gpt-5-mini": "gpt-5.6-luna",
-  "gpt-4.1": "gpt-5.6-terra",
+export const RETIRED_MODEL_IDS: Record<string, Record<string, string>> = {
+  anthropic: {
+    // Date-suffixed variants are not valid model IDs — use the bare alias.
+    "claude-haiku-4-5-20251001": "claude-haiku-4-5",
+    // Dropped from our catalog (superseded); map to the current generation.
+    "claude-opus-4-5": "claude-opus-5-5",
+    "claude-sonnet-4-5": "claude-sonnet-5-5",
+  },
+  google: {
+    // 2.0 Flash Lite withdrawn from the Gemini API; 1.5 family retired.
+    "gemini-2.0-flash-lite": "gemini-3.5-flash-lite",
+    "gemini-1.5-flash": "gemini-3.6-flash",
+    "gemini-1.5-pro": "gemini-2.5-pro",
+  },
+  groq: {
+    // Mixtral decommissioned by Groq.
+    "mixtral-8x7b-32768": "openai/gpt-oss-120b",
+  },
+  cerebras: {
+    // Cerebras no longer serves any Llama model.
+    "llama-3.3-70b": "gpt-oss-120b",
+    "llama-3.1-8b": "gpt-oss-120b",
+  },
+  openrouter: {
+    // Both free models withdrawn from the catalog.
+    "meta-llama/llama-3.3-70b-instruct:free": "google/gemma-4-31b-it:free",
+    "deepseek/deepseek-chat-v3:free": "google/gemma-4-31b-it:free",
+    "anthropic/claude-sonnet-4-6": "anthropic/claude-sonnet-5",
+    "google/gemini-2.5-flash": "google/gemini-3.6-flash",
+    "openai/gpt-4.1-mini": "openai/gpt-5.6-luna",
+  },
+  deepseek: {
+    // V3/R1 era IDs superseded by V4.
+    "deepseek-chat": "deepseek-v4-flash",
+    "deepseek-reasoner": "deepseek-v4-pro",
+  },
+  mistral: {
+    // Moving off floating aliases to explicit dated IDs.
+    "mistral-large-latest": "mistral-large-3-25-12",
+    "mistral-small-latest": "mistral-small-4-0-26-03",
+  },
+  openai: {
+    // Kept serving upstream, but dropped from our catalog, so a saved
+    // selection would silently price at $0.
+    "gpt-5": "gpt-5.6-terra",
+    "gpt-5-mini": "gpt-5.6-luna",
+    "gpt-4.1": "gpt-5.6-terra",
+  },
 };
+
+function migrateModelId(providerId: string, model: string): string {
+  return RETIRED_MODEL_IDS[providerId]?.[model] ?? model;
+}
 
 let _migrated = false;
 function migrateLegacyOnce() {
@@ -102,8 +127,11 @@ function migrateLegacyOnce() {
   for (let i = 0; i < s.length; i++) {
     const k = s.key(i);
     if (!k || !k.startsWith("ados.provider.") || !k.endsWith(".model")) continue;
+    const providerId = k.slice("ados.provider.".length, -".model".length);
     const v = s.getItem(k);
-    if (v && RETIRED_MODEL_IDS[v]) s.setItem(k, RETIRED_MODEL_IDS[v]);
+    if (!v) continue;
+    const next = migrateModelId(providerId, v);
+    if (next !== v) s.setItem(k, next);
   }
   _migrated = true;
 }
@@ -130,25 +158,35 @@ export function getProviderKey(providerId: string): string {
   // missing key (prompting the user rather than sending garbage to a provider).
   return resolveStoredValue(name, raw);
 }
-export function setProviderKey(providerId: string, key: string): void {
-  const name = providerKeyName(providerId);
+/**
+ * Persist a secret, encrypting it when the vault is unlocked. Plaintext is
+ * written first so a failed encrypt can't lose the user's key; the ciphertext
+ * write-back only happens if the stored value is STILL the one we encrypted —
+ * otherwise a clear (or a newer save) made while the encrypt was in flight
+ * would be silently undone. With the vault enabled but locked the value stays
+ * plaintext until unlockVault() re-encrypts it.
+ */
+function writeSecret(name: string, value: string): void {
   const s = safeLocal();
   if (!s) return;
-  if (!isVaultEnabled()) {
-    s.setItem(name, key);
-    return;
-  }
-  // Write plaintext first so a failed encrypt can't lose the user's key, then
-  // replace it with ciphertext once the async encrypt resolves.
-  s.setItem(name, key);
-  prepareForStorage(name, key)
-    .then((stored) => s.setItem(name, stored))
+  s.setItem(name, value);
+  if (!isVaultEnabled()) return;
+  prepareForStorage(name, value)
+    .then((stored) => {
+      if (stored !== value && s.getItem(name) === value) s.setItem(name, stored);
+    })
     .catch(() => {
-      /* vault locked — leave plaintext; the next lock/unlock cycle re-encrypts */
+      /* leave plaintext; unlockVault() re-encrypts */
     });
 }
+
+export function setProviderKey(providerId: string, key: string): void {
+  writeSecret(providerKeyName(providerId), key);
+}
 export function clearProviderKey(providerId: string): void {
-  safeLocal()?.removeItem(providerKeyName(providerId));
+  const name = providerKeyName(providerId);
+  safeLocal()?.removeItem(name);
+  forgetPlaintext(name);
 }
 /**
  * Is a key PERSISTED for this provider? Distinct from getProviderKey() being
@@ -165,7 +203,7 @@ export function getActiveModelId(providerId: string): string | null {
   migrateLegacyOnce();
   const stored = safeLocal()?.getItem(providerModelName(providerId)) ?? null;
   if (!stored) return null;
-  return RETIRED_MODEL_IDS[stored] ?? stored;
+  return migrateModelId(providerId, stored);
 }
 export function setActiveModelId(providerId: string, model: string): void {
   safeLocal()?.setItem(providerModelName(providerId), model);
@@ -343,14 +381,10 @@ export function setJinaKey(v: string): void {
   if (!s) return;
   if (!v) {
     s.removeItem("ados.jina_key");
+    forgetPlaintext("ados.jina_key");
     return;
   }
-  s.setItem("ados.jina_key", v);
-  if (isVaultEnabled()) {
-    prepareForStorage("ados.jina_key", v)
-      .then((stored) => s.setItem("ados.jina_key", stored))
-      .catch(() => {});
-  }
+  writeSecret("ados.jina_key", v);
 }
 
 // --- Backward-compat shims for legacy single-provider callers ---
