@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-labelledby="title desc">
-  <title id="title">OpenAdKit — Open-source AI Ad Ops Cockpit</title>
+  <title id="title">OpenAdKit — Open source AI marketing tool</title>
   <desc id="desc">Hero banner showing the OpenAdKit name, tagline, and made-by-DiceCodes attribution on a near-black background with a saffron accent block.</desc>
 
   <defs>
@@ -27,7 +27,7 @@
   <rect width="1280" height="320" fill="url(#glow2)"/>
 
   <!-- Top scope-prefix line -->
-  <text x="80" y="62" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="14" fill="#9a9aa3" letter-spacing="0.5">~/openadkit · v0.1</text>
+  <text x="80" y="62" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="14" fill="#9a9aa3" letter-spacing="0.5">~/openadkit · v2.0</text>
 
   <!-- OpenAdKit logo block -->
   <rect x="80" y="86" width="80" height="80" fill="#ffb020"/>
@@ -38,15 +38,15 @@
 
   <!-- Tagline -->
   <text x="80" y="208" font-family="-apple-system, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="600" fill="#e7e7ea">
-    Open-source AI ad ops cockpit · every platform · BYOK · zero subscriptions
+    Open source AI marketing tool · every platform · BYOK · zero subscriptions
   </text>
 
   <!-- Feature row -->
   <g font-family="-apple-system, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" fill="#9a9aa3">
-    <text x="80" y="252"><tspan fill="#ffb020">●</tspan>  17 generators</text>
+    <text x="80" y="252"><tspan fill="#ffb020">●</tspan>  18 generators</text>
     <text x="232" y="252"><tspan fill="#ffb020">●</tspan>  11 optimizers</text>
     <text x="384" y="252"><tspan fill="#ffb020">●</tspan>  9 AI providers</text>
-    <text x="552" y="252"><tspan fill="#ffb020">●</tspan>  browser-only</text>
+    <text x="552" y="252"><tspan fill="#ffb020">●</tspan>  Win · Mac · Linux</text>
     <text x="708" y="252"><tspan fill="#ffb020">●</tspan>  MIT</text>
     <text x="800" y="252"><tspan fill="#ffb020">●</tspan>  $0 / month</text>
   </g>
