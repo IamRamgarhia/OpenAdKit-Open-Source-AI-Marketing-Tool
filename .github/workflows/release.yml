@@ -83,7 +83,11 @@ jobs:
           $p = Start-Process -FilePath dist\OpenAdKit-Windows-Setup.exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "setup exit $($p.ExitCode)" }
           $exe = Join-Path $env:LOCALAPPDATA "Programs\OpenAdKit\OpenAdKit.exe"
-          & $exe --self-test; if ($LASTEXITCODE -notin 0,3) { throw "self-test exit $LASTEXITCODE" }
+          # OpenAdKit.exe is a GUI-subsystem app: `& exe` returns before it exits
+          # and leaves $LASTEXITCODE unset, so wait on the process explicitly.
+          $t = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
+          if ($t.ExitCode -notin 0,3) { throw "self-test exit $($t.ExitCode)" }
+          Write-Host "self-test exit $($t.ExitCode) (0 = ok, 3 = no WebView2 runtime on this runner)"
       - uses: actions/upload-artifact@v4
         with:
           name: windows
