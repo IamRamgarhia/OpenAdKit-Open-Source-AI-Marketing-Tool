@@ -52,7 +52,7 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
   generate retries, eval): per-size display copy and CTA, responsive display
   assets, X posts / card headline, TikTok captions, Shopping title and
   highlights, campaign-kit copy, Quality Score headlines, YouTube headlines.
-- winget manifests for `DiceCodes.OpenAdKit` 2.0.0 (`packaging/winget/`,
+- winget manifests for `DiceCodes.OpenAdKit` 2.0.1 (`packaging/winget/`,
   validated with `winget validate`); submit after the release is published.
 
 ### Fixed
