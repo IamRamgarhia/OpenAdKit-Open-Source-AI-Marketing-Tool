@@ -1,8 +1,6 @@
 import { makeOpenAICompatCall, makeOpenAICompatStream, makeOpenAICompatTestKey } from "./openai-compat";
 import type { Provider } from "./types";
 
-// gpt-5 / o-series reject `max_tokens` (require `max_completion_tokens`) and reject
-// non-default `temperature` with HTTP 400. Rewrite the body for those models only.
 /**
  * MODEL CATALOGS — verified against each provider's own docs on 2026-08-01.
  *
@@ -20,21 +18,31 @@ import type { Provider } from "./types";
  * serves — it is the gate on the entire onboarding flow.
  */
 
+/** Reasoning tokens are billed and counted against max_completion_tokens, so a
+ *  3k cap on a reasoning model can be spent entirely on reasoning and return an
+ *  empty / cut-off reply. Leave room on top of the requested answer size. */
+const OPENAI_REASONING_HEADROOM = 4096;
+
 // gpt-5 / o-series reject `max_tokens` (require `max_completion_tokens`) and reject
-// non-default `temperature` with HTTP 400. Rewrite the body for those models only.
+// non-default `temperature` with HTTP 400. They also reason before answering:
+// ask for "low" effort (accepted by every gpt-5.x and o-series model) and leave
+// headroom so the reasoning can't eat the answer.
+export function openaiBodyTransform(body: any) {
+  if (/^(gpt-5|o\d)/i.test(body.model)) {
+    if ("max_tokens" in body) {
+      body.max_completion_tokens = body.max_tokens + OPENAI_REASONING_HEADROOM;
+      delete body.max_tokens;
+    }
+    delete body.temperature;
+    if (!body.reasoning_effort) body.reasoning_effort = "low";
+  }
+  return body;
+}
+
 const openaiCfg = {
   baseUrl: "https://api.openai.com/v1",
   testModel: "gpt-5.6-luna",
-  bodyTransform: (body: any) => {
-    if (/^(gpt-5|o\d)/i.test(body.model)) {
-      if ("max_tokens" in body) {
-        body.max_completion_tokens = body.max_tokens;
-        delete body.max_tokens;
-      }
-      delete body.temperature;
-    }
-    return body;
-  },
+  bodyTransform: openaiBodyTransform,
 };
 const groqCfg = { baseUrl: "https://api.groq.com/openai/v1", testModel: "llama-3.1-8b-instant" };
 // Cerebras silently ignores `stream_options` — leaving it on returns null usage. (Audit #24.)

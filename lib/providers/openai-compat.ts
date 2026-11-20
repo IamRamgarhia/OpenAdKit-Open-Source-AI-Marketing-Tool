@@ -1,4 +1,4 @@
-import { LLMError, SSE_EVENT_DELIMITER, classifyKeyCheckError, type KeyCheckResult, type LLMCallOptions, type LLMResult, type LLMUsage, type StreamHandlers } from "./types";
+import { LLMError, classifyKeyCheckError, readSseJson, refusedError, truncatedError, type KeyCheckResult, type LLMCallOptions, type LLMResult, type LLMUsage, type StreamHandlers } from "./types";
 
 export interface OpenAICompatConfig {
   baseUrl: string;
@@ -49,6 +49,12 @@ async function readError(res: Response, providerId: string): Promise<LLMError> {
   }
 }
 
+/** Throw when a choice's finish_reason means the text is incomplete/blocked. */
+function checkFinish(reason: unknown, providerId: string): void {
+  if (reason === "length") throw truncatedError(providerId);
+  if (reason === "content_filter") throw refusedError(providerId, "content filter");
+}
+
 function toMessages(opts: LLMCallOptions) {
   const messages: { role: string; content: any }[] = [];
   if (opts.system) messages.push({ role: "system", content: opts.system });
@@ -88,6 +94,7 @@ export function makeOpenAICompatCall(cfg: OpenAICompatConfig, providerId: string
     });
     if (!res.ok) throw await readError(res, providerId);
     const json = await res.json();
+    checkFinish(json?.choices?.[0]?.finish_reason, providerId);
     const text = json?.choices?.[0]?.message?.content ?? "";
     const usage: LLMUsage | null = json?.usage
       ? {
@@ -123,53 +130,31 @@ export function makeOpenAICompatStream(cfg: OpenAICompatConfig, providerId: stri
     if (!res.ok) throw await readError(res, providerId);
     if (!res.body) throw new LLMError("Streaming response missing body", undefined, providerId);
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
     let full = "";
     let usage: LLMUsage | null = null;
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        // Tolerate CRLF as well as LF — see SSE_EVENT_DELIMITER.
-        const events = buffer.split(SSE_EVENT_DELIMITER);
-        buffer = events.pop() ?? "";
-        for (const ev of events) {
-          const dataLines = ev.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).replace(/^ /, ""));
-          for (const raw of dataLines) {
-            const line = raw.trim();
-            if (!line || line === "[DONE]") continue;
-            try {
-              const evt = JSON.parse(line);
-              // Mid-stream error events must surface as a real failure, not a
-              // silently-truncated result. (Matches anthropic.ts error branch.)
-              if (evt?.error) {
-                throw new LLMError(evt.error?.message ?? "stream error", undefined, providerId);
-              }
-              const delta = evt?.choices?.[0]?.delta?.content;
-              if (typeof delta === "string" && delta) {
-                full += delta;
-                handlers.onDelta?.(delta);
-              }
-              if (evt?.usage) {
-                usage = {
-                  input_tokens: evt.usage.prompt_tokens ?? 0,
-                  output_tokens: evt.usage.completion_tokens ?? 0,
-                };
-                handlers.onUsage?.(usage);
-              }
-            } catch (err) {
-              if (err instanceof LLMError) throw err;
-            }
-          }
-        }
+    let finishReason: unknown = null;
+    await readSseJson(res.body, (evt) => {
+      // Mid-stream error events must surface as a real failure, not a
+      // silently-truncated result. (Matches anthropic.ts error branch.)
+      if (evt?.error) {
+        throw new LLMError(evt.error?.message ?? "stream error", undefined, providerId);
       }
-    } finally {
-      try { await reader.cancel(); } catch {}
-    }
+      const delta = evt?.choices?.[0]?.delta?.content;
+      if (typeof delta === "string" && delta) {
+        full += delta;
+        handlers.onDelta?.(delta);
+      }
+      const fr = evt?.choices?.[0]?.finish_reason;
+      if (fr) finishReason = fr;
+      if (evt?.usage) {
+        usage = {
+          input_tokens: evt.usage.prompt_tokens ?? 0,
+          output_tokens: evt.usage.completion_tokens ?? 0,
+        };
+        handlers.onUsage?.(usage);
+      }
+    });
+    checkFinish(finishReason, providerId);
     handlers.onDone?.(full);
     return { text: full, usage, modelId: opts.model };
   };

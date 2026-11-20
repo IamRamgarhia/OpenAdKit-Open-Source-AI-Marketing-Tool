@@ -12,7 +12,7 @@
  * Every output now follows the same evidence-backed playbook.
  */
 export const FRAMEWORK_STACK = `
-=== ADFORGE FRAMEWORK STACK · apply on every generation ===
+=== OPENADKIT FRAMEWORK STACK · apply on every generation ===
 
 LAYER 1 — CLASSIFY THE AWARENESS LEVEL (Eugene Schwartz):
 Before writing a single line, decide where the audience is on the awareness ladder.

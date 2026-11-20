@@ -38,6 +38,15 @@ const CHECK_PLAINTEXT = "openadkit-vault-ok";
 /** Session-only derived key. Cleared on lock and on tab close (module reset). */
 let sessionKey: CryptoKey | null = null;
 
+/**
+ * Synchronous plaintext cache.
+ *
+ * getProviderKey() is called from deep inside synchronous code paths that
+ * can't be made async without rewriting every call site, so decrypted values
+ * are cached in memory once unlocked. The cache is cleared on lock.
+ */
+const plaintextCache = new Map<string, string>();
+
 function safeLocal(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
@@ -156,7 +165,11 @@ async function encryptExistingKeys(): Promise<void> {
   for (const k of targets) {
     const v = s.getItem(k);
     if (!v || isCiphertext(v)) continue;
-    s.setItem(k, await encryptWith(sessionKey, v));
+    const ct = await encryptWith(sessionKey, v);
+    // Skip if the value changed (cleared / replaced) while we were encrypting.
+    if (s.getItem(k) !== v) continue;
+    s.setItem(k, ct);
+    plaintextCache.set(k, v);
   }
 }
 
@@ -172,6 +185,11 @@ export async function unlockVault(passphrase: string): Promise<boolean> {
     const plain = await decryptWith(key, check);
     if (plain !== CHECK_PLAINTEXT) return false;
     sessionKey = key;
+    // Keys saved while the vault was locked were stored as plaintext (there
+    // was no key to encrypt with). Encrypt them now — previously nothing ever
+    // did, so they stayed plaintext forever. Then warm the sync cache.
+    await encryptExistingKeys();
+    await primePlaintextCache();
     window.dispatchEvent(new Event("ados:vault-changed"));
     return true;
   } catch {
@@ -183,6 +201,8 @@ export async function unlockVault(passphrase: string): Promise<boolean> {
 /** Drop the session key. Encrypted values stay encrypted. */
 export function lockVault(): void {
   sessionKey = null;
+  // Decrypted keys must not outlive the lock.
+  plaintextCache.clear();
   window.dispatchEvent(new Event("ados:vault-changed"));
 }
 
@@ -212,15 +232,6 @@ export async function disableVault(): Promise<void> {
   sessionKey = null;
   window.dispatchEvent(new Event("ados:vault-changed"));
 }
-
-/**
- * Synchronous plaintext cache.
- *
- * getProviderKey() is called from deep inside synchronous code paths that
- * can't be made async without rewriting every call site, so decrypted values
- * are cached in memory once unlocked. The cache is cleared on lock.
- */
-const plaintextCache = new Map<string, string>();
 
 /** Decrypt every stored key into the in-memory cache. Call right after unlock. */
 export async function primePlaintextCache(): Promise<void> {
@@ -255,6 +266,11 @@ export async function prepareForStorage(storageKey: string, value: string): Prom
   if (!isVaultEnabled() || !sessionKey) return value;
   plaintextCache.set(storageKey, value);
   return encryptWith(sessionKey, value);
+}
+
+/** Drop one cached plaintext (the stored value was removed). */
+export function forgetPlaintext(storageKey: string): void {
+  plaintextCache.delete(storageKey);
 }
 
 export function clearPlaintextCache(): void {
