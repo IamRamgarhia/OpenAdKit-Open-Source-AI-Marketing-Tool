@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Sparkles, Brain, History, Settings, Rocket, Target, FileBarChart, Activity, ClipboardList, BookOpen, Hash, ImageIcon, Search, GitBranch, Calendar } from "lucide-react";
+import { Sparkles, Brain, History, Settings, Rocket, Target, FileBarChart, Activity, ClipboardList, BookOpen, Hash, ImageIcon, Search, GitBranch, Calendar, Lock, KeyRound, Cpu, GraduationCap } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { FeatureTour } from "@/components/FeatureTour";
-import { hasAnyKeyConfigured, isOnboarded, getActiveBrainId } from "@/lib/settings";
+import { getActiveBrainId } from "@/lib/settings";
+import { useHasAnyKeyStatus } from "@/lib/hooks/use-has-key";
 import { listBrains, listAds, type GeneratedAd } from "@/lib/storage";
 import type { BrandBrain } from "@/lib/brand-brain";
 
@@ -14,7 +14,7 @@ const tiles: { href: string; label: string; sub: string; icon: any; accent?: boo
   { href: "/suggestions", label: "✨ AI Suggestions for active brand", sub: "What this brand should run — 3 campaigns + 30-day plan + quick wins", icon: Sparkles, accent: true },
   { href: "/platforms", label: "Pick a platform", sub: "YouTube · Meta · TikTok · Google · LinkedIn · X — formats, generators, launch guide", icon: Target, accent: true },
   { href: "/launch-guide", label: "Step-by-step launch guide", sub: "Walk through Facebook/Google UI from start to publish — for any skill level", icon: Rocket, accent: true },
-  { href: "/optimize/creative-score", label: "Creative Score", sub: "5-lever brutal score on any ad copy + 3 named fixes + predicted CTR", icon: Activity, accent: true },
+  { href: "/optimize/creative-score", label: "Creative Score", sub: "5-lever brutal score on any ad copy + 3 named fixes + AI estimate (directional) of CTR band", icon: Activity, accent: true },
   { href: "/research/compare", label: "Compare 2 ads", sub: "Head-to-head AI teardown · pick winner · hybrid proposal", icon: Search },
   { href: "/research/competitors", label: "Steal & Beat competitors", sub: "Teardown of Meta Ads Library + Google Transparency ads", icon: Search },
   { href: "/generate/campaign-kit", label: "Full Campaign Kit", sub: "One brief → every platform", icon: Sparkles },
@@ -35,18 +35,96 @@ const tiles: { href: string; label: string; sub: string; icon: any; accent?: boo
   { href: "/history", label: "History", sub: "Every generation, locally stored", icon: History },
 ];
 
-export default function Dashboard() {
-  const router = useRouter();
+/**
+ * `/` is both the public landing page and the dashboard.
+ *
+ * It used to redirect to /setup whenever no key was stored, so crawlers and
+ * first-time visitors never saw what OpenAdKit is — and users who imported a
+ * backup or added a key in Settings (without clicking through /setup's
+ * "onboarded" flag) got bounced back to onboarding. Now: any stored provider
+ * key = dashboard; otherwise (and during SSR, so the HTML is indexable) the
+ * landing page.
+ */
+export default function Home() {
+  const status = useHasAnyKeyStatus();
+  if (status === "yes") return <Dashboard />;
+  return <Landing />;
+}
+
+const LANDING_POINTS: { icon: any; title: string; body: string }[] = [
+  { icon: Sparkles, title: "18 ad generators · 11 optimizers", body: "Google RSA, PMax, Shopping, Meta, TikTok, LinkedIn, YouTube, X, email subjects, hashtags, reel ideas — plus CTR, Quality Score, budget and creative-score optimizers." },
+  { icon: KeyRound, title: "Bring your own AI key", body: "Claude, GPT, Gemini, Groq, Cerebras, OpenRouter, Together, DeepSeek or Mistral. Free tiers work. Calls go straight from your browser to the provider." },
+  { icon: Lock, title: "Runs in your browser", body: "No accounts, no backend, no telemetry. Brand brains, history and keys stay on this device." },
+  { icon: Brain, title: "Brand brain per client", body: "Paste a website URL and every tool writes in that client's voice, for that audience, with its real offers." },
+];
+
+const LANDING_LINKS: { href: string; label: string; sub: string; icon: any }[] = [
+  { href: "/learn", label: "Learn paid ads", sub: "Plain-English concept library + free courses", icon: GraduationCap },
+  { href: "/benchmarks", label: "Benchmarks", sub: "Directional CTR / CPC / CVR / ROAS ranges", icon: Target },
+  { href: "/platforms", label: "Platform guides", sub: "Formats, specs and best practices per network", icon: Rocket },
+  { href: "/providers", label: "Which AI should I use?", sub: "Prices, free tiers and limits per provider", icon: Cpu },
+];
+
+function Landing() {
+  return (
+    <div className="max-w-5xl">
+      <section className="py-6 md:py-10 animate-fade-up">
+        <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-3">free · open source · MIT</div>
+        <h1 className="font-display italic text-4xl md:text-5xl text-ink leading-tight">
+          OpenAdKit — the open-source AI marketing tool
+        </h1>
+        <p className="text-base text-ink-muted mt-4 max-w-2xl leading-relaxed">
+          Write, score and plan ads for every major platform with the AI provider you already use. Bring your own key, keep
+          your data in your browser, pay $0 to us — forever.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 mt-6">
+          <Link href="/setup" className="btn-primary text-base">
+            <Sparkles size={14} /> Get started
+          </Link>
+          <Link href="/how-to-use" className="btn-ghost">How it works</Link>
+          <Link href="/alternatives" className="btn-ghost">vs Jasper / AdCreative / Anyword</Link>
+        </div>
+      </section>
+
+      <section className="grid md:grid-cols-2 gap-3 mb-10" aria-label="What OpenAdKit does">
+        {LANDING_POINTS.map((p) => {
+          const Icon = p.icon;
+          return (
+            <div key={p.title} className="border border-base-600 bg-base-900/40 p-4">
+              <Icon size={16} className="text-live mb-2" />
+              <h2 className="text-[15px] font-semibold text-ink">{p.title}</h2>
+              <p className="text-[13px] text-ink-muted mt-1 leading-relaxed">{p.body}</p>
+            </div>
+          );
+        })}
+      </section>
+
+      <section aria-label="Free resources, no key needed">
+        <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink mb-3">Free to read — no key needed</h2>
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {LANDING_LINKS.map((l) => {
+            const Icon = l.icon;
+            return (
+              <Link key={l.href} href={l.href} className="group border border-base-600 bg-base-900/40 p-4 hover:bg-base-800/60 hover:border-base-500 transition">
+                <Icon size={15} className="text-ink-muted group-hover:text-live" />
+                <div className="font-display italic text-lg text-ink mt-2 leading-tight">{l.label}</div>
+                <p className="text-[12px] text-ink-muted mt-1">{l.sub}</p>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Dashboard() {
   const [brains, setBrains] = useState<BrandBrain[]>([]);
   const [recent, setRecent] = useState<GeneratedAd[]>([]);
   const [activeBrainId, setActiveBrainIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!hasAnyKeyConfigured() || !isOnboarded()) {
-      router.replace("/setup");
-      return;
-    }
     const load = () => {
       const active = getActiveBrainId();
       setActiveBrainIdState(active);
@@ -68,7 +146,7 @@ export default function Dashboard() {
       window.removeEventListener("ados:brains-changed", onChange);
       window.removeEventListener("ados:active-brain-changed", onChange);
     };
-  }, [router]);
+  }, []);
 
   // Skeleton instead of `return null` to avoid the blank-flash + layout shift
   // when the user returns to the dashboard. (Audit finding #54.)
@@ -173,7 +251,7 @@ export default function Dashboard() {
             {recent.map((a) => (
               <Link
                 key={a.id}
-                href={`/history#${a.id}`}
+                href={`/history?focus=${encodeURIComponent(a.id)}`}
                 className="flex items-center justify-between border-b border-base-700 last:border-b-0 px-3 py-2 hover:bg-base-800/40"
               >
                 <div className="flex items-center gap-3 min-w-0">

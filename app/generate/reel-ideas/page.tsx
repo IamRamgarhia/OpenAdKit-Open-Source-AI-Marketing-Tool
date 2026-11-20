@@ -5,12 +5,19 @@ import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { buildReelIdeasPrompt, type ReelIdeasInput } from "@/lib/prompts/reel-ideas";
 import type { GeneratorConfig } from "@/lib/generator-config";
+import { platformForReelInput } from "@/lib/next-steps";
+import { ingestUrl, detectSocial } from "@/lib/url-ingest";
+
+/** Cap on fetched competitor text sent to the model (~2.5k tokens). */
+const MAX_COMPETITOR_CHARS = 10_000;
 import { ReelIdeasSchema } from "@/lib/schemas/generators";
 
 const config: GeneratorConfig<ReelIdeasInput & Record<string, unknown>> = {
   title: "Reel Ideas — Hook-First Generator",
   subtitle: "10 proven hook formulas rotated across the batch · platform-native rules baked in · paste a competitor URL or captions and AI finds the blue-ocean angles they're missing.",
   platform: "tiktok",
+  // Stored platform follows the selected one (was always "tiktok").
+  platformFor: (i: any) => platformForReelInput(i.platform),
   campaign_type: "Reel Ideas",
   maxTokens: 7000,
   temperature: 0.85,
@@ -46,7 +53,7 @@ const config: GeneratorConfig<ReelIdeasInput & Record<string, unknown>> = {
     { name: "hook_seed", label: "Hook seed / theme (optional)", kind: "text", placeholder: "e.g. 'the hidden cost of free tools'", span: 2, hint: "Anchor the batch around a single big idea. Blank = let the AI range." },
 
     // ----- Competitor intel -----
-    { name: "competitor_profile_url", label: "Competitor profile URL", kind: "text", section: "Competitor intel (optional — anchor to what's working in your niche)", placeholder: "https://www.tiktok.com/@competitor or https://www.instagram.com/competitor", span: 2, hint: "URL ingest happens in a follow-up step — for now, paste captions below." },
+    { name: "competitor_profile_url", label: "Competitor profile URL", kind: "text", section: "Competitor intel (optional — anchor to what's working in your niche)", placeholder: "https://www.tiktok.com/@competitor or https://www.instagram.com/competitor", span: 2, hint: "Fetched when you generate. Social profiles often block readers — if so, paste captions below." },
     { name: "competitor_pasted_content", label: "Competitor recent posts / captions", kind: "textarea", rows: 5, placeholder: "Paste captions from 5-10 of their best-performing reels. Separate with --- on its own line.", span: 2 },
 
     // ----- Own context -----
@@ -68,6 +75,23 @@ const config: GeneratorConfig<ReelIdeasInput & Record<string, unknown>> = {
     tone_override: "",
     must_avoid: "",
   } as any,
+  // Fetch the competitor URL through the same reader pipeline as brand
+  // onboarding and hand the model the extracted text. The raw URL used to be
+  // pasted into the prompt, where the model could only guess at its contents.
+  prepareInput: async (input, signal) => {
+    const url = String((input as any).competitor_profile_url ?? "").trim();
+    if (!url) return { input };
+    const res = await ingestUrl(url, signal);
+    if (res.ok && res.content.trim()) {
+      return { input: { ...input, __competitor_url_content: res.content.slice(0, MAX_COMPETITOR_CHARS) } as any };
+    }
+    const social = detectSocial(url);
+    const why = res.ok ? "the page came back empty" : "it couldn't be fetched";
+    return {
+      input,
+      warning: `Competitor URL skipped — ${why}. ${social ? social.paste_hint : "Paste their captions into the box below instead."}`,
+    };
+  },
   buildPrompt: (input) => buildReelIdeasPrompt(input as unknown as ReelIdeasInput),
   buildTitle: (i: any) => `Reels · ${i.platform} · ${i.reel_count} ideas`,
   expectJson: true,

@@ -1,6 +1,7 @@
 "use client";
 
 import { GeneratorShell } from "@/components/GeneratorShell";
+import { arr, joinList, num, obj, strList, txt } from "@/lib/safe-json";
 import { Section, Pill, Kv } from "@/components/OutputBlocks";
 import { buildStrategyPrompt, type StrategyInput } from "@/lib/prompts/strategy-recommender";
 import type { GeneratorConfig } from "@/lib/generator-config";
@@ -46,71 +47,78 @@ export default function Page() {
 }
 
 function StrategyOutput({ json }: { json: any }) {
+  // No schema on this tool — read everything defensively (lib/safe-json).
+  const primary = obj(json?.primary_platform);
+  const secondary = obj(json?.secondary_platform);
+  const kpis = arr(json?.kpi_targets).filter((k) => k && typeof k === "object");
+  const split = arr(json?.month_one_budget_split).filter((b) => b && typeof b === "object");
+  const anti = strList(json?.anti_recommendations);
+  const stops = strList(json?.stop_conditions_to_resolve_first);
   return (
     <div className="space-y-4 stagger">
       <Section title="Primary platform">
         <div className="flex items-baseline gap-3">
-          <div className="font-display italic text-3xl text-live">{json?.primary_platform?.name}</div>
-          <Pill label="min budget" text={`$${(json?.primary_platform?.min_budget_usd ?? 0).toLocaleString()}/mo`} />
+          <div className="font-display italic text-3xl text-live">{txt(primary.name) || "—"}</div>
+          <Pill label="min budget" text={`$${num(primary.min_budget_usd).toLocaleString()}/mo`} />
         </div>
-        <p className="text-sm text-ink-muted mt-3 leading-relaxed">{json?.primary_platform?.reason}</p>
+        <p className="text-sm text-ink-muted mt-3 leading-relaxed">{txt(primary.reason)}</p>
       </Section>
 
-      {json?.secondary_platform?.name ? (
+      {txt(secondary.name) ? (
         <Section title="Secondary platform">
           <div className="flex items-baseline gap-3">
-            <div className="font-display italic text-2xl text-ink">{json.secondary_platform.name}</div>
-            <Pill label="min" text={`$${(json.secondary_platform.min_budget_usd ?? 0).toLocaleString()}/mo`} />
+            <div className="font-display italic text-2xl text-ink">{txt(secondary.name)}</div>
+            <Pill label="min" text={`$${num(secondary.min_budget_usd).toLocaleString()}/mo`} />
           </div>
-          <p className="text-sm text-ink-muted mt-2">{json.secondary_platform.reason}</p>
+          <p className="text-sm text-ink-muted mt-2">{txt(secondary.reason)}</p>
         </Section>
       ) : null}
 
       <Section title="Plan">
         <div className="grid md:grid-cols-3 gap-2">
-          <Kv k="funnel stage" v={json?.funnel_stage ?? "—"} />
-          <Kv k="timeline" v={`${json?.timeline_to_first_read_days ?? "—"} days`} />
-          <Kv k="format priority" v={(json?.creative_format_priority ?? []).join(" · ")} />
+          <Kv k="funnel stage" v={txt(json?.funnel_stage) || "—"} />
+          <Kv k="timeline" v={`${txt(json?.timeline_to_first_read_days) || "—"} days`} />
+          <Kv k="format priority" v={joinList(json?.creative_format_priority) || "—"} />
         </div>
       </Section>
 
-      {json?.kpi_targets?.length ? (
+      {kpis.length ? (
         <Section title="KPI targets">
           <ul className="space-y-1.5 text-xs">
-            {json.kpi_targets.map((k: any, i: number) => (
+            {kpis.map((k: any, i: number) => (
               <li key={i} className="flex items-center gap-2 border border-base-700 px-2 py-1.5">
-                <span className="font-mono text-ink-faint w-12">m{k.month}</span>
-                <span className="flex-1 text-ink">{k.metric}</span>
-                <span className="text-pos font-mono tabular">{k.target}</span>
+                <span className="font-mono text-ink-faint w-12">m{txt(k.month)}</span>
+                <span className="flex-1 text-ink">{txt(k.metric)}</span>
+                <span className="text-pos font-mono tabular">{txt(k.target)}</span>
               </li>
             ))}
           </ul>
         </Section>
       ) : null}
 
-      {json?.month_one_budget_split?.length ? (
+      {split.length ? (
         <Section title="Month 1 budget split">
           <ul className="space-y-1.5 text-sm">
-            {json.month_one_budget_split.map((b: any, i: number) => (
+            {split.map((b: any, i: number) => (
               <li key={i} className="flex items-center gap-2 border border-base-700 px-2 py-1.5">
-                <span className="font-mono text-live w-12 tabular">{b.pct}%</span>
-                <span className="w-32 text-ink">{b.platform}</span>
-                <span className="text-ink-muted text-xs tabular">${(b.dollars ?? 0).toLocaleString()}</span>
+                <span className="font-mono text-live w-12 tabular">{txt(b.pct)}%</span>
+                <span className="w-32 text-ink">{txt(b.platform)}</span>
+                <span className="text-ink-muted text-xs tabular">${num(b.dollars).toLocaleString()}</span>
               </li>
             ))}
           </ul>
         </Section>
       ) : null}
 
-      {json?.anti_recommendations?.length ? (
+      {anti.length ? (
         <Section title="Anti-recommendations">
-          <ul className="list-disc list-inside text-sm text-neg space-y-0.5">{json.anti_recommendations.map((a: string, i: number) => <li key={i}>{a}</li>)}</ul>
+          <ul className="list-disc list-inside text-sm text-neg space-y-0.5">{anti.map((a, i) => <li key={i}>{a}</li>)}</ul>
         </Section>
       ) : null}
 
-      {json?.stop_conditions_to_resolve_first?.length ? (
+      {stops.length ? (
         <Section title="Resolve before launch">
-          <ul className="space-y-1 text-sm">{json.stop_conditions_to_resolve_first.map((s: string, i: number) => <li key={i} className="flex gap-2"><span className="text-live">○</span>{s}</li>)}</ul>
+          <ul className="space-y-1 text-sm">{stops.map((st, i) => <li key={i} className="flex gap-2"><span className="text-live">○</span>{st}</li>)}</ul>
         </Section>
       ) : null}
     </div>

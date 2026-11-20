@@ -217,7 +217,7 @@ function StepWelcome() {
         No backend, no accounts, no telemetry. You bring your own AI key — free or paid, your choice — and everything runs locally.
       </p>
       <ul className="mt-5 space-y-2 text-sm text-ink">
-        <li className="flex items-start gap-2"><span className="text-live mt-1">○</span><span>16 generators for Google, Meta, TikTok, YouTube, LinkedIn, X, Display + hashtags, lead forms, email subjects, AI image/video prompts</span></li>
+        <li className="flex items-start gap-2"><span className="text-live mt-1">○</span><span>18 generators for Google, Meta, TikTok, YouTube, LinkedIn, X, Display + hashtags, lead forms, email subjects, AI image/video prompts</span></li>
         <li className="flex items-start gap-2"><span className="text-live mt-1">○</span><span>11 optimization tools — CTR, Quality Score, Budget Waste, Bid Strategy, Ad Fatigue, more</span></li>
         <li className="flex items-start gap-2"><span className="text-live mt-1">○</span><span>Competitor research from Meta Ads Library + Google Transparency Center</span></li>
         <li className="flex items-start gap-2"><span className="text-live mt-1">○</span><span>Manage multiple client brands by pasting their website URL</span></li>
@@ -231,7 +231,7 @@ function StepWelcome() {
 
 const TOUR_SLIDES: { icon: any; label: string; title: string; body: string }[] = [
   { icon: Brain, label: "tour 1 / 4", title: "Brand Brain anchors everything.", body: "Every generation pulls from your active Brand Brain — tone, audience, VOC, USP, objections. Add a brand by pasting its URL — we extract automatically. Manage many brands; switch with one click." },
-  { icon: Sparkles, label: "tour 2 / 4", title: "16 generators · 7 platforms · 1 brief.", body: "Google · Meta · TikTok · YouTube · LinkedIn · X · Display. Plus Campaign Kit (one brief → every platform), hashtags in any language, native lead forms, email subjects, and AI image/video prompts for Midjourney / Runway / Pika." },
+  { icon: Sparkles, label: "tour 2 / 4", title: "18 generators · 7 platforms · 1 brief.", body: "Google · Meta · TikTok · YouTube · LinkedIn · X · Display. Plus Campaign Kit (one brief → every platform), hashtags in any language, native lead forms, email subjects, and AI image/video prompts for Midjourney / Runway / Pika." },
   { icon: Search, label: "tour 3 / 4", title: "Steal & Beat competitors.", body: "Deep-links into Meta Ads Library, Google Transparency, TikTok Top Ads, LinkedIn Ad Library — all free, all public. Paste what you see; we tear it down + write 3 variants that beat the strongest one." },
   { icon: Activity, label: "tour 4 / 4", title: "11 optimizers + routines + learn hub.", body: "CTR, Quality Score, Budget Waste, Bid Strategy, Audience Targeting, A/B planner, ad fatigue. Daily/weekly/monthly checklists with streak counters. 28 mini-course lessons + Ad Copy School interactive trainer." },
 ];

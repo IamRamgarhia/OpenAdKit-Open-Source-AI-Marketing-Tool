@@ -49,21 +49,25 @@ export function CommandPalette() {
   // on close/unmount instead of dropping it to <body>.
   const prevFocusRef = useRef<HTMLElement | null>(null);
 
-  const refresh = useCallback(async () => {
-    const [b, a] = await Promise.all([listBrains(), listAds()]);
-    setBrains(b);
-    setRecent(a.slice(0, 8));
-    setActiveBrain(getActiveBrainId());
+  // Reload brains/recent each time the palette opens (fresh data), and reset
+  // the query + selection there instead of in an effect reacting to `open`.
+  const refresh = useCallback(() => {
+    Promise.all([listBrains(), listAds()]).then(([b, a]) => {
+      setBrains(b);
+      setRecent(a.slice(0, 8));
+      setActiveBrain(getActiveBrainId());
+    });
   }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
+        if (!open) {
+          setQ("");
+          setIdx(0);
+          refresh();
+        }
         setOpen((o) => !o);
       } else if (e.key === "Escape" && open) {
         setOpen(false);
@@ -71,15 +75,12 @@ export function CommandPalette() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, refresh]);
 
   useEffect(() => {
     if (open) {
       // Save the currently-focused element so we can restore it on close.
       prevFocusRef.current = (document.activeElement as HTMLElement) ?? null;
-      refresh();
-      setQ("");
-      setIdx(0);
       setTimeout(() => inputRef.current?.focus(), 30);
       document.body.style.overflow = "hidden";
       return () => {
@@ -91,7 +92,7 @@ export function CommandPalette() {
       };
     }
     document.body.style.overflow = "";
-  }, [open, refresh]);
+  }, [open]);
 
   const actions = useMemo<Action[]>(() => {
     const groupIconMap: Record<string, any> = {
@@ -192,9 +193,6 @@ export function CommandPalette() {
     });
   }, [actions, q]);
 
-  useEffect(() => {
-    setIdx(0);
-  }, [q]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -247,7 +245,10 @@ export function CommandPalette() {
             ref={inputRef}
             id="cmdk-input"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setIdx(0);
+            }}
             onKeyDown={onKeyDown}
             placeholder="Jump to a page, switch client, find a saved ad…"
             className="flex-1 bg-transparent outline-hidden text-[15px] text-ink placeholder-ink-subtle"

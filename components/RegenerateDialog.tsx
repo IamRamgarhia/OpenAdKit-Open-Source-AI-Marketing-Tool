@@ -10,6 +10,8 @@ import { buildBrandSystemPrompt } from "@/lib/brand-brain";
 import { assertWithinBudget } from "@/lib/budget";
 import { formatCost } from "@/lib/utils";
 import { CopyButton } from "@/components/CopyButton";
+import { readAdGenMeta, withGenMeta, type AdGenMeta } from "@/lib/ad-meta";
+import { resolveMaxTokens, schemaForCampaignType } from "@/lib/generator-registry";
 
 /**
  * Re-run a saved generation against a different model/provider and compare the
@@ -24,6 +26,42 @@ import { CopyButton } from "@/components/CopyButton";
  * The system prompt is rebuilt from the brand at run time rather than replayed
  * from the ad, so a comparison always reflects the CURRENT brand brain.
  */
+/** Module-level so the id/timestamp generation stays out of render scope. */
+function buildRegeneratedCopy(
+  ad: GeneratedAd,
+  r: {
+    output: string;
+    parsed: unknown;
+    modelId: string;
+    providerId: string;
+    result: { cost: number; inTok: number; outTok: number };
+    maxTokens: number;
+    hasImage?: boolean;
+  }
+) {
+  return withGenMeta(
+    {
+      ...ad,
+      id: crypto.randomUUID(),
+      title: `${ad.title} · ${r.modelId}`,
+      output_text: r.output,
+      output_json: r.parsed,
+      model_id: r.modelId,
+      provider_id: r.providerId,
+      usage_input_tokens: r.result.inTok,
+      usage_output_tokens: r.result.outTok,
+      cost_usd: r.result.cost,
+      created_at: Date.now(),
+      starred: false,
+      status: "draft",
+      notes: `Regenerated from ${ad.model_id} for comparison`,
+      performance: undefined,
+      deleted_at: undefined,
+    },
+    { max_tokens: r.maxTokens, has_image: r.hasImage }
+  );
+}
+
 export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (saved: boolean) => void }) {
   const configured = useMemo(() => new Set(getProvidersWithKeys()), []);
   const usable = useMemo(() => PROVIDERS.filter((p) => configured.has(p.id)), [configured]);
@@ -35,15 +73,28 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ cost: number; inTok: number; outTok: number } | null>(null);
   const [saved, setSaved] = useState(false);
+  const [meta, setMeta] = useState<AdGenMeta>({});
+  const [parsedNew, setParsedNew] = useState<unknown>(null);
+  const [shapeWarning, setShapeWarning] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const provider = getProvider(providerId);
+  // Keep the model valid for the chosen provider (derived, not synced in an effect).
+  const effectiveModel =
+    provider && !provider.models.some((m) => m.id === modelId) ? provider.default_model : modelId;
+  // Token budget: what the original run used (saved on the ad), else that
+  // tool's default. A hard-coded 3000 truncated long-output tools.
+  const maxTokens = resolveMaxTokens(meta.max_tokens, ad.campaign_type);
 
   useEffect(() => {
-    // Keep the model valid whenever the provider changes.
-    const p = getProvider(providerId);
-    if (p && !p.models.some((m) => m.id === modelId)) setModelId(p.default_model);
-  }, [providerId, modelId]);
+    let cancelled = false;
+    readAdGenMeta(ad.id).then((m) => {
+      if (!cancelled) setMeta(m);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ad.id]);
 
   // Escape closes, matching the rest of the app's dialogs.
   useEffect(() => {
@@ -60,6 +111,8 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
     setOutput("");
     setResult(null);
     setSaved(false);
+    setParsedNew(null);
+    setShapeWarning(null);
 
     try {
       await assertWithinBudget();
@@ -90,11 +143,11 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
         {
           system,
           messages: [{ role: "user", content: ad.prompt }],
-          maxTokens: 3000,
+          maxTokens,
           temperature: 0.7,
           signal: controller.signal,
           providerOverride: provider ?? undefined,
-          modelOverride: modelId,
+          modelOverride: effectiveModel,
           apiKeyOverride: key,
         },
         {
@@ -112,6 +165,20 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
       addUsage(cost, inTok, outTok);
       window.dispatchEvent(new Event("ados:usage"));
       setResult({ cost, inTok, outTok });
+      // Validate against the tool's schema when one exists, so a reply that
+      // can't render in the tool isn't silently kept as structured output.
+      const json = tryParseJson(text);
+      const schema = schemaForCampaignType(ad.campaign_type);
+      if (schema) {
+        const check = json !== null ? schema.safeParse(json) : null;
+        if (check?.success) setParsedNew(check.data);
+        else
+          setShapeWarning(
+            "This reply doesn't match the tool's expected JSON shape, so it would only be kept as raw text. Try another model."
+          );
+      } else {
+        setParsedNew(json);
+      }
     } catch (e: any) {
       setError(e?.name === "AbortError" ? "Stopped." : e?.message ?? "Regeneration failed.");
     } finally {
@@ -122,24 +189,15 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
 
   async function saveAsNew() {
     if (!output || !result) return;
-    const copy: GeneratedAd = {
-      ...ad,
-      id: crypto.randomUUID(),
-      title: `${ad.title} · ${modelId}`,
-      output_text: output,
-      output_json: tryParseJson(output),
-      model_id: modelId,
-      provider_id: providerId,
-      usage_input_tokens: result.inTok,
-      usage_output_tokens: result.outTok,
-      cost_usd: result.cost,
-      created_at: Date.now(),
-      starred: false,
-      status: "draft",
-      notes: `Regenerated from ${ad.model_id} for comparison`,
-      performance: undefined,
-      deleted_at: undefined,
-    };
+    const copy = buildRegeneratedCopy(ad, {
+      output,
+      parsed: parsedNew,
+      modelId: effectiveModel,
+      providerId,
+      result,
+      maxTokens,
+      hasImage: meta.has_image,
+    });
     await saveAd(copy);
     setSaved(true);
   }
@@ -174,7 +232,11 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
             id="regen-provider"
             className="input-base"
             value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
+            onChange={(e) => {
+              setProviderId(e.target.value);
+              const p = getProvider(e.target.value);
+              if (p) setModelId(p.default_model);
+            }}
             disabled={running}
           >
             {usable.map((p) => (
@@ -187,7 +249,7 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
           <select
             id="regen-model"
             className="input-base"
-            value={modelId}
+            value={effectiveModel}
             onChange={(e) => setModelId(e.target.value)}
             disabled={running}
           >
@@ -207,6 +269,17 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
         ) : null}
       </div>
 
+      {meta.has_image ? (
+        <div role="note" className="border border-info/40 bg-info/5 text-info text-[11px] px-3 py-2" data-testid="regen-image-warning">
+          The original run included an image. Images aren't stored, so this re-run sends the text prompt only — the
+          new model won't see the screenshot, and results aren't a like-for-like comparison.
+        </div>
+      ) : null}
+
+      {shapeWarning ? (
+        <div className="border border-live/40 bg-live/5 text-live text-[11px] px-3 py-2">{shapeWarning}</div>
+      ) : null}
+
       {error ? (
         <div className="border border-neg/40 bg-neg/5 text-neg text-[11px] px-3 py-2 font-mono uppercase tracking-ui-wide">
           {error}
@@ -220,7 +293,7 @@ export function RegenerateDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (s
           text={ad.output_text}
         />
         <Pane
-          label={`new · ${modelId || "—"}`}
+          label={`new · ${effectiveModel || "—"}`}
           sub={result ? `${formatCost(result.cost)} · in ${result.inTok} · out ${result.outTok}` : running ? "streaming…" : "not run yet"}
           text={output}
           highlight

@@ -36,8 +36,18 @@ export function BrainVersionHistory({
   }, [brainId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    listBrainVersions(brainId)
+      .catch(() => [] as BrainVersion[])
+      .then((v) => {
+        if (cancelled) return;
+        setVersions(v);
+        setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [brainId]);
 
   async function restore(v: BrainVersion) {
     const when = new Date(v.created_at).toLocaleString();

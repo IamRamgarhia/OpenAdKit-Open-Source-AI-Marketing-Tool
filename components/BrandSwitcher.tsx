@@ -7,29 +7,36 @@ import { listBrains, getBrain } from "@/lib/storage";
 import { getActiveBrainId, setActiveBrainId } from "@/lib/settings";
 import type { BrandBrain } from "@/lib/brand-brain";
 
+async function loadSwitcherState(): Promise<{ all: BrandBrain[]; cur: BrandBrain | null }> {
+  const all = await listBrains();
+  const id = getActiveBrainId();
+  const cur = id ? (await getBrain(id)) ?? null : null;
+  if (!id && all[0]) setActiveBrainId(all[0].id);
+  return { all, cur: cur ?? all[0] ?? null };
+}
+
 export function BrandSwitcher() {
   const [brains, setBrains] = useState<BrandBrain[]>([]);
   const [active, setActive] = useState<BrandBrain | null>(null);
   const [open, setOpen] = useState(false);
 
-  async function refresh() {
-    const all = await listBrains();
-    setBrains(all);
-    const id = getActiveBrainId();
-    const cur = id ? await getBrain(id) : null;
-    setActive(cur ?? all[0] ?? null);
-    if (!id && all[0]) setActiveBrainId(all[0].id);
-  }
-
   useEffect(() => {
-    refresh();
-    const h = () => refresh();
+    let cancelled = false;
+    const h = () => {
+      loadSwitcherState().then(({ all, cur }) => {
+        if (cancelled) return;
+        setBrains(all);
+        setActive(cur);
+      });
+    };
+    h();
     window.addEventListener("storage", h);
     window.addEventListener("ados:brains-changed", h);
     // PageHeader chip needs to refresh when the Sidebar switches active brand.
     // (Audit finding #32.)
     window.addEventListener("ados:active-brain-changed", h);
     return () => {
+      cancelled = true;
       window.removeEventListener("storage", h);
       window.removeEventListener("ados:brains-changed", h);
       window.removeEventListener("ados:active-brain-changed", h);

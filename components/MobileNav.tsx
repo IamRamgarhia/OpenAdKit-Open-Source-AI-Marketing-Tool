@@ -1,21 +1,40 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { NAV_GROUPS } from "@/components/nav-config";
 import { cn } from "@/lib/utils";
+import { isNavItemActive } from "@/lib/nav-active";
 
 export function MobileNav() {
+  return (
+    <Suspense fallback={<MobileNavView search="" />}>
+      <MobileNavWithSearch />
+    </Suspense>
+  );
+}
+
+function MobileNavWithSearch() {
+  const params = useSearchParams();
+  return <MobileNavView search={params?.toString() ?? ""} />;
+}
+
+function MobileNavView({ search }: { search: string }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
-  useEffect(() => {
+  // Close the drawer whenever the location changes (adjust-state-on-render
+  // instead of an effect, so a navigation doesn't cost an extra render pass).
+  const locationKey = `${path ?? ""}?${search}`;
+  const [closedFor, setClosedFor] = useState(locationKey);
+  if (closedFor !== locationKey) {
+    setClosedFor(locationKey);
     setOpen(false);
-  }, [path]);
+  }
 
   useEffect(() => {
     // The app shell pins the page to one viewport, so <body> no longer scrolls —
@@ -94,11 +113,15 @@ export function MobileNav() {
                 </div>
                 <div className="space-y-0.5">
                   {g.items.map((item) => {
-                    const active = path === item.href || (item.href !== "/" && path?.startsWith(item.href));
+                    const active = isNavItemActive(path, search, item);
+                    // Carry the platform pre-selection, same as the desktop
+                    // Sidebar — dropping it landed mobile users on a blank form.
+                    const href = item.query ? `${item.href}?${item.query}` : item.href;
                     return (
                       <Link
-                        key={item.href}
-                        href={item.href}
+                        key={`${item.href}?${item.query ?? ""}`}
+                        href={href}
+                        aria-current={active ? "page" : undefined}
                         className={cn(
                           "flex items-center gap-2 px-3 py-2.5 text-[15px] border-l-2",
                           active

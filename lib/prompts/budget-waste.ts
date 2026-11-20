@@ -8,6 +8,14 @@ export interface BudgetWasteInput {
   device_targeting?: string;
   geo_targeting?: string;
   excludes_customers?: string;
+  /** Search impression share (%) as reported by the ad platform, if known. */
+  impression_share_pct?: string;
+}
+
+/** Parsed impression share in (0,100], else null. */
+export function parseImpressionShare(v: unknown): number | null {
+  const n = Number(String(v ?? "").replace(/[%\s]/g, ""));
+  return Number.isFinite(n) && n > 0 && n <= 100 ? n : null;
 }
 
 import { MANDATORY_EXCLUSIONS, DIAGNOSIS_TREES } from "./common-rules";
@@ -15,6 +23,13 @@ import { getCurrencyCode } from "../currency";
 
 export function buildBudgetWastePrompt(input: BudgetWasteInput): string {
   const cc = getCurrencyCode();
+  // "Demand captured" is only knowable from the platform's impression-share
+  // column. Without it the model would invent a percentage, so the metric is
+  // dropped unless the user supplies the real figure.
+  const share = parseImpressionShare(input.impression_share_pct);
+  const demandRule = share !== null
+    ? `  - demand_captured_pct — USE EXACTLY ${share} (the user's reported impression share). Do not change the value; explain the top contributor to lost share and the fix.`
+    : `  - demand_captured_pct — OMIT this key entirely (no impression-share data was provided; never estimate it).`;
   return `Audit this ad account for budget waste and produce a PULSE REPORT (not a letter grade).
 
 CURRENCY CONTEXT: All amounts in/out are in ${cc}. The field names below (e.g. waste_per_month_usd) carry the literal "_usd" suffix in the JSON schema for backwards compatibility, but the numeric VALUES should be in ${cc}.
@@ -25,10 +40,10 @@ ${DIAGNOSIS_TREES}
 
 
 PULSE METRICS RULE (toprank pattern):
-Return THREE numbers as the headline finding:
-  - waste_per_month_usd (estimated waste in $)
-  - demand_captured_pct (rough % of available demand the account currently captures)
-  - cpa_efficiency_ratio (current CPA vs target CPA as a ratio)
+Return these headline numbers:
+  - waste_per_month_usd (estimated waste — derive it from figures in the input and show the basis in top_contributor)
+${demandRule}
+  - cpa_efficiency_ratio (current CPA vs target CPA as a ratio — only if both are stated in the input, else 0 and say so)
 Each number must have:
   - top_contributor: NAMED specific cause (campaign/keyword/ad group, not "some keywords")
   - fix_pointer: the single highest-impact action
@@ -52,6 +67,7 @@ ${(input.campaign_summary ?? "").slice(0, 16_000)}
 - Device targeting: ${input.device_targeting || "all"}
 - Geographic targeting: ${input.geo_targeting || "not specified"}
 - Excludes current customers from prospecting: ${input.excludes_customers || "not specified"}
+- Search impression share: ${share !== null ? `${share}%` : "not provided"}
 
 20-QUESTION WASTE AUDIT — for each question, mark hit (waste likely present), miss (looks fine), unknown.
 

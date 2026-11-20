@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { X, Sparkles, Brain, Activity, ClipboardList, BookOpen, FileBarChart } from "lucide-react";
-import { hasSeenTour, markTourSeen, isOnboarded } from "@/lib/settings";
+import { hasSeenTour, markTourSeen, hasAnyKeyConfigured } from "@/lib/settings";
 
 interface Slide {
   icon: any;
@@ -24,14 +24,14 @@ const SLIDES: Slide[] = [
   {
     icon: Sparkles,
     label: "step 2 of 4",
-    title: "13 generators · 7 platforms · 1 brief.",
+    title: "18 generators · 7 platforms · 1 brief.",
     body: "Google · Meta · TikTok · YouTube · LinkedIn · X · Display. Plus Campaign Kit (one brief → every platform), hashtags, lead forms, email subjects, and AI image/video prompts.",
     cta: { href: "/generate/campaign-kit", label: "try campaign kit" },
   },
   {
     icon: Activity,
     label: "step 3 of 4",
-    title: "10 optimizers + competitor research.",
+    title: "11 optimizers + competitor research.",
     body: "CTR, Quality Score, Budget Waste, Bid Strategy, Audience Targeting, Landing Page, A/B Test Planner, Ad Fatigue, Keywords, Budget Planner — and a Steal-and-Beat that tears down competitor ads from Meta/Google libraries.",
     cta: { href: "/research/competitors", label: "see steal & beat" },
   },
@@ -52,7 +52,8 @@ export function FeatureTour() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!isOnboarded()) return;
+    // Any stored key counts as onboarded (backup import / key added in Settings).
+    if (!hasAnyKeyConfigured()) return;
     if (hasSeenTour()) return;
     const t = setTimeout(() => setOpen(true), 400);
     return () => clearTimeout(t);

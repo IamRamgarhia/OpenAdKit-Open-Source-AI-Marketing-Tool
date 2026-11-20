@@ -5,6 +5,7 @@ import { Check, Flame, RotateCcw, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "./PageHeader";
 import { CHECKLISTS, type ChecklistScope } from "@/lib/checklists";
 import { db, type ChecklistState } from "@/lib/storage";
+import { isInCurrentPeriod, streakAfterCheck } from "@/lib/checklist-period";
 
 interface CustomItem {
   key: string;
@@ -27,71 +28,74 @@ export function ChecklistView(props: Props) {
   return <Inner {...props} />;
 }
 
-function periodKey(scope: ChecklistScope, when = new Date()): string {
-  const y = when.getFullYear();
-  if (scope === "daily") {
-    return `${y}-${String(when.getMonth() + 1).padStart(2, "0")}-${String(when.getDate()).padStart(2, "0")}`;
+type CustomRow = { id: string; scope: string; text: string; section: string };
+
+/** Read this scope's rows, un-checking anything completed in an earlier period. */
+async function loadChecklist(scope: ChecklistScope): Promise<{ map: Record<string, ChecklistState>; customs: CustomRow[] }> {
+  const rows = await db().checklist.where("scope").equals(scope).toArray();
+  const map: Record<string, ChecklistState> = {};
+  for (const r of rows) {
+    const checkedCurrentPeriod = r.checked && isInCurrentPeriod(scope, r.last_completed);
+    map[r.item_key] = { ...r, checked: checkedCurrentPeriod };
   }
-  if (scope === "weekly") {
-    // ISO-8601 week numbering. The previous `onejan + getDay()` formula
-    // miscounted around year boundaries (it could yield week 53 and week 1 for
-    // days in the same actual week), which silently reset streaks every New Year.
-    const [isoYear, isoWeek] = isoWeekOf(when);
-    return `${isoYear}-W${String(isoWeek).padStart(2, "0")}`;
-  }
-  return `${y}-${String(when.getMonth() + 1).padStart(2, "0")}`;
+  const customs = await db().custom_items.where("scope").equals(scope).toArray();
+  return { map, customs };
 }
 
-/** ISO-8601 week number + its ISO week-year (which can differ from the calendar
- *  year for days at either end of January/December). */
-function isoWeekOf(date: Date): [number, number] {
-  // Work in UTC on a copy so DST transitions can't shift the day.
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  // ISO weeks run Mon(1)..Sun(7); getUTCDay() gives Sun=0.
-  const dayNum = d.getUTCDay() || 7;
-  // Shift to the Thursday of this week — the year that Thursday falls in is
-  // the ISO week-year by definition.
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const isoYear = d.getUTCFullYear();
-  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
-  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return [isoYear, week];
+/** Next row state for a click on `key`. Module-level so the timestamp/uuid
+ *  work stays out of the render scope. */
+function toggledState(scope: ChecklistScope, key: string, cur: ChecklistState | undefined): ChecklistState {
+  if (cur?.checked) {
+    // Unchecking keeps last_completed + streak: re-checking within the same
+    // period must restore the streak, not reset it.
+    return { ...cur, checked: false };
+  }
+  const now = new Date();
+  return {
+    id: cur?.id ?? crypto.randomUUID(),
+    scope,
+    item_key: key,
+    checked: true,
+    last_completed: now.getTime(),
+    streak: streakAfterCheck(scope, cur, now),
+  };
 }
 
-function isStaleForPeriod(scope: ChecklistScope, lastCompleted: number | null): boolean {
-  if (lastCompleted == null) return true;
-  return periodKey(scope, new Date(lastCompleted)) !== periodKey(scope);
+async function insertCustom(scope: ChecklistScope, section: string, text: string): Promise<void> {
+  await db().custom_items.put({ id: crypto.randomUUID(), scope, section, text, created_at: Date.now() });
 }
 
 function Inner({ scope }: Props) {
   const def = CHECKLISTS[scope];
   const [state, setState] = useState<Record<string, ChecklistState>>({});
-  const [customs, setCustoms] = useState<{ id: string; scope: string; text: string; section: string }[]>([]);
+  const [customs, setCustoms] = useState<CustomRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [addingForSection, setAddingForSection] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
   const load = useCallback(async () => {
-    const rows = await db().checklist.where("scope").equals(scope).toArray();
-    const map: Record<string, ChecklistState> = {};
-    for (const r of rows) {
-      const checkedCurrentPeriod = r.checked && !isStaleForPeriod(scope, r.last_completed);
-      map[r.item_key] = { ...r, checked: checkedCurrentPeriod };
-    }
+    const { map, customs: cust } = await loadChecklist(scope);
     setState(map);
-    const cust = await db().custom_items.where("scope").equals(scope).toArray();
     setCustoms(cust);
     setLoaded(true);
   }, [scope]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    loadChecklist(scope).then(({ map, customs: cust }) => {
+      if (cancelled) return;
+      setState(map);
+      setCustoms(cust);
+      setLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scope]);
 
   async function addCustom(section: string) {
     if (!draft.trim()) return;
-    const item = { id: crypto.randomUUID(), scope, section, text: draft.trim(), created_at: Date.now() };
-    await db().custom_items.put(item);
+    await insertCustom(scope, section, draft.trim());
     setDraft("");
     setAddingForSection(null);
     load();
@@ -131,25 +135,7 @@ function Inner({ scope }: Props) {
   const maxStreak = useMemo(() => Math.max(0, ...Object.values(state).map((s) => s.streak || 0)), [state]);
 
   async function toggle(key: string) {
-    const now = Date.now();
-    const cur = state[key];
-    let next: ChecklistState;
-    if (cur?.checked) {
-      next = { ...cur, checked: false };
-    } else {
-      const wasStreak = cur?.streak ?? 0;
-      const continued = cur?.last_completed
-        ? !isStaleForPeriodPrev(scope, cur.last_completed)
-        : false;
-      next = {
-        id: cur?.id ?? crypto.randomUUID(),
-        scope,
-        item_key: key,
-        checked: true,
-        last_completed: now,
-        streak: continued ? wasStreak + 1 : 1,
-      };
-    }
+    const next = toggledState(scope, key, state[key]);
     setState((s) => ({ ...s, [key]: next }));
     await db().checklist.put(next);
   }
@@ -302,15 +288,4 @@ function Stat({ label, value, accent, icon }: { label: string; value: string; ac
       <div className={`mt-2 font-display italic text-3xl tabular ${accent ? "text-live" : "text-ink"}`}>{value}</div>
     </div>
   );
-}
-
-function isStaleForPeriodPrev(scope: ChecklistScope, lastCompleted: number): boolean {
-  const prevDate = (() => {
-    const d = new Date();
-    if (scope === "daily") d.setDate(d.getDate() - 1);
-    else if (scope === "weekly") d.setDate(d.getDate() - 7);
-    else d.setMonth(d.getMonth() - 1);
-    return d;
-  })();
-  return periodKey(scope, new Date(lastCompleted)) !== periodKey(scope, prevDate);
 }

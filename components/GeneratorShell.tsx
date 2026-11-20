@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, Suspense, memo, useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, Save, AlertTriangle, StopCircle } from "lucide-react";
 import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
@@ -11,7 +11,10 @@ import { getApiKey, getModel, getActiveBrainId, addUsage, getLanguage, getToneOv
 import { streamClaude, estimateCostUsd, tryParseJson, llmStream, llmCall, type LLMMessage } from "@/lib/llm";
 import { getProvider, type Provider } from "@/lib/providers";
 import { getProviderKey } from "@/lib/settings";
-import { getBrain, saveAd, type GeneratedAd } from "@/lib/storage";
+import { getAd, getBrain, saveAd, type Platform } from "@/lib/storage";
+import { withGenMeta } from "@/lib/ad-meta";
+import { applyQueryOverrides, prefillFromSavedInput, persistableInput } from "@/lib/generator-prefill";
+import { CampaignPicker } from "@/components/CampaignPicker";
 import { buildBrandSystemPrompt, type BrandBrain } from "@/lib/brand-brain";
 import { applySmartFill } from "@/lib/smart-fill";
 import { rememberLastGenerated, suggestNextSteps, type NextStep } from "@/lib/next-steps";
@@ -40,8 +43,28 @@ export function GeneratorShell<I extends Record<string, unknown>>({ config, scop
   );
 }
 
+/** Everything needed to persist one finished run — kept so a run made with
+ *  auto-save OFF can still be saved by hand. */
+interface RunResult {
+  json: any;
+  text: string;
+  modelId: string;
+  providerId?: string;
+  inTokens: number;
+  outTokens: number;
+  cost: number;
+  prompt: string;
+  input: Record<string, unknown>;
+  brainId: string;
+  platform: Platform;
+  title: string;
+  maxTokens: number;
+  hasImage: boolean;
+}
+
 function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [input, setInput] = useState<I>(config.initial);
   const [brain, setBrain] = useState<BrandBrain | null>(null);
   const [running, setRunning] = useState(false);
@@ -52,6 +75,8 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
   // generation look like a failure. (Audit finding #10.)
   const [warning, setWarning] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<RunResult | null>(null);
   const [hasRun, setHasRun] = useState(false);
   // True when the model's first reply failed schema validation and we
   // auto-corrected via a retry round-trip. UI shows a small badge so the user
@@ -71,35 +96,58 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
   const [fillToast, setFillToast] = useState<string | null>(null);
   const stream = useThrottledStream();
   const abortRef = useRef<AbortController | null>(null);
-  // Ref mirror of `running` so the brain-switch effect can read the live value
-  // without re-binding. Without this guard, switching active brand mid-generation
-  // mutates the brain state captured by the in-flight closure, producing output
-  // built against the OLD brain but displayed under the NEW brand name.
-  // (Audit finding #25.)
+  // Live "is a generation in flight" flag for the brain-switch listener.
+  // Switching active brand mid-generation must not swap the brain under the
+  // in-flight closure (output built against the OLD brain but displayed under
+  // the NEW brand name — audit finding #25). Written synchronously in run().
   const runningRef = useRef(false);
-  useEffect(() => { runningRef.current = running; }, [running]);
+  // A brand switch / edit that arrived DURING a run. It used to be dropped
+  // (loadBrain returned early and never re-ran), so after the run the form
+  // kept using the previous client. Replayed in run()'s finally.
+  const pendingReloadRef = useRef<{ resetForm: boolean } | null>(null);
+  const loadBrainRef = useRef<((opts?: { resetForm?: boolean }) => Promise<void>) | null>(null);
+  const adPrefillDoneRef = useRef(false);
 
   useEffect(() => {
     const loadBrain = async (opts: { resetForm?: boolean } = {}) => {
-      // Skip brain updates while a generation is in flight. The user's switch
-      // takes effect on the NEXT run; the current run finishes against the
-      // brain it started with.
-      if (runningRef.current) return;
+      if (runningRef.current) {
+        pendingReloadRef.current = {
+          resetForm: Boolean(pendingReloadRef.current?.resetForm || opts.resetForm),
+        };
+        return;
+      }
       const id = getActiveBrainId();
       const b = id ? (await getBrain(id)) ?? null : null;
+
+      // ?ad_id=<id> — arriving from a next step such as "Apply rewrite as a
+      // new variant". Hydrate the form from that saved ad's inputs, once.
+      let saved: Record<string, unknown> | null = null;
+      const adId = searchParams?.get("ad_id");
+      if (adId && !adPrefillDoneRef.current && !opts.resetForm) {
+        adPrefillDoneRef.current = true;
+        const ad = await getAd(adId);
+        if (ad) {
+          saved = ad.input;
+          setFillToast(`Pre-filled from "${ad.title.slice(0, 60)}". Edit anything before generating.`);
+        }
+      }
+
       setBrain(b);
       // Smart-fill behavior:
       //   - On initial load + on brain attribute edits: top-up empty fields only.
       //   - On active-client SWITCH: reset form to defaults, then auto-fill from
-      //     the new brain. This is what "select a client → all tools populate"
-      //     means — switching clients shouldn't leave the previous client's
-      //     industry / audience / etc. in the form.
-      if (opts.resetForm) {
-        setInput(applyQueryOverrides(applySmartFill(config.fields, config.initial, b), searchParams, config.fields));
-      } else {
-        setInput((cur) => applyQueryOverrides(applySmartFill(config.fields, cur, b), searchParams, config.fields));
-      }
+      //     the new brain, so the previous client's industry / audience don't
+      //     linger in the form.
+      // Precedence: brand smart-fill < saved ad inputs < explicit URL params.
+      const hydrate = (base: I): I => {
+        let next = applySmartFill(config.fields, base, b) as I;
+        if (saved) next = prefillFromSavedInput(next, saved, config.fields).input;
+        return applyQueryOverrides(next, searchParams, config.fields);
+      };
+      if (opts.resetForm) setInput(hydrate(config.initial));
+      else setInput((cur) => hydrate(cur));
     };
+    loadBrainRef.current = loadBrain;
     loadBrain();
     const handleBrainsChanged = () => loadBrain();
     const handleClientSwitched = () => loadBrain({ resetForm: true });
@@ -111,6 +159,12 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!fillToast) return;
+    const t = setTimeout(() => setFillToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [fillToast]);
 
   const setField = useCallback((name: string, value: unknown) => {
     setInput((cur) => ({ ...cur, [name]: value }));
@@ -132,10 +186,62 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, input, brain]);
 
+  /** Persist a finished run to history. Runs automatically when auto-save is
+   *  on; otherwise from the "Save to history" button. */
+  async function saveResult(r: RunResult) {
+    setSaving(true);
+    try {
+      const ad = withGenMeta(
+        {
+          id: crypto.randomUUID(),
+          brand_id: r.brainId,
+          platform: r.platform,
+          campaign_type: config.campaign_type,
+          title: r.title,
+          input: r.input,
+          output_json: r.json,
+          output_text: r.text,
+          model_id: r.modelId,
+          usage_input_tokens: r.inTokens,
+          usage_output_tokens: r.outTokens,
+          cost_usd: r.cost,
+          starred: false,
+          status: "draft",
+          notes: "",
+          created_at: Date.now(),
+          // Enables regenerate-and-compare from /history against a different
+          // model without the history page needing every generator's builder.
+          prompt: r.prompt,
+          provider_id: r.providerId,
+        },
+        // Regenerate reuses this budget instead of a hard-coded 3000, and
+        // warns that an image-based run can't resend its image.
+        { max_tokens: r.maxTokens, has_image: r.hasImage }
+      );
+      await saveAd(ad);
+      setSavedId(ad.id);
+      rememberLastGenerated({
+        id: ad.id,
+        title: ad.title,
+        platform: ad.platform,
+        campaign_type: ad.campaign_type,
+        brand_id: ad.brand_id,
+        saved_at: ad.created_at,
+      });
+      setNextSteps(suggestNextSteps({ route: pathname ?? scope, ad_id: ad.id, input: r.input }));
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't save to history.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function run() {
     setError(null);
     setWarning(null);
     setSavedId(null);
+    setResult(null);
+    setNextSteps([]);
     setParsed(null);
     setSchemaRecovered(false);
     setLastRun(null);
@@ -189,12 +295,9 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
       if (!providerId || !providerSupportsVision(providerId, getModel())) {
         const fallback = pickVisionProvider(providerId);
         if (fallback) {
-          // Use warning (not error) so the banner is info-blue and clears with
-          // the next run. setError stays reserved for actual failures.
           setWarning(
             `Active provider can't read images. Falling back to ${fallback} for this run only. Make it permanent in Settings.`
           );
-          // Let the run continue — llmStream below will use providerOverride.
           visionFallbackId = fallback;
         } else {
           setError(
@@ -205,17 +308,30 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
       }
     }
 
+    // Snapshot what this run uses, so edits made while it streams can't leak
+    // into what gets saved.
+    const runBrain = brain;
+    const runInput = input;
+    const maxTokens = config.maxTokens ?? 3000;
+
+    runningRef.current = true;
     setRunning(true);
     setHasRun(true);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const system = buildBrandSystemPrompt(brain, {
+      let promptInput: I = runInput;
+      if (config.prepareInput) {
+        const prep = await config.prepareInput(runInput, controller.signal);
+        promptInput = prep.input;
+        if (prep.warning) setWarning((w) => (w ? `${w} ${prep.warning}` : prep.warning!));
+      }
+      const system = buildBrandSystemPrompt(runBrain, {
         language: getLanguage(),
         tone_override: getToneOverride(),
         skip_framework_stack: config.skip_framework_stack,
       });
-      const prompt = config.buildPrompt(input, brain);
+      const prompt = config.buildPrompt(promptInput, runBrain);
       // Build content. With no images, send a plain string for cheapest path.
       // With images, send the array of parts (images first → text last is the
       // convention all three vision-capable providers expect).
@@ -234,7 +350,7 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
             {
               system,
               messages: [{ role: "user", content }],
-              maxTokens: config.maxTokens ?? 3000,
+              maxTokens,
               temperature: config.temperature ?? 0.7,
               signal: controller.signal,
               providerOverride: fallbackProvider,
@@ -252,19 +368,16 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
               model: getModel() || undefined,
               system,
               messages: [{ role: "user", content }],
-              maxTokens: config.maxTokens ?? 3000,
+              maxTokens,
               temperature: config.temperature ?? 0.7,
               signal: controller.signal,
             },
             { onDelta: stream.append }
           );
 
-      // Three-arg form so vision-fallback runs (which route via a different provider than the
-      // active one) bill against the correct pricing table. (Audit finding #8.)
-      // These are mutable: a schema-correction retry below adds its own cost and
-      // tokens, and the SAVED AD must reflect the true total. Previously the
-      // retry was added to the global usage counter but not to `ad.cost_usd`,
-      // so per-ad spend under-reported every time a correction pass ran.
+      // Three-arg form so vision-fallback runs bill against the correct
+      // pricing table. Mutable: a schema-correction retry below adds its own
+      // cost and tokens, and the SAVED AD must reflect the true total.
       let cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
       let inTokens = res.usage?.input_tokens ?? 0;
       let outTokens = res.usage?.output_tokens ?? 0;
@@ -272,40 +385,29 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
       window.dispatchEvent(new Event("ados:usage"));
 
       // Some providers (Gemini in particular) occasionally return res.text empty
-      // even when streaming deltas worked correctly. Fall back to the accumulated
-      // streamed buffer so the user's output (and any auto-saved ad) is never blank.
-      // getText() reads the live ref synchronously — the closure's stream.text is
-      // the stale pre-generation "" captured when run() started.
+      // even when streaming deltas worked correctly. getText() reads the live
+      // buffer — the closure's stream.text is the stale pre-generation "".
       const finalText = res.text || stream.getText();
 
       let json: any = null;
       let finalTextOut = finalText;
       if (config.expectJson !== false) {
         json = tryParseJson(finalText);
-        // Schema-validated outputs: if a Zod schema is declared on the config,
-        // validate the parsed JSON. On failure, do ONE non-streaming retry
-        // round-trip with the validation errors so the model can self-correct.
-        // This is the "no false results" guarantee — UI either sees the
-        // expected shape or a clear error, never a partial/wrong shape that
-        // could render as junk. (See lib/llm-structured.ts for the standalone
-        // helper used by non-shell call sites.)
+        // Schema-validated outputs: on failure, ONE non-streaming retry with
+        // the validation errors so the model can self-correct. UI either sees
+        // the expected shape or a clear error, never a partial/wrong shape.
         if (config.schema) {
           const candidate = json;
           const first = config.schema.safeParse(candidate);
           if (first.success) {
             json = first.data;
           } else {
-            // Retry: send the original prompt + the assistant's wrong reply
-            // + a corrective hint. Non-streaming so we don't double-render.
             const issues = first.error.issues
               .slice(0, 8)
               .map((i: any) => `- ${i.path.join(".") || "<root>"}: ${i.message}`)
               .join("\n");
             try {
-              // Re-send the ORIGINAL content, not just the text prompt. On an
-              // image-based generator, passing `prompt` alone meant attempt #2
-              // reasoned about a screenshot it could no longer see — and then
-              // got blamed for returning the wrong shape again.
+              // Re-send the ORIGINAL content (incl. images), not just the text.
               const retryMessages: LLMMessage[] = [
                 { role: "user", content },
                 { role: "assistant", content: (finalText || "").slice(0, 8000) },
@@ -317,7 +419,7 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
               const retry = await llmCall({
                 system,
                 messages: retryMessages,
-                maxTokens: config.maxTokens ?? 3000,
+                maxTokens,
                 temperature: 0.2,
                 signal: controller.signal,
                 ...(fallbackProvider
@@ -328,8 +430,6 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
               const retryIn = retry.usage?.input_tokens ?? 0;
               const retryOut = retry.usage?.output_tokens ?? 0;
               addUsage(retryCost, retryIn, retryOut);
-              // Roll into the per-ad totals so the saved record shows what this
-              // generation actually cost, retry included.
               cost += retryCost;
               inTokens += retryIn;
               outTokens += retryOut;
@@ -364,59 +464,40 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
         outTokens,
         cost,
         modelId: res.modelId,
-        // streamClaude() is the legacy shim and types providerId as optional;
-        // fall back to the active provider so the strip never renders blank.
         providerId: res.providerId ?? getActiveProviderId() ?? "",
         retried: inTokens !== (res.usage?.input_tokens ?? 0),
       });
 
-      if (getAutoSave()) {
-        // Never persist internal, double-underscore-prefixed keys (e.g. a former
-        // vision-provider override). They're transient routing hints, not user
-        // input, and would produce stale routing if replayed from history.
-        const persistedInput = Object.fromEntries(
-          Object.entries(input as Record<string, unknown>).filter(([k]) => !k.startsWith("__"))
-        );
-        const ad: GeneratedAd = {
-          id: crypto.randomUUID(),
-          brand_id: brain?.id ?? "",
-          platform: config.platform,
-          campaign_type: config.campaign_type,
-          title: config.buildTitle(input),
-          input: persistedInput,
-          output_json: json,
-          output_text: finalTextOut,
-          model_id: res.modelId,
-          usage_input_tokens: inTokens,
-          usage_output_tokens: outTokens,
-          cost_usd: cost,
-          starred: false,
-          status: "draft",
-          notes: "",
-          created_at: Date.now(),
-          // Enables regenerate-and-compare from /history against a different
-          // model without the history page needing every generator's builder.
-          prompt,
-          provider_id: res.providerId,
-        };
-        await saveAd(ad);
-        setSavedId(ad.id);
-        rememberLastGenerated({
-          id: ad.id,
-          title: ad.title,
-          platform: ad.platform,
-          campaign_type: ad.campaign_type,
-          brand_id: ad.brand_id,
-          saved_at: ad.created_at,
-        });
-        setNextSteps(suggestNextSteps({ platform: ad.platform, campaign_type: ad.campaign_type, ad_id: ad.id }));
-      }
+      const r: RunResult = {
+        json,
+        text: finalTextOut,
+        modelId: res.modelId,
+        providerId: res.providerId,
+        inTokens,
+        outTokens,
+        cost,
+        prompt,
+        // Never persist internal, double-underscore-prefixed keys — they're
+        // transient routing / prompt hints, not user input.
+        input: persistableInput(runInput as Record<string, unknown>),
+        brainId: runBrain?.id ?? "",
+        platform: config.platformFor ? config.platformFor(runInput) : config.platform,
+        title: config.buildTitle(runInput),
+        maxTokens,
+        hasImage: attachedImages.length > 0,
+      };
+      setResult(r);
+      if (getAutoSave()) await saveResult(r);
     } catch (e: any) {
       if (e?.name === "AbortError") setError("Generation stopped.");
       else setError(e?.message ?? "Generation failed");
     } finally {
+      runningRef.current = false;
       setRunning(false);
       abortRef.current = null;
+      const pending = pendingReloadRef.current;
+      pendingReloadRef.current = null;
+      if (pending) void loadBrainRef.current?.(pending);
     }
   }
 
@@ -450,6 +531,11 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
                 <a href="/brand/new" className="btn-primary text-[12px]">
                   ✨ Add your first client
                 </a>
+                {fillToast ? (
+                  <div className="mt-2 text-[11px] text-pos font-mono uppercase tracking-ui-wide animate-fade-up" role="status">
+                    ✓ {fillToast}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="border border-live/30 bg-live/5 px-3 py-2.5 space-y-2">
@@ -462,21 +548,18 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
                 <button
                   type="button"
                   onClick={() => {
-                    setInput((cur) => {
-                      const next = applySmartFill(config.fields, cur as any, brain) as I;
-                      // Count fields that actually changed so the user sees what happened.
-                      let filled = 0;
-                      for (const f of config.fields) {
-                        if ((cur as any)[f.name] !== (next as any)[f.name]) filled++;
-                      }
-                      if (filled === 0) {
-                        setFillToast("All fields already match — nothing to fill.");
-                      } else {
-                        setFillToast(`Filled ${filled} field${filled === 1 ? "" : "s"} from ${brain.name || brain.business_name}. Edit anything that looks off.`);
-                      }
-                      setTimeout(() => setFillToast(null), 3000);
-                      return next;
-                    });
+                    const next = applySmartFill(config.fields, input as any, brain) as I;
+                    // Count fields that actually changed so the user sees what happened.
+                    let filled = 0;
+                    for (const f of config.fields) {
+                      if ((input as any)[f.name] !== (next as any)[f.name]) filled++;
+                    }
+                    setInput(next);
+                    setFillToast(
+                      filled === 0
+                        ? "All fields already match — nothing to fill."
+                        : `Filled ${filled} field${filled === 1 ? "" : "s"} from ${brain.name || brain.business_name}. Edit anything that looks off.`
+                    );
                   }}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-live text-base-950 font-semibold text-[13px] hover:bg-live/90 transition"
                   title="Auto-fill empty fields from this client's brand brain"
@@ -485,7 +568,7 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
                   <span>Auto-fill from {brain.name || brain.business_name}</span>
                 </button>
                 {fillToast ? (
-                  <div className="text-[11px] text-pos font-mono uppercase tracking-ui-wide animate-fade-up">
+                  <div className="text-[11px] text-pos font-mono uppercase tracking-ui-wide animate-fade-up" role="status">
                     ✓ {fillToast}
                   </div>
                 ) : null}
@@ -540,53 +623,38 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
               ) : null}
             </div>
 
+            {/* Auto-save OFF used to leave a finished run with no way to keep
+                it (and next steps never appeared). */}
+            {result && !savedId && !running ? (
+              <button
+                onClick={() => saveResult(result)}
+                disabled={saving}
+                className="btn-ghost w-full"
+                data-testid="save-to-history"
+              >
+                {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                Save to history
+              </button>
+            ) : null}
+
             {savedId ? (
-              <div className="text-[10px] text-pos flex items-center gap-1.5 font-mono uppercase tracking-ui-mega">
-                <Save size={10} /> saved to history
+              <div className="space-y-2">
+                <div className="text-[10px] text-pos flex items-center gap-1.5 font-mono uppercase tracking-ui-mega">
+                  <Save size={10} /> saved to history
+                </div>
+                <CampaignPicker adId={savedId} brandId={result?.brainId ?? brain?.id ?? ""} compact />
               </div>
             ) : null}
           </div>
         </section>
 
         <section className="lg:col-span-3 space-y-4">
-          <OutputArea running={running} stream={stream.text} parsed={parsed} config={config as unknown as GeneratorConfig<Record<string, unknown>>} hasRun={hasRun} lastError={error} schemaRecovered={schemaRecovered} lastRun={lastRun} />
+          <OutputArea running={running} stream={stream.text} rawText={result?.text ?? ""} renderInput={(result?.input ?? input) as Record<string, unknown>} parsed={parsed} config={config as unknown as GeneratorConfig<Record<string, unknown>>} hasRun={hasRun} lastError={error} schemaRecovered={schemaRecovered} lastRun={lastRun} />
           {savedId && nextSteps.length ? <NextStepsPanel steps={nextSteps} /> : null}
         </section>
       </div>
     </div>
   );
-}
-
-/**
- * Apply URL query params on top of a smart-filled input. Only fields whose
- * names actually appear in the generator's config get overridden, so URLs like
- * `/optimize/ctr?platform=Meta+Feed&ad_id=...` are safe to pass through unknown
- * params (ad_id, brand_id) without polluting form state.
- *
- * The config-field check is load-bearing and used to be missing: every query
- * param was written into form state regardless of whether the generator had a
- * matching field, and those junk keys were then persisted into the saved ad's
- * `input` blob.
- *
- * Skipped if `?carry=0` is passed (used to force-reset the form).
- */
-function applyQueryOverrides<I extends Record<string, unknown>>(
-  current: I,
-  searchParams: URLSearchParams | null,
-  fields: InputField[]
-): I {
-  if (!searchParams) return current;
-  if (searchParams.get("carry") === "0") return current;
-  const allowed = new Set(fields.map((f) => f.name));
-  const next: any = { ...current };
-  for (const [key, val] of searchParams.entries()) {
-    if (!allowed.has(key)) continue;
-    // Image fields hold an ImagePart object — a string from the URL would be
-    // silently wrong (and would fail the `required` check in a confusing way).
-    if (fields.find((f) => f.name === key)?.kind === "image") continue;
-    if (val) next[key] = val;
-  }
-  return next as I;
 }
 
 function NextStepsPanel({ steps }: { steps: NextStep[] }) {
@@ -849,6 +917,8 @@ function UsageStrip({
 const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
   running,
   stream,
+  rawText,
+  renderInput,
   parsed,
   config,
   hasRun,
@@ -858,6 +928,10 @@ const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
 }: {
   running: boolean;
   stream: string;
+  /** Final text of the finished run — after a schema retry this is the
+   *  corrected reply, not the failed first attempt that `stream` holds. */
+  rawText?: string;
+  renderInput?: Record<string, unknown>;
   parsed: any;
   config: GeneratorConfig<I>;
   hasRun: boolean;
@@ -955,16 +1029,18 @@ const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
             cost readout you have to scroll past the whole result to find is a
             cost readout nobody reads. */}
         {lastRun ? <UsageStrip run={lastRun} /> : null}
-        {config.renderJson(parsed)}
+        {config.renderJson(parsed, (renderInput ?? {}) as I)}
         <div className="flex items-center justify-end gap-2">
-          <CopyButton text={stream} label="copy raw output" />
+          <CopyButton text={rawText || stream} label="copy raw output" />
           <CopyButton text={JSON.stringify(parsed, null, 2)} label="copy parsed json" />
         </div>
       </div>
     );
   }
 
-  if (stream && config.renderStreaming) {
+  // Live renderer while streaming (and for plain-text tools after). For JSON
+  // tools it must NOT run once finished, or it hides the parse-failure panel.
+  if (stream && config.renderStreaming && (running || config.expectJson === false)) {
     return <>{config.renderStreaming(stream)}</>;
   }
 

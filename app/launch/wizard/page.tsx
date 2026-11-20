@@ -22,6 +22,8 @@ import {
   type LaunchWizardCommon,
 } from "@/lib/prompts/launch-wizard";
 import { rememberLastGenerated } from "@/lib/next-steps";
+import { createIdleTimeout, anySignal } from "@/lib/idle-timeout";
+import { withGenMeta } from "@/lib/ad-meta";
 import { getCurrency } from "@/lib/currency";
 import { ProviderSwitcher } from "@/components/ProviderSwitcher";
 
@@ -44,6 +46,80 @@ const ALL_PLATFORMS = [
   { id: "youtube", label: "YouTube" },
   { id: "twitter", label: "X / Twitter" },
 ];
+
+
+/** No streamed output for this long → treat the provider as stalled. A
+ *  healthy stream that keeps delivering is never cut off (the old fixed 90s
+ *  wall-clock timer killed long phases mid-stream). */
+const PHASE_IDLE_TIMEOUT_MS = 90_000;
+
+/** JSON from a phase is unvalidated — only trust it as an object. */
+function asObject(v: unknown): Record<string, any> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, any>) : {};
+}
+const asText = (v: unknown): string => (typeof v === "string" ? v : "");
+const asStringList = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : typeof v === "string" && v ? [v] : [];
+
+function buildWizardAd(
+  brandId: string,
+  args: {
+    campaign_id: string;
+    platform: GeneratedAd["platform"];
+    campaign_type: string;
+    title: string;
+    input: Record<string, unknown>;
+    output_json: any;
+    output_text: string;
+    modelId: string;
+    providerId?: string;
+    usage: any;
+    cost: number;
+    prompt?: string;
+    maxTokens?: number;
+  }
+): GeneratedAd {
+  return withGenMeta(
+    {
+      id: crypto.randomUUID(),
+      brand_id: brandId,
+      platform: args.platform,
+      campaign_type: args.campaign_type,
+      title: args.title,
+      input: args.input,
+      output_json: args.output_json,
+      output_text: args.output_text,
+      model_id: args.modelId,
+      provider_id: args.providerId,
+      usage_input_tokens: args.usage?.input_tokens ?? 0,
+      usage_output_tokens: args.usage?.output_tokens ?? 0,
+      cost_usd: args.cost,
+      starred: false,
+      status: "draft",
+      notes: "",
+      created_at: Date.now(),
+      campaign_id: args.campaign_id,
+      // Persisted so History can regenerate / compare each phase.
+      prompt: args.prompt,
+    },
+    { max_tokens: args.maxTokens }
+  );
+}
+
+function newLaunchCampaign(brandId: string, name: string, goal: string, notes: string): Campaign {
+  return { id: crypto.randomUUID(), brand_id: brandId, name, goal, status: "planning", created_at: Date.now(), notes };
+}
+
+function rememberLaunchKit(campaignId: string, name: string, brandId: string) {
+  rememberLastGenerated({
+    id: campaignId,
+    title: `Launch kit · ${name}`,
+    platform: "google",
+    campaign_type: "Launch Wizard",
+    brand_id: brandId,
+    saved_at: Date.now(),
+  });
+}
 
 export default function Page() {
   return (
@@ -110,9 +186,6 @@ function Inner() {
     setPhases((cur) => cur.map((p) => (p.key === key ? { ...p, ...patch } : p)));
   }
 
-  // 90s per-phase ceiling. If a provider stalls (e.g. Groq queueing) the
-  // user is told instead of staring at a spinner forever.
-  const PHASE_TIMEOUT_MS = 90_000;
 
   async function runOnePhase(args: {
     key: string;
@@ -126,11 +199,10 @@ function Inner() {
     const system = buildBrandSystemPrompt(brain, { language: getLanguage(), tone_override: getToneOverride() });
     let accumulated = "";
 
-    // Compose the wizard's master AbortSignal with a per-phase timeout signal.
-    // First of the two to abort wins.
-    const timeoutCtl = new AbortController();
-    const timeoutId = setTimeout(() => timeoutCtl.abort(new Error("Phase timed out after 90s")), PHASE_TIMEOUT_MS);
-    const signals = [args.signal, timeoutCtl.signal].filter(Boolean) as AbortSignal[];
+    // Compose the wizard's master AbortSignal with a per-phase IDLE timeout
+    // (reset on every delta). First of the two to abort wins.
+    const idle = createIdleTimeout(PHASE_IDLE_TIMEOUT_MS, "No output for 90s");
+    const signals = [args.signal, idle.signal].filter(Boolean) as AbortSignal[];
     const combined = anySignal(signals);
 
     try {
@@ -144,6 +216,7 @@ function Inner() {
         },
         {
           onDelta: (delta) => {
+            idle.bump();
             accumulated += delta;
             updatePhase(args.key, { text: accumulated });
           },
@@ -151,13 +224,14 @@ function Inner() {
       );
       const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
       addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
+      window.dispatchEvent(new Event("ados:usage"));
       // res.text might be empty if the provider returned content only via deltas
       // (some Gemini responses do this). Fall back to our accumulated buffer so
       // the UI doesn't show "queued" on a successfully completed phase.
       const finalText = res.text || accumulated;
       const json = args.expectJson === false ? null : tryParseJson<any>(finalText);
       updatePhase(args.key, { status: "done", result: json, text: finalText });
-      return { json, text: finalText, modelId: res.modelId, usage: res.usage, cost };
+      return { json, text: finalText, modelId: res.modelId, providerId: res.providerId, usage: res.usage, cost, prompt: args.prompt, maxTokens: args.maxTokens };
     } catch (e: any) {
       // The user pressed Stop — surface no failover, no error spam.
       if (args.signal?.aborted) {
@@ -165,7 +239,7 @@ function Inner() {
         throw e;
       }
 
-      const wasTimeout = timeoutCtl.signal.aborted;
+      const wasTimeout = idle.timedOut;
 
       // Auto-failover: if the active provider timed out and another provider
       // has a saved key, retry the phase with that provider once. Don't loop
@@ -187,16 +261,12 @@ function Inner() {
             text: `[Active provider stalled — retrying with fallback: ${fallbackProvider.name}]\n\n`,
           });
           accumulated = `[Active provider stalled — retrying with fallback: ${fallbackProvider.name}]\n\n`;
-          const fallbackCtl = new AbortController();
-          const fallbackTimeoutId = setTimeout(
-            () => fallbackCtl.abort(new Error("Fallback also timed out after 90s")),
-            PHASE_TIMEOUT_MS
-          );
+          const fallbackIdle = createIdleTimeout(PHASE_IDLE_TIMEOUT_MS, "Fallback also produced no output for 90s");
           try {
             // Compose master wizard abort + fallback timeout so Stop button
             // still cancels the fallback retry. Without args.signal here, the
             // user clicking Stop while in fallback would leave it running.
-            const fallbackCombined = anySignal([args.signal, fallbackCtl.signal].filter(Boolean) as AbortSignal[]);
+            const fallbackCombined = anySignal([args.signal, fallbackIdle.signal].filter(Boolean) as AbortSignal[]);
             const res = await llmStream(
               {
                 system,
@@ -209,6 +279,7 @@ function Inner() {
               },
               {
                 onDelta: (delta) => {
+                  fallbackIdle.bump();
                   accumulated += delta;
                   updatePhase(args.key, { text: accumulated });
                 },
@@ -216,41 +287,30 @@ function Inner() {
             );
             const cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
             addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
+            window.dispatchEvent(new Event("ados:usage"));
             const finalText = res.text || accumulated;
             const json = args.expectJson === false ? null : tryParseJson<any>(finalText);
             updatePhase(args.key, { status: "done", result: json, text: finalText });
-            return { json, text: finalText, modelId: res.modelId, usage: res.usage, cost };
+            return { json, text: finalText, modelId: res.modelId, providerId: res.providerId, usage: res.usage, cost, prompt: args.prompt, maxTokens: args.maxTokens };
           } catch {
             // fall through to error state below
           } finally {
-            clearTimeout(fallbackTimeoutId);
+            fallbackIdle.clear();
           }
         }
       }
 
       const msg = wasTimeout
-        ? "Timed out after 90s on the primary provider. Failover provider also failed or none configured. Use ↻ retry, or switch provider in Settings."
+        ? "The primary provider stopped sending output for 90s. Failover provider also failed or none configured. Use ↻ retry, or switch provider in Settings."
         : e?.message ?? "Phase failed";
       updatePhase(args.key, { status: "error", error: msg });
       throw e;
     } finally {
-      clearTimeout(timeoutId);
+      idle.clear();
     }
   }
 
-  /** Polyfill for AbortSignal.any — combine multiple signals into one. */
-  function anySignal(signals: AbortSignal[]): AbortSignal {
-    // Use the native AbortSignal.any when available (modern browsers).
-    if (typeof (AbortSignal as any).any === "function") {
-      return (AbortSignal as any).any(signals);
-    }
-    const ctl = new AbortController();
-    for (const s of signals) {
-      if (s.aborted) { ctl.abort((s as any).reason); break; }
-      s.addEventListener("abort", () => ctl.abort((s as any).reason), { once: true });
-    }
-    return ctl.signal;
-  }
+
 
   /** Retry a single failed phase without re-running the whole wizard. */
   async function retryPhase(phaseKey: string) {
@@ -265,7 +325,7 @@ function Inner() {
       notes: notes.trim() || undefined,
     };
     // Pull the strategy brief from completed phases (or re-run nothing if it's missing).
-    const strat = phases.find((p) => p.key === "strategy")?.result ?? {};
+    const strat = asObject(phases.find((p) => p.key === "strategy")?.result);
     const ctl = new AbortController();
     setRunning(true);
     try {
@@ -279,7 +339,7 @@ function Inner() {
             prompt: buildCampaignKitPrompt({
               campaign_name: common.campaign_name,
               product: brain.business_name,
-              primary_offer: brain.usp || strat.big_idea || "",
+              primary_offer: brain.usp || asText(strat.big_idea),
               audience: brain.audience_who || "",
               goal: common.goal,
               budget_monthly: common.budget_total,
@@ -306,9 +366,9 @@ function Inner() {
           built = {
             prompt: buildEmailSequencePrompt({
               ...common,
-              big_idea: strat.big_idea ?? "",
-              positioning_one_liner: strat.positioning_one_liner ?? "",
-              primary_cta: strat.primary_cta ?? "",
+              big_idea: asText(strat.big_idea),
+              positioning_one_liner: asText(strat.positioning_one_liner),
+              primary_cta: asText(strat.primary_cta),
             }),
             max: 2500,
           };
@@ -317,9 +377,9 @@ function Inner() {
           built = {
             prompt: buildLaunchDayPostsPrompt({
               ...common,
-              big_idea: strat.big_idea ?? "",
-              positioning_one_liner: strat.positioning_one_liner ?? "",
-              proof_points: strat.proof_points ?? [],
+              big_idea: asText(strat.big_idea),
+              positioning_one_liner: asText(strat.positioning_one_liner),
+              proof_points: asStringList(strat.proof_points),
             }),
             max: 3500,
           };
@@ -351,8 +411,11 @@ function Inner() {
         output_json: result.json,
         output_text: result.text,
         modelId: result.modelId,
+        providerId: result.providerId,
         usage: result.usage,
         cost: result.cost,
+        prompt: result.prompt,
+        maxTokens: result.maxTokens,
       });
     } catch {
       /* updatePhase already set status="error" */
@@ -361,37 +424,8 @@ function Inner() {
     }
   }
 
-  async function persistAsAd(args: {
-    campaign_id: string;
-    platform: GeneratedAd["platform"];
-    campaign_type: string;
-    title: string;
-    input: Record<string, unknown>;
-    output_json: any;
-    output_text: string;
-    modelId: string;
-    usage: any;
-    cost: number;
-  }): Promise<string> {
-    const ad: GeneratedAd = {
-      id: crypto.randomUUID(),
-      brand_id: brain?.id ?? "",
-      platform: args.platform,
-      campaign_type: args.campaign_type,
-      title: args.title,
-      input: args.input,
-      output_json: args.output_json,
-      output_text: args.output_text,
-      model_id: args.modelId,
-      usage_input_tokens: args.usage?.input_tokens ?? 0,
-      usage_output_tokens: args.usage?.output_tokens ?? 0,
-      cost_usd: args.cost,
-      starred: false,
-      status: "draft",
-      notes: "",
-      created_at: Date.now(),
-      campaign_id: args.campaign_id,
-    };
+  async function persistAsAd(args: Parameters<typeof buildWizardAd>[1]): Promise<string> {
+    const ad = buildWizardAd(brain?.id ?? "", args);
     await saveAd(ad);
     return ad.id;
   }
@@ -423,15 +457,12 @@ function Inner() {
     setPhases(phaseList);
 
     // Create the Campaign up-front so every asset gets linked.
-    const camp: Campaign = {
-      id: crypto.randomUUID(),
-      brand_id: brain.id,
-      name: campaignName.trim(),
+    const camp = newLaunchCampaign(
+      brain.id,
+      campaignName.trim(),
       goal,
-      status: "planning",
-      created_at: Date.now(),
-      notes: `Launch date ${launchDate} · duration ${duration} · budget ${getCurrency().symbol}${budget} · platforms ${platforms.join(", ")}`,
-    };
+      `Launch date ${launchDate} · duration ${duration} · budget ${getCurrency().symbol}${budget} · platforms ${platforms.join(", ")}`
+    );
     await saveCampaign(camp);
     setCampaignId(camp.id);
 
@@ -454,7 +485,7 @@ function Inner() {
         maxTokens: 1200,
         signal: controller.signal,
       });
-      const strat = strategy.json ?? {};
+      const strat = asObject(strategy.json);
       await persistAsAd({
         campaign_id: camp.id,
         platform: "google" as any,
@@ -464,16 +495,19 @@ function Inner() {
         output_json: strategy.json,
         output_text: strategy.text,
         modelId: strategy.modelId,
+        providerId: strategy.providerId,
         usage: strategy.usage,
         cost: strategy.cost,
+        prompt: strategy.prompt,
+        maxTokens: strategy.maxTokens,
       });
 
       // ── Phases 2-5 · run in parallel; they don't depend on each other now that
       //              strategy has populated the system context.
-      const big_idea = strat.big_idea ?? "";
-      const positioning_one_liner = strat.positioning_one_liner ?? "";
-      const primary_cta = strat.primary_cta ?? "";
-      const proof_points = strat.proof_points ?? [];
+      const big_idea = asText(strat.big_idea);
+      const positioning_one_liner = asText(strat.positioning_one_liner);
+      const primary_cta = asText(strat.primary_cta);
+      const proof_points = asStringList(strat.proof_points);
 
       const tasks = await Promise.allSettled([
         runOnePhase({
@@ -554,21 +588,17 @@ function Inner() {
             output_json: t.value.json,
             output_text: t.value.text,
             modelId: t.value.modelId,
+            providerId: t.value.providerId,
             usage: t.value.usage,
             cost: t.value.cost,
+            prompt: t.value.prompt,
+            maxTokens: t.value.maxTokens,
           });
         })
       );
 
       // Update the dashboard "last generated" pill to the wizard's last completed asset.
-      rememberLastGenerated({
-        id: camp.id,
-        title: `Launch kit · ${common.campaign_name}`,
-        platform: "google",
-        campaign_type: "Launch Wizard",
-        brand_id: brain.id,
-        saved_at: Date.now(),
-      });
+      rememberLaunchKit(camp.id, common.campaign_name, brain.id);
       window.dispatchEvent(new Event("ados:usage"));
     } catch (e: any) {
       if (e?.name === "AbortError") {

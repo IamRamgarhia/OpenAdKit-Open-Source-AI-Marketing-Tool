@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -29,6 +29,7 @@ import { NAV_GROUPS } from "./nav-config";
 import { listBrains } from "@/lib/storage";
 import { getActiveBrainId, setActiveBrainId } from "@/lib/settings";
 import type { BrandBrain } from "@/lib/brand-brain";
+import { isNavItemActive } from "@/lib/nav-active";
 
 // Lucide doesn't ship a Google-G icon by default; use SearchIcon as the closest
 // semantic fit (Google = search ads in this app). Same for TikTok → Music2.
@@ -47,7 +48,25 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   "Data": Database,
 };
 
+/**
+ * useSearchParams() needs a Suspense boundary on statically prerendered pages.
+ * The fallback renders the same sidebar without query awareness, so the
+ * server HTML is complete and hydration swaps in the query-aware version.
+ */
 export function Sidebar() {
+  return (
+    <Suspense fallback={<SidebarView search="" />}>
+      <SidebarWithSearch />
+    </Suspense>
+  );
+}
+
+function SidebarWithSearch() {
+  const params = useSearchParams();
+  return <SidebarView search={params?.toString() ?? ""} />;
+}
+
+function SidebarView({ search }: { search: string }) {
   const path = usePathname();
   const [open, setOpen] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -86,19 +105,22 @@ export function Sidebar() {
     setSwitcherOpen(false);
   }
 
-  // Auto-expand the group containing the current path so users never have a
-  // hidden active item.
-  useEffect(() => {
-    if (!path) return;
-    setOpen((cur) => {
-      const next = { ...cur };
-      for (const g of NAV_GROUPS) {
-        const hit = g.items.some((i) => path === i.href || (i.href !== "/" && path.startsWith(i.href)));
-        if (hit) next[g.title] = true;
-      }
-      return next;
-    });
-  }, [path]);
+  // Auto-expand the group containing the current route so users never have a
+  // hidden active item. Done as "adjust state while rendering" (keyed on the
+  // location) rather than in an effect, which would render twice per nav.
+  const locationKey = `${path ?? ""}?${search}`;
+  const [expandedFor, setExpandedFor] = useState<string | null>(null);
+  if (path && expandedFor !== locationKey) {
+    setExpandedFor(locationKey);
+    const hits = NAV_GROUPS.filter((g) => g.items.some((i) => isNavItemActive(path, search, i)));
+    if (hits.some((g) => !open[g.title])) {
+      setOpen((cur) => {
+        const next = { ...cur };
+        for (const g of hits) next[g.title] = true;
+        return next;
+      });
+    }
+  }
 
   // Escape + click-outside close the brand switcher (ARIA dialog pattern, audit findings #33).
   useEffect(() => {
@@ -269,9 +291,7 @@ export function Sidebar() {
           const Icon = GROUP_ICONS[g.title];
           // Does any item in this group match the current path? Used to
           // highlight the group header even when collapsed.
-          const hasActive = g.items.some(
-            (i) => path === i.href || (i.href !== "/" && path?.startsWith(i.href))
-          );
+          const hasActive = g.items.some((i) => isNavItemActive(path, search, i));
           return (
             <div key={g.title}>
               <button
@@ -331,8 +351,7 @@ export function Sidebar() {
               >
                 <div className="mt-0.5 mb-1 space-y-px">
                   {g.items.map((item, itemIdx) => {
-                    const active =
-                      path === item.href || (item.href !== "/" && path?.startsWith(item.href));
+                    const active = isNavItemActive(path, search, item);
                     const href = item.query ? `${item.href}?${item.query}` : item.href;
                     const linkKey = `${g.title}::${item.href}::${item.query ?? ""}`;
                     return (

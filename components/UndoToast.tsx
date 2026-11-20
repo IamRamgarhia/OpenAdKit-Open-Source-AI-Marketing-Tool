@@ -19,47 +19,55 @@ export function showUndoToast(detail: UndoEvent) {
   window.dispatchEvent(new CustomEvent("ados:undo", { detail }));
 }
 
+interface QueuedUndo extends UndoEvent {
+  id: number;
+}
+
 export function UndoToast() {
   // Queue of pending undo events. A rapid double-delete used to silently drop
   // the first one because we only held a single slot. Now the second event
   // joins the queue and surfaces when the first dismisses / times out.
   // (Audit finding #43.)
-  const [queue, setQueue] = useState<UndoEvent[]>([]);
-  const [remaining, setRemaining] = useState(0);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [queue, setQueue] = useState<QueuedUndo[]>([]);
+  const nextId = useRef(0);
   const evt = queue[0] ?? null;
 
   useEffect(() => {
     const onUndo = (e: CustomEvent<UndoEvent>) => {
-      setQueue((q) => [...q, e.detail]);
+      const id = ++nextId.current;
+      setQueue((q) => [...q, { ...e.detail, id }]);
     };
     window.addEventListener("ados:undo", onUndo);
     return () => window.removeEventListener("ados:undo", onUndo);
   }, []);
 
-  useEffect(() => {
-    if (!evt) { setRemaining(0); return; }
-    setRemaining(evt.timeoutMs ?? 7000);
-    if (tickRef.current) clearInterval(tickRef.current);
-    tickRef.current = setInterval(() => {
-      setRemaining((r) => {
-        const next = r - 100;
-        if (next <= 0) {
-          if (tickRef.current) clearInterval(tickRef.current);
-          setQueue((q) => q.filter((x) => x !== evt));
-          return 0;
-        }
-        return next;
-      });
-    }, 100);
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, [evt]);
-
   if (!evt) return null;
+  const dismiss = (id: number) => setQueue((q) => q.filter((x) => x.id !== id));
+  // key= remounts the toast per event, so its countdown starts fresh without
+  // resetting state from an effect.
+  return <UndoToastItem key={evt.id} evt={evt} onDone={() => dismiss(evt.id)} />;
+}
 
-  const pct = (remaining / (evt.timeoutMs ?? 7000)) * 100;
+function UndoToastItem({ evt, onDone }: { evt: QueuedUndo; onDone: () => void }) {
+  const total = evt.timeoutMs ?? 7000;
+  const [remaining, setRemaining] = useState(total);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  });
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRemaining((r) => Math.max(0, r - 100));
+    }, 100);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (remaining <= 0) onDoneRef.current();
+  }, [remaining]);
+
+  const pct = (remaining / total) * 100;
 
   return (
     <div className="fixed bottom-14 left-1/2 -translate-x-1/2 z-50 min-w-[320px] max-w-md">
@@ -68,20 +76,19 @@ export function UndoToast() {
           <span className="text-sm text-ink flex-1">{evt.message}</span>
           <button
             onClick={async () => {
-              const target = evt;
               try {
-                await target.undo();
+                await evt.undo();
               } catch (err) {
                 console.error("Undo failed", err);
               } finally {
-                setQueue((q) => q.filter((x) => x !== target));
+                onDone();
               }
             }}
             className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-live hover:bg-live/10 px-2 py-1"
           >
             <Undo2 size={12} /> Undo
           </button>
-          <button onClick={() => setQueue((q) => q.filter((x) => x !== evt))} className="text-ink-faint hover:text-ink" aria-label="Dismiss">
+          <button onClick={onDone} className="text-ink-faint hover:text-ink" aria-label="Dismiss">
             <X size={14} />
           </button>
         </div>

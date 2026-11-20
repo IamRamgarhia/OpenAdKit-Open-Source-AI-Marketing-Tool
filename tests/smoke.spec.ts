@@ -35,6 +35,11 @@ const PUBLIC_ROUTES = [
   "/checklist/daily",
   "/checklist/weekly",
   "/checklist/monthly",
+  // Static learning / reference content is public (owner decision, v2) — only
+  // the AI actions on these pages ask for a key.
+  "/strategy/decision-tree",
+  "/learn/ctr",
+  "/learn/courses/google",
 ];
 
 // Routes that are GATED behind ApiKeyGate. Without a key, they should either
@@ -47,7 +52,6 @@ const GATED_ROUTES = [
   "/campaigns",
   "/suggestions",
   "/strategy",
-  "/strategy/decision-tree",
   "/batch",
   "/report",
   "/launch/wizard",

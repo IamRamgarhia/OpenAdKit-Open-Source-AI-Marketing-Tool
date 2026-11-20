@@ -8,74 +8,64 @@ export interface BudgetPlannerInput {
   current_cvr: string;
   has_organic: string;
   geo: string;
+  /** Platform the volume projection is computed for (benchmarks are per platform). */
+  primary_platform?: string;
+  /** lib/benchmarks INDUSTRIES value, or "" for none. */
+  industry?: string;
+  /** User's own average CPC, if known. */
+  avg_cpc?: string;
 }
 
+/**
+ * The model allocates budget and explains trade-offs. It is NOT asked for
+ * impressions / clicks / conversions / ROAS / break-even CPA any more — those
+ * are computed client-side from the user's inputs (lib/budget-estimates.ts),
+ * because "estimates" from the model were arithmetic on invented numbers.
+ */
 export function buildBudgetPlannerPrompt(input: BudgetPlannerInput): string {
   const cc = getCurrencyCode();
-  return `Build a monthly ad budget plan. Be specific with amounts in ${cc} — every line must add up to the total.
+  return `Build a monthly ad budget allocation plan. Amounts in ${cc} — every split must add up to the total.
 
 INPUT:
 - Currency: ${cc} (ALL amounts in the output should be in ${cc})
 - Total monthly budget: ${cc} ${input.total_monthly}
 - Goal: ${input.goal}
 - Business type: ${input.business_type}
-- Current AOV / LTV: ${input.current_aov_or_ltv}
-- Current site CVR: ${input.current_cvr}
-- Existing organic traffic: ${input.has_organic}
-- Geo: ${input.geo}
+- Current AOV / LTV: ${input.current_aov_or_ltv || "not given"}
+- Current site CVR: ${input.current_cvr || "not given"}
+- Existing organic traffic: ${input.has_organic || "not given"}
+- Geo: ${input.geo || "not given"}
+- Main platform under consideration: ${input.primary_platform || "not specified"}
 
 PRODUCE:
 
-1. PLATFORM SPLIT — % and dollar amount per platform. Justify each (must reference user's actual inputs, not generic logic).
+1. PLATFORM SPLIT — % and amount per platform. Justify each (must reference the user's actual inputs, not generic logic).
 
-2. FUNNEL SPLIT — within those platform amounts, how much for:
-   - Awareness (cold prospecting)
-   - Consideration (mid-funnel content/retargeting of engagers)
-   - Conversion (hot retargeting, conversion campaigns)
-   The split shifts based on goal + existing organic baseline.
+2. FUNNEL SPLIT — within those amounts, how much for awareness (cold prospecting), consideration (mid-funnel / engager retargeting) and conversion (hot retargeting). The split shifts with goal + existing organic baseline.
 
-3. DAILY BUDGET PER CAMPAIGN — translate monthly to daily, with the campaign-by-campaign breakout. Account for: platforms that need ≥ $X/day to exit learning phase (cite the number for each platform).
+3. CAMPAIGN BREAKOUT — campaign-by-campaign monthly amounts. Note which platforms need a minimum daily spend to exit the learning phase, as guidance (say "typically", don't present it as a guarantee).
 
-4. ESTIMATED VOLUME PROJECTION — using realistic benchmarks for ${input.business_type}:
-   - Estimated impressions
-   - Estimated clicks
-   - Estimated conversions
-   - Estimated CPA
-   - Estimated revenue (if AOV given)
-   - ROAS projection
-   Be honest — directional only, mark assumptions.
+4. SATURATION FLAGS — qualitative: where adding more budget at this level is likely to hit diminishing returns, and why.
 
-5. BREAK-EVEN ANALYSIS:
-   - What CPA does this budget need to hit to be profitable at the given AOV/LTV?
-   - At what spend level does each platform stop being efficient (saturation flag)?
+5. RESERVE — recommend setting aside 10-15% for testing, scaling winners and replacing fatigued creative.
 
-6. RESERVE — recommend setting aside 10-15% for: testing, scaling winners, replacing fatigued creative.
+6. NO-GO LIST — what NOT to spend on at this budget level. Specific.
 
-7. NO-GO LIST — what NOT to spend on at this budget level. Specific.
+DO NOT output impressions, clicks, conversions, CPA, revenue, ROAS or break-even figures — the app computes those from the user's own numbers.
 
 Return ONLY valid JSON:
 {
   "platform_split": [
-    { "platform": "string", "pct": 0, "monthly_usd": 0, "daily_usd": 0, "rationale": "string (cite user's inputs)" }
+    { "platform": "string", "pct": 0, "monthly_usd": 0, "rationale": "string (cite user's inputs)" }
   ],
   "funnel_split_overall": [
     { "stage": "awareness|consideration|conversion", "pct": 0, "monthly_usd": 0 }
   ],
   "campaign_breakout": [
-    { "campaign_name": "string", "platform": "string", "funnel_stage": "string", "daily_usd": 0, "monthly_usd": 0, "minimum_to_exit_learning": 0 }
+    { "campaign_name": "string", "platform": "string", "funnel_stage": "string", "monthly_usd": 0, "learning_phase_note": "string" }
   ],
-  "volume_projection": {
-    "impressions": 0,
-    "clicks": 0,
-    "conversions": 0,
-    "cpa_usd": 0,
-    "revenue_usd": 0,
-    "roas": 0,
-    "directional_note": "string"
-  },
   "break_even": {
-    "cpa_break_even_usd": 0,
-    "saturation_flags": [{ "platform": "string", "saturates_above_usd_per_day": 0 }]
+    "saturation_flags": [{ "platform": "string", "reason": "string" }]
   },
   "reserve": {
     "pct": 0,
