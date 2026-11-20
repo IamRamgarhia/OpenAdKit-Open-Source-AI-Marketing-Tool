@@ -5,7 +5,7 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 ## [Unreleased]
 
 ### Fixed
-- Windows uninstall now also removes the Next.js runtime cache (`app.nextserveroute-cache`), so the program folder is fully removed. User data was never stored there.
+- Windows uninstall now also removes the Next.js runtime cache (`app/.next/server/route-cache`), so the program folder is fully removed. User data was never stored there.
 
 ## [2.0.2] — 2026-11-20
 
