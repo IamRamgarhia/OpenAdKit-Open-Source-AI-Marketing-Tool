@@ -29,6 +29,8 @@ import {
   lockVault, primePlaintextCache, clearPlaintextCache,
 } from "@/lib/key-vault";
 import { useIsClient } from "@/lib/hooks/use-is-client";
+import { checkForUpdate, setUpdateChecksEnabled, updateChecksEnabled } from "@/components/UpdateNotice";
+import { McpConnectPanel } from "@/components/McpConnectPanel";
 
 /**
  * NOT wrapped in <ApiKeyGate>. Settings is where you ADD a key — gating it on
@@ -82,6 +84,8 @@ function SettingsInner() {
   const [tone, setTone] = useState(getToneOverride);
   const [charWarn, setCharWarnState] = useState(getCharWarn);
   const [autoSave, setAutoSaveState] = useState(getAutoSave);
+  const [updateCheck, setUpdateCheckState] = useState(updateChecksEnabled);
+  const [updateMsg, setUpdateMsg] = useState("");
   const [jina, setJinaState] = useState(getJinaKey);
   const [currency, setCurrencyState] = useState(getCurrencyCode);
   const [budget, setBudget] = useState(() => {
@@ -275,6 +279,21 @@ function SettingsInner() {
   function persistTone(v: string) { setTone(v); setToneOverride(v); }
   function persistCharWarn(v: boolean) { setCharWarnState(v); setCharWarn(v); }
   function persistAutoSave(v: boolean) { setAutoSaveState(v); setAutoSave(v); }
+  function persistUpdateCheck(v: boolean) { setUpdateCheckState(v); setUpdateChecksEnabled(v); }
+  async function checkUpdatesNow() {
+    setUpdateMsg("Checking…");
+    try {
+      const r = await checkForUpdate();
+      if (!r) setUpdateMsg("The OpenAdKit background service isn't running, so updates can't be checked from here.");
+      else if (r.status === "network_error") setUpdateMsg("Couldn't reach GitHub. Check your internet connection.");
+      else if (r.update_available) {
+        setUpdateMsg(`Version ${r.latest} is available (you have ${r.current}).`);
+        window.dispatchEvent(new Event("ados:update-check"));
+      } else setUpdateMsg(`You're on the latest version (${r.current}).`);
+    } catch {
+      setUpdateMsg("Update check failed.");
+    }
+  }
 
   return (
     <div>
@@ -505,6 +524,15 @@ function SettingsInner() {
             </div>
             <ToggleRow label="character-count warnings" desc="badges when output exceeds platform limits" v={charWarn} on={persistCharWarn} />
             <ToggleRow label="auto-save to history" desc="every generation goes into /history automatically" v={autoSave} on={persistAutoSave} />
+            {!isHostedMode() ? (
+              <div>
+                <ToggleRow label="check for updates" desc="once a day, asks GitHub whether a newer OpenAdKit release exists (nothing else is sent)" v={updateCheck} on={persistUpdateCheck} />
+                <div className="flex items-center gap-3 mt-1">
+                  <button type="button" className="btn-ghost" onClick={checkUpdatesNow}>check now</button>
+                  {updateMsg ? <span className="text-[11px] text-ink-muted" role="status">{updateMsg}</span> : null}
+                </div>
+              </div>
+            ) : null}
             {/* Folder-sync only exists when the local sidecar is running.
                 In hosted mode this toggle has nothing to act on. */}
             {!isHostedMode() ? (
@@ -600,7 +628,7 @@ function SettingsInner() {
                 <strong>Hosted mode:</strong> brand brains + history live only in this browser's
                 IndexedDB. Clearing site data wipes everything. Export below and re-import on
                 a new browser / device to move your work. Want auto-backup to disk?{" "}
-                <a href="https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool#install-in-60-seconds" target="_blank" rel="noreferrer" className="underline">
+                <a href="https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool#download--install" target="_blank" rel="noreferrer" className="underline">
                   install locally
                 </a>.
               </div>
@@ -674,6 +702,8 @@ function SettingsInner() {
               </div>
             ) : null}
           </section>
+
+          {!isHostedMode() ? <McpConnectPanel /> : null}
 
           <section className="border border-neg/40 bg-neg/5 p-5 space-y-3">
             <h2 className="text-[10px] font-mono uppercase tracking-ui-mega text-neg">danger zone</h2>

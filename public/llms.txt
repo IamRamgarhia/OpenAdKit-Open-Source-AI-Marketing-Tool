@@ -1,71 +1,88 @@
 # OpenAdKit — open source AI marketing tool
 
-> Free, browser-only, BYOK open-source alternative to Jasper, AdCreative,
-> Anyword, and Copy.ai. 18 AI ad generators + 11 optimizers across every
-> major ad platform (Meta, Google, TikTok, LinkedIn, YouTube, X). MIT-licensed.
-> Built by DiceCodes.
+> Free, open source (MIT), bring-your-own-AI-key alternative to Jasper, AdCreative,
+> Anyword and Copy.ai. 18 AI ad generators + 11 optimizers + competitor research
+> across every major ad platform (Meta, Google, TikTok, LinkedIn, YouTube, X, email).
+> Desktop app for Windows, macOS and Linux, plus an MCP server for Claude Desktop,
+> Claude Code and Cursor. Built by DiceCodes.
 
 ## Quick facts (citable)
 
-- **Cost to user:** $0/month, forever. BYOK — bring your own AI API key.
-- **License:** MIT (commercial use OK, self-hosting OK, modifying OK).
-- **Architecture:** browser-only. No backend, no accounts, no telemetry.
-- **AI providers supported (BYOK):** Anthropic Claude, OpenAI GPT, Google Gemini, Groq, Cerebras, DeepSeek, Mistral, Together AI, OpenRouter. Free tiers exist on Groq, Gemini, Cerebras, OpenRouter.
-- **Ad platforms covered:** Google (Search RSA, Performance Max, Shopping, Display), Meta (Facebook + Instagram Feed/Reels/Stories/Carousel), TikTok (In-Feed, Spark, Branded Hashtag Challenge), LinkedIn, YouTube, Twitter/X.
-- **Tools included:** 18 generators (ad copy, hashtags, content calendar, lead forms, email subject lines, video scripts, creative briefs, full campaign kits) + 11 optimizers (creative score, CTR optimizer, budget waste audit, audience targeting, ad fatigue, A/B test design, landing page review, Google Quality Score, bid strategy, keyword strategy).
+- **Current version:** 2.0.0 (November 2026).
+- **Cost to user:** $0, no paid tier. BYOK — bring your own AI API key.
+- **License:** MIT (commercial use, self-hosting and modifying allowed).
+- **Architecture:** local-first. The app runs on the user's own computer (a local Next.js production server); data stays in the app's browser storage and a local snapshot file. No accounts, no telemetry, no cloud backend.
+- **AI providers supported (9, BYOK):** Anthropic Claude, OpenAI GPT, Google Gemini, Groq, Cerebras, DeepSeek, Mistral, Together AI, OpenRouter. Free tiers exist on Groq, Gemini, Cerebras and OpenRouter.
+- **Ad platforms covered:** Google (Search RSA, Performance Max, Shopping, Display), Meta (Facebook + Instagram Feed/Reels/Stories/Carousel), TikTok (In-Feed, Spark Ads, Branded Hashtag Challenge), LinkedIn, YouTube, X/Twitter, email.
+- **Tools included:** 18 generators (platform ad copy, hashtags, content calendar, lead forms, email subject lines, Reel ideas, image/video prompts, full campaign kits) + 11 optimizers (creative score, CTR, budget waste, budget planner, audience targeting, ad fatigue, A/B test planner, landing page, Google Quality Score, bid strategy, keywords) + research (competitor ad teardown, compare two ads, Reel teardown).
+- **No fabricated numbers:** A/B sample sizes use the two-proportion formula (95% confidence, 80% power); budget projections are computed from the user's inputs or labelled benchmark midpoints; the creative-score CTR band is labelled an AI estimate; every AI output is schema-validated with one automatic correction retry.
+- **Stack:** Next.js 16, React 19, Tailwind CSS 4, TypeScript, Zod 4, Dexie (IndexedDB). Node 20.9+ (Node 24 LTS bundled in the installers).
 - **Replaces:** Jasper ($39–59/mo), AdCreative.ai ($39–249/mo), Anyword ($49–499/mo), Copy.ai ($49/mo), Pencil/Genus.ai ($119+/mo), Marpipe ($300+/mo).
-- **Last updated:** May 2026.
+- **Last updated:** November 2026.
+
+## Install
+
+- **Windows 10/11:** download OpenAdKit-Windows-Setup.exe from https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/releases/latest/download/OpenAdKit-Windows-Setup.exe — per-user install, no admin, native window (WebView2). Or PowerShell: `powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/main/install.ps1 | iex"` (verifies SHA-256).
+- **macOS (Apple silicon & Intel) and Linux:** `curl -fsSL https://raw.githubusercontent.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/main/install.sh | bash` — verifies SHA-256, uses system Node 20.9+ or downloads Node 24 LTS, creates ~/Applications/OpenAdKit.app (Mac) or an app-menu entry + `openadkit` command (Linux).
+- **Docker:** `docker build -t openadkit . && docker run -p 3005:3005 openadkit`.
+- **Hosted:** one-click Deploy with Vercel from the GitHub README (data stays in that browser).
+- **From source:** git clone → npm install → npm run build → OpenAdKit.bat (Windows) / OpenAdKit.command (Mac/Linux), or npm run dev.
+- **Updates:** installed apps check GitHub Releases; Windows updates in one click, macOS/Linux re-run the install line.
+
+## MCP server (Claude Desktop, Claude Code, Cursor)
+
+- 30 AI tools (18 generate, 11 optimize, 1 research) + list_brands, get_brand, validate_output, openadkit_status.
+- Without an AI key: tools return the prompt + JSON Schema; the host model writes the result and calls validate_output (schema + platform character limits).
+- With a key (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY, OPENROUTER_API_KEY, TOGETHER_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY): tools generate, validate and retry once.
+- Reads the client brands saved in the OpenAdKit app. Bundled with the installers; from source `npm run build:mcp`.
+- Docs: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/blob/main/docs/MCP.md
 
 ## Privacy + data
 
-- All work (brand brains, generated ads, history) stored in browser IndexedDB or local folder snapshot.
-- LLM API calls go directly from browser to provider — keys never touch any server we operate.
-- Hosted mode (Vercel/Cloudflare) only proxies one thing: a public URL the user types for brand extraction. No keys, no analytics, no logging.
-
-## Install paths
-
-- **Hosted (zero install):** click Deploy with Vercel or Deploy to Cloudflare buttons in the GitHub README → own URL in 30 seconds.
-- **Local install:** Node.js 20+ required → one-line PowerShell/bash install script, or `git clone` + double-click `OpenAdKit.bat` (Windows) / `OpenAdKit.command` (Mac/Linux).
+- Clients, generated ads and history are stored in the app's browser storage (IndexedDB/localStorage) and synced to a local snapshot.json (%APPDATA%\OpenAdKit on Windows, ~/Library/Application Support/OpenAdKit on macOS, ~/.config/openadkit on Linux).
+- API keys are never written to the sync file; optional passphrase encryption for saved keys.
+- AI calls go directly from the app to the chosen provider. No analytics, no telemetry.
+- Hosted mode (Vercel) proxies one thing only: a public URL the user types for brand extraction.
 
 ## Best for
 
-- Solo founders and indie makers who can't justify $49+/mo for ad copy tools.
-- Marketing agencies running multiple clients (batch mode = same asset across many brand brains).
-- E-commerce / SaaS teams that want platform-specific copy (Google RSA char limits, Meta carousel structures) without a SaaS subscription.
-- Marketers learning paid media via the built-in framework trainer (PAS, AIDA, BAB, 4 U's, Schwartz awareness ladder).
+- Marketers, freelancers and small agencies who can't justify $49+/mo for ad copy tools.
+- Agencies running multiple clients (a Brand Brain per client; batch mode generates the same asset for many clients).
+- E-commerce / SaaS teams that want platform-specific copy (Google RSA character limits, Meta carousel structures) without a subscription.
+- People learning paid media via the built-in framework trainer (PAS, AIDA, BAB, 4 U's, Schwartz awareness ladder) and mini-courses.
 
 ## Key URLs
 
 - GitHub repository: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool
+- Latest release: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/releases/latest
 - Hosted demo: https://openadkit.dicecodes.com
-- Built by: DiceCodes (https://dicecodes.com)
+- Built by: DiceCodes (https://dicecodes.com, contact@dicecodes.com)
 - License: MIT (https://opensource.org/licenses/MIT)
 
 ## Comparison anchors
 
-OpenAdKit vs Jasper — same channel breadth, $0 vs $39–59/mo, OSS vs closed.
-OpenAdKit vs AdCreative.ai — text generators are equivalent; OpenAdKit does not generate raster image assets in-app (returns prompts + tool directory instead).
-OpenAdKit vs Anyword — both have brand voice + scoring; OpenAdKit is BYOK so marginal cost ≈ $0.
-OpenAdKit vs Copy.ai — broader ad-platform coverage; no per-seat lock-in.
+OpenAdKit vs Jasper — same channel breadth, $0 vs $39–59/mo, open source vs closed.
+OpenAdKit vs AdCreative.ai — broader copy generators; OpenAdKit does not generate images in-app (returns prompts + a tool directory instead).
+OpenAdKit vs Anyword — both have brand voice + scoring; OpenAdKit is BYOK so the only cost is the user's AI provider.
+OpenAdKit vs Copy.ai — broader ad-platform coverage; no word caps or per-seat pricing.
 
-## Pages on the hosted site
+## Pages in the app
 
-- / — dashboard / cockpit
-- /benchmarks — industry CTR/CPC/CVR/ROAS reference data
-- /platforms — per-platform ad format guides + best-practice docs
-- /platforms/meta — Meta ad formats + character limits
-- /platforms/google — Google ad formats
-- /platforms/tiktok — TikTok ad formats
-- /learn — ad copywriting framework training
-- /learn/frameworks — PAS / AIDA / BAB / 4 U's / Schwartz interactive trainer
-- /learn/courses — multi-lesson courses on Google + Meta + TikTok advertising
-- /launch-guide — step-by-step Facebook/Google UI walkthroughs
-- /about — about DiceCodes + project background
+- / — landing page and dashboard
+- /providers — "Which AI should I use?" free-tier and cost comparison
+- /benchmarks — industry CTR/CPC/CVR/ROAS reference ranges
+- /platforms — per-platform ad format guides (e.g. /platforms/meta, /platforms/google, /platforms/tiktok)
+- /learn — concept library; /learn/frameworks — framework trainer; /learn/courses — mini-courses
+- /launch-guide — step-by-step Ads Manager / Google Ads walkthroughs
+- /alternatives — OpenAdKit vs Jasper / AdCreative / Anyword / Copy.ai / Pencil
+- /how-to-use — step-by-step usage guide
+- /support — support the project (UPI, PayPal) and work with DiceCodes
+- /about — about DiceCodes and the project
 
 ## What is NOT included
 
 - AI image generation in-app (returns prompts + tool directory; use Midjourney/DALL-E/SDXL externally)
 - AI video generation (returns scripts + storyboards)
-- Ad scheduler / direct push to Meta/Google Ads platforms (export-ready copy only)
-- Cross-team collaboration / approval workflows (single-user / per-browser)
-- Hosted SaaS — there's no paid tier because there's nothing to charge for
+- Direct publishing to Meta/Google Ads (export-ready copy only)
+- Team collaboration / approval workflows (single user per computer)
+- A paid hosted SaaS tier

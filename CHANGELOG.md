@@ -4,6 +4,52 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-11-20
+
+### Added
+- **Desktop apps.** Windows: `OpenAdKit-Windows-Setup.exe` (per-user, no
+  admin) with a native WebView2 window, bundled Node 24 LTS, single instance,
+  clean shutdown. macOS / Linux: one-line `install.sh` (verified downloads,
+  `OpenAdKit.app` on Mac, app-menu entry + `openadkit` command on Linux,
+  `--uninstall` keeps data). Windows one-liner `install.ps1`.
+- **Update notifications.** Installed copies check GitHub releases (once a day,
+  can be turned off in Settings). Windows updates in one click: the Setup is
+  downloaded, verified against the release's SHA256SUMS and installed
+  silently, then OpenAdKit reopens. macOS/Linux get the install command.
+- **MCP server** (`openadkit-mcp`) for Claude Desktop, Claude Code, Cursor and
+  any MCP client: 30 generators/optimizers/research tools plus `list_brands`,
+  `get_brand`, `validate_output`, `openadkit_status`. Works with an AI key
+  (generates, validates, retries) or without one (returns the prompt + JSON
+  Schema; the assistant writes it and validates). Platform character limits
+  enforced. Bundled in the installers; the Windows installer can connect it
+  to Claude Desktop; Settings shows the exact config for this install.
+- **Support & about page** (UPI QR, PayPal, star / share / report, Work with
+  DiceCodes), sidebar credit, FUNDING.yml.
+- **Honest numbers.** A/B sample size and duration computed with the
+  two-proportion formula; budget projections computed from your inputs or
+  labelled benchmark midpoints; creative-score CTR labelled an AI estimate.
+- Public learn / benchmarks / platforms / decision-tree pages (no key needed)
+  and a real landing page at `/`.
+- Campaign picker on history and generator results; manual "Save to history".
+- `npm run eval`: real-output evaluation of all AI tools (needs a key).
+
+### Fixed (highlights of ~110 audit findings)
+- Prompts asked for `null` fields the schemas rejected → a wasted correction
+  call on most runs (7 generators). Contract test now covers all 32 pairs.
+- Claude 5.5 models added with correct pricing (Sonnet 5 was billed 50% high);
+  request bodies match each model's thinking / sampling rules.
+- Truncated or refused AI replies now say so instead of "wrong shape".
+- Sync merge is per-row by `updated_at` with tombstones: no lost edits, no
+  resurrected deletes. API keys and vault material never reach the sync file.
+- Budget hard stop enforced for every AI call; key vault encrypts keys saved
+  while locked.
+- Security: ReDoS-safe HTML stripping, DNS-pinned SSRF guard in the sidecar,
+  rate limit no longer bypassable via `X-Forwarded-For`.
+- Launch scripts work from any folder; Mac `.command` / `.sh` are executable;
+  packaged apps honour the port they were given.
+- Over-limit ad text (e.g. 31-character Google headlines) is rejected with the
+  exact field to shorten; prompts no longer push models to invent proof.
+
 ### Changed — platform upgrade (v2 phase 1)
 - **Next.js 14.2.5 → 16.4.6** (Turbopack). Closes a critical Next.js advisory
   and the high-severity zod / postcss / nanoid / source-map-js advisories:

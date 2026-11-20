@@ -1,6 +1,8 @@
 # Contributing to OpenAdKit
 
-Thanks for thinking about contributing. OpenAdKit is browser-only, BYOK, open source. There is no backend to deploy, no secrets to share, and no telemetry — meaning every contribution lands in production the moment it's merged. That focuses the work nicely.
+Thanks for thinking about contributing. OpenAdKit is open source, bring-your-own-key and local-first: there are no accounts, no server secrets and no telemetry. That keeps the work focused.
+
+Not a developer? You can still help a lot: [report a bug](https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/issues/new), suggest a generator your clients need, or improve the docs.
 
 ## Quick start
 
@@ -11,83 +13,99 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000, paste your Claude API key, you're in.
+Open <http://localhost:3005>, paste a key for any of the 9 providers (Groq and Gemini have free tiers), and you're in.
 
-Node 20.9+ is required by Next.js 16 — `.nvmrc` pins 24 (LTS). If your team is on an older Node, run via Docker (`docker build -t openadkit . && docker run -p 3005:3005 openadkit`) — no Node install needed.
+Node 20.9+ is required (Next.js 16); `.nvmrc` pins 24 (LTS). No Node? Use Docker: `docker build -t openadkit . && docker run -p 3005:3005 openadkit`.
+
+To try the full local app (production server + sync sidecar, like the installers ship), run `npm run build` once, then `OpenAdKit.bat` (Windows) or `bash OpenAdKit.command` (macOS / Linux).
 
 ## Project shape
 
 ```
-app/                      Next.js App Router pages
-components/               React UI primitives
+app/                      Next.js App Router pages (generate/, optimize/, research/, …)
+components/               React UI (GeneratorShell, AdMockup, Sidebar, nav-config.ts, …)
 lib/
-  ├── claude.ts           Claude API wrapper (streaming + non-streaming)
-  ├── stream-hook.ts      Throttled stream accumulator (one render per frame)
+  ├── llm.ts              Provider-agnostic call/stream + budget hard stop
+  ├── providers/          The 9 AI providers (catalogs, pricing, streaming)
+  ├── prompts/            One prompt template per tool
+  ├── schemas/            Zod output schemas (tolerant of nulls / numeric strings)
+  ├── tools/registry.ts   Framework-free tool registry used by the MCP server
+  ├── tools/limits.ts     Hard platform character limits
   ├── brand-brain.ts      Brand Brain types + system-prompt builder
-  ├── storage.ts          Dexie/IndexedDB schema
+  ├── storage.ts          Dexie / IndexedDB schema, merge + tombstones
+  ├── local-sync.ts       Folder-sync client (never syncs keys)
   ├── settings.ts         localStorage layer
-  ├── generator-config.ts Shared shape for generator pages
-  ├── checklists.ts       Daily/weekly/monthly checklist data
-  ├── learn-content.ts    Concept library index
-  └── prompts/            One Claude prompt template per file
+  └── key-vault.ts        Optional key encryption
+mcp/                      MCP server (server.ts, runtime.ts)
+scripts/                  Sidecar (local-sync.cjs), launchers, build + release helpers
+installer/                Windows WebView2 host + Inno Setup script
+tests/                    Playwright suites + output-quality eval
 ```
 
-## Adding a new generator (10 min)
+## Adding a new generator
 
-Most contributions will fall into this pattern. Example: adding "Pinterest Pin Ads".
+Most contributions follow this pattern. Example: adding "Pinterest Pin Ads".
 
-1. **Prompt** — create `lib/prompts/pinterest-ads.ts`. Export an `Input` interface and a `buildPinterestPrompt(input): string`. Include explicit char limits up top.
-2. **Page** — create `app/generate/pinterest/page.tsx`. Use `GeneratorShell` with a `GeneratorConfig`. Look at `app/generate/twitter/page.tsx` for the shortest example, or `app/generate/google/page.tsx` for the fullest output renderer.
-3. **Sidebar** — add a nav entry in `components/Sidebar.tsx` under the Generate group.
+1. **Prompt** — create `lib/prompts/pinterest-ads.ts`. Export an `Input` interface and a `buildPinterestPrompt(input): string`. Put the character limits up top.
+2. **Schema** — add the output schema in `lib/schemas/generators.ts`, wrapped with `tolerant()` like the others.
+3. **Page** — create `app/generate/pinterest/page.tsx` using `GeneratorShell` with a `GeneratorConfig`. `app/generate/twitter/page.tsx` is the shortest example; `app/generate/google/page.tsx` has the fullest output renderer.
+4. **Sidebar** — add an entry in `components/nav-config.ts` under the right platform group.
+5. **MCP** — add the tool to `lib/tools/registry.ts` so Claude Desktop / Claude Code / Cursor get it too. If the platform has hard limits, add them to `lib/tools/limits.ts`.
+6. **Tests** — `lib/__tests__/prompt-schema-contract.test.ts` has a coverage guard: every schema wired into a page needs a contract entry proving the prompt's JSON example passes the schema.
 
-That's it. The `GeneratorShell` handles streaming, character counts, history saving, cost tracking, Brand Brain injection, error state, and the abort button — you write the prompt and the output renderer.
+`GeneratorShell` handles streaming, character counts, history saving, cost tracking, Brand Brain injection, schema validation with one correction retry, error state and the stop button — you write the prompt and the output renderer.
 
-## Prompt engineering conventions
+## Prompt conventions
 
-These are the patterns OpenAdKit prompts follow. Borrow them when adding new ones:
-
-1. **Self-counted char limits with overage flags.** Every length-constrained field in the JSON schema should include a `chars` field and a `status: "ok"|"over"` field, with a `trimmed_alt` for overages. Don't trust the model to silently respect limits.
-2. **Declare angles first.** For ad-copy prompts, require the model to emit an `angles[]` array before writing variants. Variants reference angles by label.
-3. **Combinability clause** (Google Copycat pattern, verbatim): "Each variant must make sense standalone AND in any combination together."
-4. **Cascade from tightest constraint outward.** When generating multi-platform output, start at Google 30-char and expand to Meta 40, LinkedIn 150, etc. Don't write long-form first.
-5. **Pulse metrics, never letter grades.** For audit/optimization prompts: return 3 numbers with named contributors + fix pointers. Reject letter grades or hidden-reasoning scores.
-6. **"Name names" rule.** Every observation must NAME the specific phrase, campaign, keyword, or asset — never "some keywords are weak."
-7. **STOP conditions before optimization.** If tracking is broken, the prompt should halt and tell the user to fix that first, refusing to recommend changes.
-8. **Mode declaration.** Two-mode prompts (scratch vs iterate-from-data) should declare their mode at the top of the response.
-9. **Severity tiers with fix-time SLAs.** Use critical / high / medium / low with explicit time windows.
+1. **Self-counted character limits with overage flags.** Length-limited fields include `chars` and `status: "ok"|"over"`, with a `trimmed_alt` for overages. Don't trust the model to respect limits silently.
+2. **Declare angles first.** Ad-copy prompts emit an `angles[]` array before variants; variants reference angles by label.
+3. **Combinability clause** (Google pattern): "Each variant must make sense standalone AND in any combination together."
+4. **Start from the tightest limit.** For multi-platform output, start at Google's 30 characters and expand outward.
+5. **Numbers with named contributors, not letter grades.** Audit prompts return a few numbers with named reasons and fix pointers.
+6. **"Name names."** Every observation names the specific phrase, keyword, campaign or asset.
+7. **STOP conditions.** If tracking is broken, the prompt tells the user to fix that first.
+8. **Mode declaration.** Two-mode prompts (from scratch vs from data) say which mode they're in.
+9. **Severity tiers** (critical / high / medium / low) with time windows.
+10. **No invented numbers or proof.** Only use social proof, stats and customer names that are in the Brand Brain. If a number can be computed (sample size, projections), compute it in code (`lib/ab-math.ts`, `lib/budget-estimates.ts`) and pass it to the model as a fact.
 
 ## Code conventions
 
 - **TypeScript strict.** No `any` escape hatches unless you really mean it.
-- **Streaming everywhere.** Never call the non-streaming Claude path for user-facing generators. `useThrottledStream` + `streamClaude` is the pattern.
-- **No backend.** Don't add API routes that proxy to Anthropic. The whole product runs in the browser by design.
+- **Streaming for user-facing generators** via `GeneratorShell` / `llmStream` and `useThrottledStream`.
+- **No server-side AI calls.** AI requests go from the app straight to the user's chosen provider. Don't add API routes that proxy to providers.
 - **No telemetry, no analytics calls.** Period.
-- **Font + color tokens** are defined in `tailwind.config.ts`. Use semantic classes (`text-live`, `border-base-600`) rather than raw colors.
-- **Prefer hairline borders over cards.** Density-first.
-
-## Performance
-
-- Stream-throttled at `requestAnimationFrame` to avoid jitter at high token rates.
-- All routes statically prerendered; client work runs in browser only.
-- Memoize output renderers when they're heavy. The `GeneratorShell` already memoizes input fields.
-- Use `next/font/google` for self-hosted fonts (no CDN waterfall).
+- **Design tokens** live in the `@theme` block of `app/globals.css`. Use semantic classes (`text-live`, `border-base-600`) rather than raw colors.
+- **React Compiler lint rules are errors** (`npm run lint`): no `setState` in effects, no impure calls during render.
 
 ## Privacy & security
 
-- Never log or store the API key outside `localStorage`.
-- Never add any `fetch()` to a server you don't fully trust. The only outbound calls OpenAdKit makes are to the API host of whichever AI provider the user selected (see `lib/providers/`), plus the optional URL reader used by brand extraction.
-- Don't ship any analytics or feature flag SDK.
+- Never write API keys anywhere except the browser's `localStorage` (or the encrypted vault). `lib/local-sync.ts` `isSyncablePrefKey()` keeps them out of the sync file — keep it that way.
+- The only outbound calls are the selected provider's API, the URL readers used for brand extraction, and GitHub release checks for updates. Don't add others.
+- Don't ship analytics or feature-flag SDKs.
+
+## Checks
+
+```bash
+npm run typecheck
+npm test               # Vitest unit + integration tests
+npm run lint
+npm run build
+npm run test:smoke     # Playwright, against a running production server (see .github/workflows/ci.yml)
+npm run build:mcp      # if you touched the MCP server or registry
+```
+
+`npm run eval` runs every AI tool against a real provider (key in `.env.test.local`) and checks character limits, banned hype words, invented statistics and retries. It refuses to run without a key.
 
 ## PR checklist
 
-- [ ] `npm run typecheck` passes
-- [ ] `npm run build` passes
-- [ ] Tested in browser with a real provider key (any of the 9 — Groq and Gemini have free tiers)
-- [ ] No new outbound network calls except the selected provider's API host
-- [ ] No new env vars (BYOK only — there are no server secrets)
-- [ ] Prompts include character-limit self-validation
-- [ ] No new fonts loaded from external CDN (use `next/font`)
+- [ ] `npm run typecheck`, `npm test`, `npm run lint` and `npm run build` pass
+- [ ] Tested in the app with a real provider key (any of the 9)
+- [ ] No new outbound network calls
+- [ ] No new server secrets (BYOK only)
+- [ ] Prompts include character-limit self-checks and don't invite invented numbers
+- [ ] New generator added to `lib/tools/registry.ts` and the contract test
+- [ ] No fonts loaded from an external CDN (use `next/font`)
 
 ## License
 
-By contributing, you agree your contribution will be licensed under MIT.
+By contributing, you agree your contribution is licensed under MIT.

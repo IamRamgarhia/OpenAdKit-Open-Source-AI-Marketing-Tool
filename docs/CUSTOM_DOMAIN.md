@@ -1,82 +1,59 @@
 # Custom local domain for OpenAdKit
 
-Want `http://openadkit.local:3005` instead of `http://localhost:3005`? You have three options, ranked easiest first.
+Want `http://openadkit.localhost:<port>` instead of `http://127.0.0.1:<port>`? This guide is for people running OpenAdKit in a browser (macOS, Linux, or a source checkout). The Windows app opens in its own window, so there's no address bar to tidy up.
+
+> **Read this first: browser data belongs to one address.** Your browser stores OpenAdKit's clients, history and API keys separately for every address — `127.0.0.1:41573`, `localhost:41573` and `openadkit.localhost:41573` are three different stores. When you switch address, the app starts empty there: your clients come back from the sync file (if the sidecar is running), but **you'll need to paste your API keys again**, because keys are never written to the sync file. Pick one address and stick with it.
+
+## Which port does my copy use?
+
+| Install | Where the port is saved |
+|---|---|
+| macOS / Linux installer | `ports` file in the app folder (`~/Library/Application Support/OpenAdKit/runtime/ports` or `~/.local/share/openadkit/ports`) — first number is the web app |
+| Windows app | `%LOCALAPPDATA%\OpenAdKit\ports.txt` |
+| Source checkout | `PORT=` in `.env.local` (`npm run dev` uses 3005) |
+
+The installers pick a free pair in the 41573+ range on first launch and keep it. Below, replace `<port>` with yours.
 
 ---
 
 ## Option 1 · `*.localhost` · zero setup, recommended
 
-**All modern browsers** (Chrome, Firefox, Safari, Edge, Brave, Arc) automatically resolve any hostname ending in `.localhost` to `127.0.0.1`. No hosts-file edits, no DNS config, no admin privileges. RFC 6761 compliant.
-
-So you can open these RIGHT NOW with no setup:
+Modern browsers (Chrome, Firefox, Safari, Edge, Brave, Arc) resolve any name ending in `.localhost` to your own computer. No hosts-file edits, no admin rights.
 
 ```
-http://openadkit.localhost:3005/
-http://acme.localhost:3005/
-http://anything-you-want.localhost:3005/
+http://openadkit.localhost:<port>/
 ```
 
-Substitute your port if you changed it.
+OpenAdKit treats `*.localhost` as local, so folder sync and the local website reader keep working.
 
-**Pros:** instant, no admin, no machine changes
-**Cons:** you still see the port number; some weird command-line tools (curl on macOS) might need extra args
+**Pros:** instant, no admin, no system changes
+**Cons:** the port is still visible; it's a new address, so re-enter your API keys once
 
 This is what most people want.
 
 ---
 
-## Option 2 · Hosts-file entry · pretty URL with no port
+## Option 2 · Hosts-file entry (`openadkit.local`) · advanced
 
-Want `http://openadkit.local/` (no port at all)? You need two things:
-1. **A hosts-file entry** mapping `openadkit.local` → `127.0.0.1`
-2. **The web app running on port 80** (browser's default for HTTP)
+You can add a hosts-file entry so `openadkit.local` points to your computer:
 
-Port 80 needs root/admin privileges to bind. So this requires admin rights, every time you start.
-
-### Set up the hosts entry (one time, admin/sudo)
-
-**Windows:**
-1. Right-click `scripts\set-domain.bat`
-2. Choose **"Run as administrator"**
-3. Confirm the UAC prompt
-
-**Mac / Linux:**
-```bash
-sudo bash scripts/set-domain.sh
-```
+- **Windows:** right-click `scripts\set-domain.bat` → **Run as administrator**
+- **Mac / Linux:** `sudo bash scripts/set-domain.sh`
 
 This adds one line to your hosts file:
+
 ```
 127.0.0.1   openadkit.local
 ```
 
-### Run OpenAdKit on port 80
+**Important limitation:** OpenAdKit only treats `localhost`, `127.0.0.1` and `*.localhost` as local. At `openadkit.local` it behaves like a hosted copy — **folder sync and the local website reader are switched off** and your work lives only in that browser. If you want sync, use Option 1.
 
-```bash
-# .env.local
-PORT=80
-```
-
-Then start with admin/sudo:
-- Windows: right-click `scripts\start.bat` → Run as administrator
-- Mac/Linux: `sudo bash scripts/start.sh`
-
-Open `http://openadkit.local/` and you're in.
-
-**Pros:** clean URL, no port shown
-**Cons:** needs admin to start every time (port 80 is privileged); hosts file is global to your machine; one entry per app
+Hiding the port as well (`http://openadkit.local/`) would mean running the web app on port 80, which needs admin rights every time and isn't supported by the installers. A reverse proxy (Option 3) is a cleaner way to do that.
 
 ### Undo the hosts entry
 
-**Windows:**
-1. Right-click Notepad → "Run as administrator"
-2. Open `C:\Windows\System32\drivers\etc\hosts`
-3. Delete the line containing `openadkit.local`
-
-**Mac / Linux:**
-```bash
-sudo sed -i.bak '/openadkit\.local/d' /etc/hosts
-```
+- **Windows:** from an administrator Command Prompt in the OpenAdKit folder, run `scripts\set-domain.bat remove` — or edit `C:\Windows\System32\drivers\etc\hosts` in Notepad (run as administrator) and delete the `openadkit.local` line.
+- **Mac / Linux:** `sudo bash scripts/set-domain.sh remove`
 
 ---
 
@@ -86,25 +63,20 @@ If you already run a local reverse proxy:
 
 ```
 # Caddyfile
-openadkit.local {
-  reverse_proxy localhost:3005
+openadkit.localhost {
+  reverse_proxy 127.0.0.1:<port>
 }
 ```
 
-Then `caddy run` from this folder, open `https://openadkit.local/` (Caddy auto-issues a local cert). Same pattern with nginx.
-
-This is overkill for most people but lovely if you already use a local reverse proxy for other projects.
+Using a `.localhost` name keeps sync working (see Option 2's limitation). This is overkill for most people but handy if you already route other local projects this way.
 
 ---
 
 ## Recommendation
 
-- **Just starting?** Use `openadkit.localhost:3005`. Done.
-- **Want it pretty for a demo or daily use?** Hosts entry + port 80.
-- **Run lots of local projects?** Set up Caddy once, route everything.
-
----
+- **Most people:** `http://openadkit.localhost:<port>/` — or just keep the address the app opened with.
+- **Never switch addresses casually** — each one has its own browser storage.
 
 ## What about HTTPS?
 
-OpenAdKit's runtime doesn't need HTTPS — everything runs locally and the API keys are localStorage-only, never sent over the network except to your chosen LLM provider (which IS HTTPS). For a polished demo, Caddy (option 3) gives you trusted local HTTPS automatically.
+You don't need it. Everything runs on your own computer, and your API key only travels to your chosen AI provider, which always uses HTTPS.

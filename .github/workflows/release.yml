@@ -46,6 +46,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run build:mcp
       - run: node scripts/build-payload.cjs
       - name: Smoke-test the payload with plain node
         run: |
@@ -59,6 +60,7 @@ jobs:
           path: |
             dist/payload
             dist/OpenAdKit-app.tar.gz
+            mcp/dist/openadkit-mcp.mjs
           retention-days: 7
 
   windows:
@@ -69,7 +71,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: payload
-          path: dist
+          path: .
       - uses: actions/setup-node@v4
         with:
           node-version: 24.x
@@ -107,9 +109,10 @@ jobs:
       - name: Collect assets + checksums
         run: |
           mkdir out
-          cp art/payload/OpenAdKit-app.tar.gz out/
+          cp art/payload/dist/OpenAdKit-app.tar.gz out/
+          cp art/payload/mcp/dist/openadkit-mcp.mjs out/
           cp art/windows/OpenAdKit-Windows-Setup.exe out/
-          (cd out && sha256sum OpenAdKit-app.tar.gz OpenAdKit-Windows-Setup.exe > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          (cd out && sha256sum OpenAdKit-app.tar.gz OpenAdKit-Windows-Setup.exe openadkit-mcp.mjs > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - name: Create or update the draft release
         if: startsWith(github.ref, 'refs/tags/v')
         env:

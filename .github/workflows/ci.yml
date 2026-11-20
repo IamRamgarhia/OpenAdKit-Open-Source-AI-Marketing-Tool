@@ -69,7 +69,7 @@ jobs:
       - name: Playwright smoke
         env:
           BASE_URL: http://localhost:3055
-        run: npx playwright test tests/smoke.spec.ts --reporter=line
+        run: npx playwright test tests/smoke.spec.ts tests/wiring.spec.ts --reporter=line
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4

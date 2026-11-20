@@ -78,6 +78,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
+Name: "claudedesktop"; Description: "Connect OpenAdKit to Claude Desktop (adds its MCP server; other servers are kept)"; GroupDescription: "AI assistants:"; Check: ClaudeDesktopFound
 
 [InstallDelete]
 ; Replace the app payload wholesale on update so files removed upstream
@@ -93,9 +94,25 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
+Filename: "{app}\node\node.exe"; Parameters: """{app}\app\scripts\register-mcp.cjs"""; Flags: runhidden waituntilterminated; Tasks: claudedesktop; StatusMsg: "Connecting to Claude Desktop..."
 Filename: "{app}\{#AppExe}"; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent
+; In-app one-click updates run Setup with /SILENT /RELAUNCH: reopen afterwards.
+Filename: "{app}\{#AppExe}"; Flags: nowait; Check: ShouldRelaunch
+
+[UninstallRun]
+Filename: "{app}\node\node.exe"; Parameters: """{app}\app\scripts\register-mcp.cjs"" --remove"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveClaudeMcp"
 
 [Code]
+function ClaudeDesktopFound(): Boolean;
+begin
+  Result := DirExists(ExpandConstant('{userappdata}\Claude'));
+end;
+
+function ShouldRelaunch(): Boolean;
+begin
+  Result := WizardSilent() and (Pos('/RELAUNCH', Uppercase(GetCmdTail())) > 0);
+end;
+
 function InstalledVersion(): String;
 var
   Key: String;
