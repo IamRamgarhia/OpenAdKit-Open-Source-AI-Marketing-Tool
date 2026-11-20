@@ -289,6 +289,28 @@ export async function ingestUrl(rawUrl: string, signal?: AbortSignal): Promise<I
   };
 }
 
+/** Path key for subpage dedupe: trailing slashes stripped so /about and
+ *  /about/ collide, while the root stays "/". (The old replace(/\/+$/, "/")
+ *  kept the slash on one form only, so both were fetched.) */
+export function subpageDedupeKey(pathname: string): string {
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
+/** Resolve candidate paths against `origin`, deduped, at most `limit`. */
+export function subpageTargets(origin: string, candidates: string[], limit: number): string[] {
+  const seen = new Set<string>();
+  const targets: string[] = [];
+  for (const path of candidates) {
+    const u = new URL(path, origin);
+    const key = subpageDedupeKey(u.pathname);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    targets.push(u.toString());
+    if (targets.length >= limit) break;
+  }
+  return targets;
+}
+
 /**
  * Multi-page ingest. Given a successful homepage ingest, derives 2-3 likely
  * subpages (/about, /pricing, /services, /contact) from the metadata's
@@ -315,17 +337,7 @@ export async function ingestSubpages(
     "/why-us", "/team",
   ];
 
-  // Dedupe by path (avoid /about + /about/ counting separately).
-  const seen = new Set<string>();
-  const targets: string[] = [];
-  for (const path of candidates) {
-    const u = new URL(path, base.origin);
-    const key = u.pathname.replace(/\/+$/, "/");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    targets.push(u.toString());
-    if (targets.length >= maxPages * 2) break;
-  }
+  const targets = subpageTargets(base.origin, candidates, maxPages * 2);
 
   const fetches = targets.map(async (url) => {
     const result = await trySidecar(url, signal).catch(() => null);

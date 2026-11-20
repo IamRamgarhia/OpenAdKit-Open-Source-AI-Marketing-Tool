@@ -71,7 +71,7 @@ describe("buildBrandSystemPrompt", () => {
   it("includes the framework stack by default", () => {
     const b = { ...emptyBrandBrain(), business_name: "Acme" };
     const prompt = buildBrandSystemPrompt(b);
-    expect(prompt).toContain("ADFORGE FRAMEWORK STACK");
+    expect(prompt).toContain("OPENADKIT FRAMEWORK STACK");
     // Schwartz's awareness ladder is the cornerstone of the stack.
     expect(prompt).toContain("AWARENESS LEVEL");
   });
@@ -79,7 +79,7 @@ describe("buildBrandSystemPrompt", () => {
   it("suppresses the framework stack when skip_framework_stack is true", () => {
     const b = { ...emptyBrandBrain(), business_name: "Acme" };
     const prompt = buildBrandSystemPrompt(b, { skip_framework_stack: true });
-    expect(prompt).not.toContain("ADFORGE FRAMEWORK STACK");
+    expect(prompt).not.toContain("OPENADKIT FRAMEWORK STACK");
     expect(prompt).not.toContain("AWARENESS LEVEL");
     // But the brand brain block still renders.
     expect(prompt).toContain("Acme");

@@ -29,10 +29,16 @@ export function suggestFromBrain(field: InputField, brain: BrandBrain | null): s
     return brain.business_name;
   }
 
+  // Age band lives in demographics ("35-64, homeowners"), not in audience_who.
+  if (n === "audience_age" || n === "age" || n === "age_range") return brain.audience_demographics || "";
+
+  // Role/title ("VP Marketing at B2B SaaS") is a who, never a demographic string.
+  if (n === "audience_role") return brain.audience_who || "";
+
   // Audience — any of these variants pulls audience_who; fall back to demographics
   if (
     n === "audience" || n === "audience_who" || n === "audience_context" || n === "audience_one_liner" ||
-    n === "audience_role" || n === "audience_age" || n === "audience_targeting" || n === "audience_signal" ||
+    n === "audience_targeting" || n === "audience_signal" ||
     n === "target_audience"
   ) {
     return brain.audience_who || brain.audience_demographics || "";
@@ -79,9 +85,10 @@ export function suggestFromBrain(field: InputField, brain: BrandBrain | null): s
   // Goal / objective — leave blank, user picks per generation
   if (n === "goal" || n === "primary_goal" || n === "objective" || n === "primary_outcome") return "";
 
-  // Geographic context — pull demographics as a hint
+  // Geographic context — the brand's service area. Demographics ("35-64,
+  // homeowners") are not a geo; leave blank for non-local brands.
   if (n === "geo" || n === "geo_targeting" || n === "market" || n === "region_or_timezone") {
-    return brain.audience_demographics || "";
+    return brain.service_area || "";
   }
 
   return null;
