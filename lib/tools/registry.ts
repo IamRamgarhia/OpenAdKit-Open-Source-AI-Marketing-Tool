@@ -679,6 +679,11 @@ export const AI_TOOLS: AiTool[] = [
       platform: s("Platform."),
       monthly_spend: s("Monthly spend."),
       campaign_summary: s("How the campaigns are set up."),
+      conversion_tracking: z
+        .enum(["yes", "no", "unsure"])
+        .optional()
+        .describe("Is conversion tracking set up and verified? Anything but 'yes' still runs the structural audit, with conversion-based checks marked unknown."),
+
       match_types: os("Match types in use."),
       has_negatives: os("Negative keyword status."),
       schedule: os("Ad schedule."),

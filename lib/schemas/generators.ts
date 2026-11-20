@@ -528,6 +528,9 @@ export const BudgetWasteSchema = tolerant(z
   .object({
     // budget-waste prompt returns null when no stop condition is triggered.
     stop_condition: z.string().nullish(),
+    // Set when conversion tracking isn't confirmed (audit still runs).
+    tracking_warning: z.string().nullish(),
+
     pulse: z.record(z.string(), z.any()).optional(),
     audit: z.array(z.any()).optional(),
     top_5_fixes_by_roi: z.array(z.any()).optional(),

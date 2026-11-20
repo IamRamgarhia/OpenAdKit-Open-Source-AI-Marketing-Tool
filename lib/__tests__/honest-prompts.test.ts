@@ -55,9 +55,37 @@ describe("Budget waste: demand captured only from real impression share", () => 
     const p = buildBudgetWastePrompt({ ...base, impression_share_pct: "42%" });
     expect(p).toContain("USE EXACTLY 42");
   });
+  it("leaves demand_captured_pct out of the JSON template without impression share", () => {
+    expect(buildBudgetWastePrompt(base)).not.toContain('"demand_captured_pct"');
+    expect(buildBudgetWastePrompt({ ...base, impression_share_pct: "42" })).toContain('"demand_captured_pct"');
+  });
   it("parseImpressionShare", () => {
     expect(parseImpressionShare("42%")).toBe(42);
     expect(parseImpressionShare("")).toBeNull();
     expect(parseImpressionShare("140")).toBeNull();
+  });
+});
+
+describe("Budget waste: tracking status never empties the audit", () => {
+  const base = { platform: "Google Ads", monthly_spend: "4000", campaign_summary: "One Search campaign, broad match" };
+  it("embeds the 20 audit questions and uses the real key name", () => {
+    const p = buildBudgetWastePrompt(base);
+    for (let n = 1; n <= 20; n++) expect(p).toContain(`\n${n}. `);
+    expect(p).not.toContain("audit_findings");
+  });
+  it("runs the structural audit with a warning when tracking is unconfirmed", () => {
+    for (const conversion_tracking of [undefined, "", "unsure", "no"]) {
+      const p = buildBudgetWastePrompt({ ...base, conversion_tracking });
+      expect(p).not.toMatch(/Conversion tracking is not mentioned/);
+      expect(p).toContain('"tracking_warning"');
+      expect(p).toMatch(/still run the structural audit/i);
+    }
+  });
+  it("no warning when tracking is confirmed", () => {
+    const p = buildBudgetWastePrompt({ ...base, conversion_tracking: "yes" });
+    expect(p).not.toContain('"tracking_warning"');
+  });
+  it("mentions the _usd suffix only for non-USD currencies", () => {
+    expect(buildBudgetWastePrompt(base)).not.toMatch(/_usd" suffix/);
   });
 });
