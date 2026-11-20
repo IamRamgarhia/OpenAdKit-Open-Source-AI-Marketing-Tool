@@ -30,8 +30,10 @@ const config: GeneratorConfig<TwitterInput & Record<string, unknown>> = {
     { name: "product", label: "Product", kind: "text", required: true, placeholder: "e.g. focus app for students", span: 2 },
     { name: "objective", label: "Objective", kind: "text", required: true, placeholder: "free trial signups" },
     { name: "voice", label: "Voice", kind: "text", placeholder: "direct, witty, scroll-stopping" },
+    { name: "landing_url", label: "Landing URL", kind: "text", placeholder: "https://example.com/offer", hint: "Optional. Links count as 23 characters on X (t.co)." },
+    { name: "audience_geo", label: "Audience country / region", kind: "text", placeholder: "e.g. India, US East Coast", hint: "Optional. Needed for a posting-time window." },
   ],
-  initial: { format: "promoted_tweet", product: "", objective: "", voice: "" } as any,
+  initial: { format: "promoted_tweet", product: "", objective: "", voice: "", landing_url: "", audience_geo: "" } as any,
   buildPrompt: (input) => buildTwitterPrompt(input as unknown as TwitterInput),
   buildTitle: (i: any) => `Twitter · ${i.format} · ${i.product}`,
   expectJson: true,
@@ -85,6 +87,12 @@ function TwitterOutput({ json }: { json: any }) {
             ))}
           </ul>
         </Section>
+        {json.website_card_title ? (
+          <Section title="Website card headline" actions={<CopyButton text={json.website_card_title} label="" />}>
+            <CharBadge count={String(json.website_card_title).length} max={TWITTER_LIMITS.website_card_title} />
+            <p className="text-sm text-ink mt-1">{json.website_card_title}</p>
+          </Section>
+        ) : null}
         {json.best_time_window_utc ? (
           <p className="text-[11px] text-ink-muted font-mono uppercase tracking-ui-wide">best window utc: {json.best_time_window_utc}</p>
         ) : null}
