@@ -27,22 +27,23 @@ import { buildLeadFormPrompt } from "../prompts/lead-form";
 import { buildContentCalendarPrompt } from "../prompts/content-calendar";
 import { buildCreativePromptPrompt } from "../prompts/creative-prompts";
 import { buildCampaignKitPrompt } from "../prompts/campaign-kit";
-import { buildCtrPrompt } from "../prompts/ctr-optimizer";
-import { buildQualityScorePrompt } from "../prompts/quality-score";
+import { buildCtrPrompt, ctrMetrics } from "../prompts/ctr-optimizer";
+import { buildQualityScorePrompt, qualityScoreMetrics } from "../prompts/quality-score";
 import { buildAudienceTargetingPrompt } from "../prompts/audience-targeting";
 import { buildFatiguePrompt } from "../prompts/ad-fatigue";
-import { buildBidStrategyPrompt } from "../prompts/bid-strategy";
+import { buildBidStrategyPrompt, bidStrategyFeasibility } from "../prompts/bid-strategy";
 import { buildKeywordPrompt } from "../prompts/keyword-strategy";
 import { buildLandingPrompt } from "../prompts/landing-page";
 import { buildCompetitorStealPrompt } from "../prompts/competitor-steal";
 import { buildAbTestPrompt } from "../prompts/ab-test";
-import { buildBudgetPlannerPrompt } from "../prompts/budget-planner";
+import { buildBudgetPlannerPrompt, plannerEstimate } from "../prompts/budget-planner";
 import { buildCreativeScorePrompt } from "../prompts/creative-score";
 import { buildBudgetWastePrompt } from "../prompts/budget-waste";
 import { buildReelIdeasPrompt } from "../prompts/reel-ideas";
 import { planAbTest } from "../ab-math";
-import { estimateVolume } from "../budget-estimates";
+import { fatigueDecay, landingMetrics } from "../ad-metrics";
 
+import type { BrandBrain } from "../brand-brain";
 import * as G from "../schemas/generators";
 import { CampaignKitSchema } from "../schemas/campaign-kit";
 import { ContentCalendarSchema } from "../schemas/content-calendar";
@@ -59,8 +60,10 @@ export interface AiTool {
   /** Web-app route with the same tool, for "open in OpenAdKit" links. */
   route: string;
   input: ZodRawShape;
+  /** Same signature as a page's GeneratorConfig.buildPrompt: the brand (when
+   *  one is selected) lets a prompt adapt, e.g. campaign-kit surfaces. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  buildPrompt: (input: any) => string;
+  buildPrompt: (input: any, brain?: BrandBrain | null) => string;
   schema: ZodTypeAny;
   maxTokens: number;
   temperature: number;
@@ -206,7 +209,7 @@ export const AI_TOOLS: AiTool[] = [
   {
     name: "generate_x_twitter_ads",
     title: "X (Twitter) ads",
-    description: "Promoted posts, video, website cards, follower ads or threads for X.",
+    description: "Promoted posts, video, website cards, follower ads or threads for X. Posts are checked against 280 characters with links counted as 23.",
     category: "generate",
     route: "/generate/twitter",
     input: {
@@ -216,6 +219,8 @@ export const AI_TOOLS: AiTool[] = [
       product: s("Product."),
       objective: s("Objective."),
       voice: s("Voice, e.g. 'witty', 'authoritative'."),
+      landing_url: os("Landing page URL (optional). Counted as 23 characters in a post."),
+      audience_geo: os("Audience country / region (optional). Without it no posting-time window is given."),
     },
     buildPrompt: buildTwitterPrompt,
     schema: G.TwitterSchema,
@@ -448,6 +453,7 @@ export const AI_TOOLS: AiTool[] = [
     schema: G.CtrSchema,
     maxTokens: 3500,
     temperature: 0.7,
+    computed: (i) => ctrMetrics(i),
   },
   {
     name: "optimize_quality_score",
@@ -475,6 +481,7 @@ export const AI_TOOLS: AiTool[] = [
     schema: G.QualityScoreSchema,
     maxTokens: 3500,
     temperature: 0.7,
+    computed: (i) => qualityScoreMetrics(i),
   },
   {
     name: "optimize_audience_targeting",
@@ -526,6 +533,7 @@ export const AI_TOOLS: AiTool[] = [
     schema: G.AdFatigueSchema,
     maxTokens: 3200,
     temperature: 0.7,
+    computed: (i) => fatigueDecay(i),
   },
   {
     name: "optimize_bid_strategy",
@@ -552,6 +560,7 @@ export const AI_TOOLS: AiTool[] = [
     schema: G.BidStrategySchema,
     maxTokens: 3000,
     temperature: 0.7,
+    computed: (i) => bidStrategyFeasibility(i),
   },
   {
     name: "optimize_keywords",
@@ -598,6 +607,7 @@ export const AI_TOOLS: AiTool[] = [
     schema: G.LandingPageSchema,
     maxTokens: 4000,
     temperature: 0.7,
+    computed: (i) => landingMetrics(i),
   },
 
   {
@@ -636,24 +646,17 @@ export const AI_TOOLS: AiTool[] = [
       current_cvr: s("Current conversion rate %."),
       has_organic: s("Existing organic presence (yes/no + detail)."),
       geo: s("Geography."),
-      primary_platform: os("Platform the projection is for, e.g. 'google_search', 'meta'."),
+      primary_platform: os("Platform the projection is for: 'Google Search', 'Meta Feed', 'TikTok In-Feed' or 'LinkedIn Sponsored' (short forms like 'meta' work)."),
       industry: os("Benchmark industry, e.g. 'ecommerce', 'b2b_saas'."),
       avg_cpc: os("Your own average CPC, if known."),
+      gross_margin_pct: os("Gross margin %, if known (e.g. '40'). Enables the profit break-even CPA (AOV × margin)."),
     },
     buildPrompt: buildBudgetPlannerPrompt,
     schema: G.BudgetPlannerSchema,
     maxTokens: 3500,
     temperature: 0.7,
-    computed: (i) =>
-      estimateVolume({
-        monthlyBudget: i.total_monthly,
-        platform: i.primary_platform || "google_search",
-        industry: i.industry,
-        cpc: i.avg_cpc,
-        cvrPct: i.current_cvr,
-        aov: i.current_aov_or_ltv,
-        currencyCode: "USD",
-      }),
+    computed: (i) => plannerEstimate(i, "USD"),
+
   },
   {
     name: "optimize_creative_score",
@@ -681,6 +684,10 @@ export const AI_TOOLS: AiTool[] = [
       platform: s("Platform."),
       monthly_spend: s("Monthly spend."),
       campaign_summary: s("How the campaigns are set up."),
+      conversion_tracking: z
+        .enum(["yes", "no", "unsure"])
+        .optional()
+        .describe("Is conversion tracking set up and verified? Anything but 'yes' still runs the structural audit, with conversion-based checks marked unknown."),
       match_types: os("Match types in use."),
       has_negatives: os("Negative keyword status."),
       schedule: os("Ad schedule."),

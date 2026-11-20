@@ -1,5 +1,10 @@
+/**
+ * Approximate public industry averages (WordStream / LocaliQ-style search
+ * reports). Directional only — they are not the user's account and vary by
+ * year, market and match type.
+ */
 export const CTR_BENCHMARKS = {
-  google_search_avg_2025: 4.99,
+  google_search_avg: 4.99,
   google_by_industry: {
     ecommerce: 2.69,
     finance: 2.91,
@@ -38,8 +43,18 @@ export interface CtrInput {
 }
 
 import { CREATIVE_TESTING_HIERARCHY, DIAGNOSIS_TREES } from "./common-rules";
+import { performanceMetrics, performanceLines, computedBlock } from "../ad-metrics";
+
+export function ctrMetrics(input: Pick<CtrInput, "impressions" | "clicks" | "conversions" | "spend" | "avg_cpc">) {
+  return performanceMetrics({ impressions: input.impressions, clicks: input.clicks, conversions: input.conversions, spend: input.spend, avgCpc: input.avg_cpc });
+}
 
 export function buildCtrPrompt(input: CtrInput): string {
+  const m = ctrMetrics(input);
+  const computed = computedBlock(
+    performanceLines(m),
+    input.dashboard_screenshot ? "A value marked 'could not be computed' may be read from the attached screenshot instead — say so in notes." : ""
+  );
   return `You are diagnosing a paid ad's CTR using real performance data, then prescribing targeted rewrites.
 
 ${DIAGNOSIS_TREES}
@@ -76,18 +91,15 @@ visible. When the typed fields above conflict with what's in the image, trust th
 the typed fields, USE the image value. Cite "(from screenshot)" in the diagnosis_summary
 or notes when image-derived data drives a conclusion.
 
-` : ""}PHASE 1 — ANALYZE THE NUMBERS FIRST (do not skip):
-- Compute CTR = clicks / impressions × 100, rounded to 2dp.
-- Compute conversion rate = conversions / clicks × 100, rounded to 2dp.
-- Compute CPA = spend / conversions if both present.
-- Compute CPC = spend / clicks if both present (cross-check with reported avg CPC; flag mismatches > 10%).
-- If any input is missing, note that the metric "could not be computed" — never invent numbers.
+` : ""}PHASE 1 — THE NUMBERS (already computed — read them, do not redo the math):
+${computed}
 
-PHASE 2 — BENCHMARK COMPARISON:
-- Google Search 2025 avg CTR 4.99% (industry varies — ecommerce 2.69%, finance 2.91%, healthcare 3.27%, legal 3.84%, real estate 3.71%, B2B SaaS 2.45%).
-- Meta Feed 0.9–1.5% · Stories 0.5–0.8% · Reels 1.0–1.8% · Carousel 1.2–2.2%.
-- TikTok In-Feed 1.5–3.0% · Spark Ads ~3.0%.
-- Verdict tiers vs computed CTR: above_avg (>20% above benchmark), at_avg (±20%), below_avg (20-50% below), severely_below (>50% below).
+PHASE 2 — BENCHMARK COMPARISON (approximate public industry averages — directional, NOT the user's account; say so when you cite one):
+- Google Search: ~5% across industries; roughly ecommerce ~2.7%, finance ~2.9%, healthcare ~3.3%, legal ~3.8%, real estate ~3.7%, B2B SaaS ~2.5%.
+- Meta Feed ~0.9–1.5% · Stories ~0.5–0.8% · Reels ~1.0–1.8% · Carousel ~1.2–2.2%.
+- TikTok In-Feed ~1.5–3.0%.
+- Verdict tiers vs the computed CTR: above_avg (>20% above benchmark), at_avg (±20%), below_avg (20-50% below), severely_below (>50% below).
+- If CTR could not be computed, verdict = the tier you can defend from the copy alone and say "CTR not computed" in diagnosis_summary.
 
 PHASE 3 — SEARCH-TERM ANALYSIS (only if queries provided):
 For each provided query (or cluster of similar queries) classify intent: buying / research / problem-aware / low_intent / branded / wrong_audience.
@@ -108,6 +120,7 @@ PHASE 6 — KILL / ITERATE / REWRITE-FROM-SCRATCH:
 - iterate: 3+ levers scored ≥6 AND verdict is below_avg/at_avg AND search-term intent is mostly correct.
 - rewrite_from_scratch: 3+ levers scored ≤4 OR copy/audience mismatch is severe.
 - kill: verdict severely_below AND conversion rate < 0.5% AND no obvious lever to fix (poor product/market fit signal, not copy).
+- Otherwise (none of the above match, or data is missing): iterate — and say which input would sharpen the call.
 
 Return ONLY valid JSON:
 {
@@ -116,10 +129,10 @@ Return ONLY valid JSON:
     "conversion_rate": "string",
     "cpa": "string",
     "cpc": "string",
-    "notes": "string — call out any mismatches between reported and computed (e.g. 'reported CPC $4.56 vs computed $4.21 — discrepancy may indicate auction-time bid changes')"
+    "notes": "string — call out any mismatch between reported and computed values (e.g. 'reported CPC 4.56 vs computed 4.21 — may reflect auction-time bid changes')"
   },
   "verdict": "above_avg | at_avg | below_avg | severely_below",
-  "industry_benchmark_cited": "string (e.g. 'B2B SaaS Google Search avg 2.45%')",
+  "industry_benchmark_cited": "string (e.g. 'B2B SaaS Google Search ~2.5% — approximate public industry average, not your account')",
   "diagnosis_summary": "string (2-3 sentences) — grounded in the computed metrics, not generic",
   "search_term_signals": [
     { "intent": "buying | research | problem_aware | low_intent | branded | wrong_audience",

@@ -34,8 +34,8 @@ HONESTY CONSTRAINT (non-negotiable):
 export const ANTI_FABRICATION_RULE = `
 ANTI-FABRICATION (apply to every number, range, and URL you output):
 
-1. NUMBERS / RANGES — any percentage, dollar amount, audience size, or rate range you state must be one of:
-   (a) Derived from inputs the user provided. SHOW THE MATH in an adjacent field or inline parenthetical ("$120 AOV × 30% margin → CPA ceiling $36").
+1. NUMBERS / RANGES — any percentage, money amount, audience size, or rate range you state must be one of:
+   (a) Derived from inputs the user provided. SHOW THE MATH in an adjacent field or inline parenthetical ("120 AOV × 30% margin → CPA ceiling 36", in the input's currency).
    (b) An industry benchmark. CITE THE BENCHMARK BAND, not a fake precision ("WordStream B2B SaaS reports 2-4%" — not "3.2%").
    (c) Marked directional: prefix with "directional:" or set "directional_estimate": true in the field. Example: "directional: 0.8-1.4% CTR band, anchor your actual to your provider's data".
    NEVER state a percentage or dollar figure as fact without (a), (b), or (c). Confident invented numbers are the #1 trust-eroder in AI marketing output.
@@ -68,6 +68,18 @@ For every text field with a stated char limit, after writing the text:
 This catches the most common AI ad-copy failure mode: confident output that gets rejected by the ad platform at submission time.
 `.trim();
 
+/**
+ * Proof the copy may cite. Formats like "stat hook", "social proof headline"
+ * or "proof beat" used to demand proof the brand may not have — which is how
+ * models end up inventing "10,000 happy customers".
+ */
+export const PROOF_RULE = `
+PROOF + URGENCY ONLY FROM REAL INPUTS:
+- Stats, customer counts, ratings, reviews, testimonials, awards, named clients: use them ONLY if the Brand Brain or the user's input lists them. Otherwise use a verifiable product / process fact instead (what is included, how it works, a guarantee or policy the brand states).
+- Urgency / scarcity (deadlines, "only N left", "ends Friday"): ONLY when the input names a real deadline or limited offer. Never invent countdowns or scarcity.
+- No number is better than an invented one.
+`.trim();
+
 export const BANNED_WORDS_RULE = `
 WORDS / PHRASES TO AVOID (will be flagged as low-quality output):
 - Vague verbs: ${BANNED_WORDS.vague_verbs.join(", ")}
@@ -78,8 +90,8 @@ WORDS / PHRASES TO AVOID (will be flagged as low-quality output):
 
 export const VIDEO_HOOK_RULE = `
 VIDEO RULES (apply to every video script — TikTok, Reels, YouTube In-Stream, Meta Video):
-- First 3 seconds DECIDE distribution. Open with a pattern interrupt, question, contrarian claim, or shocking specific.
-- Assume sound-OFF. 85% of social-video viewers watch without sound (Meta + TikTok data). Captions and on-screen text are mandatory.
+- First 3 seconds DECIDE distribution. Open with a pattern interrupt, question, contrarian claim, or a concrete specific from the brand brain.
+- Assume sound-OFF: many viewers watch muted, so captions and on-screen text are mandatory.
 - Text overlays cover < 20% of frame.
 - For 15s+ scripts: Hook 0-3s · Problem 3-8s · Solution 8-20s · CTA 20-30s.
 - No "Hi I'm X from Y" intros. The viewer will never get past it.
@@ -94,20 +106,23 @@ RETARGETING WINDOW + FREQUENCY MATRIX (sourced from marketingskills/paid-ads):
 Stick to these bands. Higher frequencies on cold audiences burn out the audience AND brand goodwill.
 `.trim();
 
+/** One recent-converter window used everywhere (audience plan, waste audit). */
+export const RECENT_CONVERTER_WINDOW = "30 days after a purchase · 7 days after a lead / free signup";
+
 export const MANDATORY_EXCLUSIONS = `
 MANDATORY EXCLUSIONS (from every prospecting campaign):
-- Existing customers (Customer Match / Customer List upload)
-- Recent converters · 7-14 day window after the conversion event
+- Existing customers — upload a customer list (Google: Customer Match · Meta: Custom Audience from a customer list · LinkedIn: Matched Audiences · TikTok: Customer File). Use the name for the platform in question.
+- Recent converters · ${RECENT_CONVERTER_WINDOW}
 - Bounced visitors · time-on-site < 10 seconds (signals zero intent)
 - Careers / support / press page visitors (not buyers)
-- Internal IPs and employee accounts (Customer Match suppression)
+- Employees — suppress via the customer-list upload; internal IPs via IP exclusions where the platform offers them (Google Ads does)
 `.trim();
 
 export const RETIRE_THRESHOLD_RULE = `
 RETIRE THRESHOLDS (avoid premature kill):
 - Allow ≥ 1,000 impressions OR ≥ 50 clicks before judging a creative as "underperforming."
 - Below these thresholds, statistical noise dominates. Pausing too early throws away winners.
-- Exception: if frequency > 4 AND CTR < 0.5% within first 200 impressions → kill (this IS signal).
+- Exception: once past 1,000 impressions, frequency > 4 AND CTR < 0.5% → kill even before 50 clicks (this IS signal).
 `.trim();
 
 export const CREATIVE_TESTING_HIERARCHY = `
@@ -145,12 +160,44 @@ If CPM is high:
 4. Frequency exhaustion within audience pool
 `.trim();
 
+/**
+ * Currency-neutral. Only include in a prompt when the input actually contains
+ * a price or offer (see hasPriceOrOffer) — otherwise the model invents prices.
+ */
 export const PRICING_PSYCHOLOGY = `
-PRICING PSYCHOLOGY (apply to offer / discount copy and landing-page hero rewrites):
-- Rule of 100: under $100 → percentage discount sounds bigger ("20% off"). Over $100 → absolute dollar discount sounds bigger ("$50 off").
-- Charm pricing: end in .99 / .95 for value/mass-market positioning. Round prices ($500/mo, $1,200/yr) for premium positioning.
-- Mental accounting reframes: "$1/day" beats "$30/month." "Less than your morning coffee" beats "$3/day."
-- Anchor before discount: show original price first, struck-through, before the discounted price.
+PRICING PSYCHOLOGY (apply ONLY to a price or offer that appears in the input; never invent a price, discount or currency):
+- Rule of 100: for prices under 100 (in the brand's currency) a percentage discount reads bigger ("20% off"); above 100, the absolute amount off reads bigger.
+- Charm vs round pricing: endings like .99 / .95 suit value positioning; round numbers suit premium positioning.
+- Per-day reframes ("about the price of a coffee a day") make a monthly price feel smaller — only with the real price.
+- Anchor before discount: show the original price first, struck through, then the discounted price.
+`.trim();
+
+/** True when any input value mentions a price, discount or offer. */
+export function hasPriceOrOffer(...values: unknown[]): boolean {
+  const text = values.filter((v) => typeof v === "string").join(" ");
+  return /[$€£¥₹₩₦₱]|\d\s?%|\b(?:usd|eur|gbp|inr|aed|rs\.?|prices?|priced|pricing|discount|off|sale|coupon|promo|offer|trial|per month|per year|monthly|annual)\b/i.test(text);
+}
+
+/**
+ * Bid-strategy volume gates — one source for the Bid Strategy advisor and
+ * the Keyword plan. Conservative practitioner thresholds: Google publishes
+ * lower minimums, but strategies learn poorly below these.
+ */
+export const BID_THRESHOLDS = {
+  maximize_conversions_min_30d: 15,
+  target_cpa_min_30d: 30,
+  target_roas_min_30d: 50,
+  meta_tiktok_learning_min_7d: 50,
+} as const;
+
+export const BID_STRATEGY_RULES = `
+BID STRATEGY BY CONVERSION VOLUME (conservative rules of thumb — cite them as such; per campaign, last 30 days):
+- No conversion history yet (new campaign / tracking just set up): Manual CPC, or Maximize Clicks with a max CPC cap for 1-2 weeks to gather data, then re-evaluate.
+- Under ${BID_THRESHOLDS.maximize_conversions_min_30d} conversions / 30 days: Manual CPC with bid adjustments. (Google has retired Enhanced CPC for Search — never recommend it.)
+- ${BID_THRESHOLDS.maximize_conversions_min_30d}-${BID_THRESHOLDS.target_cpa_min_30d - 1} conversions / 30 days: Maximize Conversions (no target), with a stable budget.
+- ${BID_THRESHOLDS.target_cpa_min_30d}+ conversions / 30 days and a target CPA: Target CPA (Maximize Conversions with a target CPA).
+- ${BID_THRESHOLDS.target_roas_min_30d}+ conversions / 30 days with reliable conversion values: Target ROAS (Maximize Conversion Value with a target ROAS).
+- Meta / TikTok: an ad set needs roughly ${BID_THRESHOLDS.meta_tiktok_learning_min_7d} optimization events in 7 days to exit learning; cost caps / bid caps only after that.
 `.trim();
 
 export const WAVE_BATCH_RULE = `
@@ -169,4 +216,22 @@ BOTTLENECK FIRST (Theory of Constraints applied to ad funnels):
 - If traffic is fine but CVR < 1% → landing/offer is the bottleneck. More targeting won't help.
 - If both look OK but CPA is bad → cost-per-click or audience cost is the bottleneck.
 - Address only the bottleneck. Other improvements are local optima that don't move global revenue.
+`.trim();
+
+/**
+ * TikTok has been unavailable in India since 2020, so TikTok-only advice for
+ * an Indian audience is wasted. True when any value points at India.
+ */
+export function mentionsIndia(...values: unknown[]): boolean {
+  const text = values.filter((v) => typeof v === "string").join(" ");
+  return /₹|\b(?:india|indian|inr|bharat|mumbai|delhi|bengaluru|bangalore|pune|hyderabad|chennai|kolkata|ahmedabad|jaipur|lucknow|noida|gurgaon|gurugram)\b/i.test(text);
+}
+
+/** Hashtags per post, one table for the hashtag tool and the content calendar. */
+export const HASHTAG_COUNTS = `
+- Instagram: up to 5 per post (Instagram's current cap) — mix niche + branded
+- Facebook: 1-2
+- LinkedIn: 3-5 professional tags; no emoji-style tags
+- TikTok: 3-5 — over-tagging dilutes the signal
+- X / Twitter: 1-2
 `.trim();

@@ -1,4 +1,5 @@
 import { getCurrencyCode } from "../currency";
+import { estimateVolume, type VolumeEstimate } from "../budget-estimates";
 
 export interface BudgetPlannerInput {
   total_monthly: string;
@@ -14,6 +15,45 @@ export interface BudgetPlannerInput {
   industry?: string;
   /** User's own average CPC, if known. */
   avg_cpc?: string;
+  /** Gross margin %, if known — turns the break-even CPA into a profit break-even. */
+  gross_margin_pct?: string;
+}
+
+/** Benchmark platform names; MCP callers often send "meta" / "google_search". */
+export const PROJECTION_PLATFORMS = ["Google Search", "Meta Feed", "TikTok In-Feed", "LinkedIn Sponsored"] as const;
+
+export function projectionPlatform(v: unknown): string {
+  const k = String(v ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (!k) return "Google Search";
+  return PROJECTION_PLATFORMS.find((p) => p.toLowerCase().replace(/[^a-z]/g, "").startsWith(k) || k.startsWith(p.toLowerCase().split(" ")[0])) ?? String(v);
+}
+
+/** The planner's volume projection — shared by the prompt, the page and the MCP registry. */
+export function plannerEstimate(input: Partial<BudgetPlannerInput>, currencyCode: string): VolumeEstimate | null {
+  return estimateVolume({
+    monthlyBudget: input.total_monthly,
+    platform: projectionPlatform(input.primary_platform),
+
+    industry: input.industry || undefined,
+    cpc: input.avg_cpc,
+    cvrPct: input.current_cvr,
+    aov: input.current_aov_or_ltv,
+    grossMarginPct: input.gross_margin_pct,
+    currencyCode,
+  });
+}
+
+function projectionFacts(est: VolumeEstimate | null, cc: string): string {
+  if (!est) return "- No projection: the monthly budget is missing or not a number.";
+  const n = (v: number | null, dp = 0) => (v === null ? "not computable" : v.toLocaleString("en-US", { maximumFractionDigits: dp }));
+  const src = (s: string) => (s === "input" ? "user's input" : s === "benchmark" ? "labelled benchmark midpoint" : "missing");
+  return [
+    `- Clicks / month: ${n(est.clicks)} (CPC from ${src(est.cpc.source)})`,
+    `- Conversions / month: ${n(est.conversions, 1)} (CVR from ${src(est.cvrPct.source)})`,
+    `- CPA: ${n(est.cpa, 2)} ${cc}`,
+    `- ROAS: ${est.roas === null ? "not computable (no AOV / LTV)" : `${est.roas.toFixed(2)}×`}`,
+    `- Break-even CPA at 100% margin (= AOV): ${n(est.revenueBreakEvenCpa, 2)}${est.profitBreakEvenCpa !== null ? ` · at ${est.grossMarginPct}% gross margin: ${n(est.profitBreakEvenCpa, 2)}` : " (no gross margin given)"}`,
+  ].join("\n");
 }
 
 /**
@@ -24,7 +64,9 @@ export interface BudgetPlannerInput {
  */
 export function buildBudgetPlannerPrompt(input: BudgetPlannerInput): string {
   const cc = getCurrencyCode();
-  return `Build a monthly ad budget allocation plan. Amounts in ${cc} — every split must add up to the total.
+  const est = plannerEstimate(input, cc);
+  const keyNote = cc === "USD" ? "" : ` (keys ending in "_usd" are legacy names — their values are in ${cc})`;
+  return `Build a monthly ad budget allocation plan. Amounts in ${cc}${keyNote} — every split must add up to the total.
 
 INPUT:
 - Currency: ${cc} (ALL amounts in the output should be in ${cc})
@@ -36,6 +78,11 @@ INPUT:
 - Existing organic traffic: ${input.has_organic || "not given"}
 - Geo: ${input.geo || "not given"}
 - Main platform under consideration: ${input.primary_platform || "not specified"}
+- Gross margin: ${input.gross_margin_pct ? `${input.gross_margin_pct}%` : "not given"}
+
+PROJECTION COMPUTED BY THE APP for ${projectionPlatform(input.primary_platform)} (facts — the user sees these next to your plan):
+${projectionFacts(est, cc)}
+Use them qualitatively when justifying the split — e.g. "at a projected CPA above the break-even CPA, keep prospecting spend small until CVR improves". Do not restate them as new numbers or compute others.
 
 PRODUCE:
 
@@ -45,7 +92,7 @@ PRODUCE:
 
 3. CAMPAIGN BREAKOUT — campaign-by-campaign monthly amounts. Note which platforms need a minimum daily spend to exit the learning phase, as guidance (say "typically", don't present it as a guarantee).
 
-4. SATURATION FLAGS — qualitative: where adding more budget at this level is likely to hit diminishing returns, and why.
+4. SATURATION FLAGS — qualitative: where adding more budget at this level is likely to hit diminishing returns, and why (top-level "saturation_flags").
 
 5. RESERVE — recommend setting aside 10-15% for testing, scaling winners and replacing fatigued creative.
 
@@ -64,9 +111,7 @@ Return ONLY valid JSON:
   "campaign_breakout": [
     { "campaign_name": "string", "platform": "string", "funnel_stage": "string", "monthly_usd": 0, "learning_phase_note": "string" }
   ],
-  "break_even": {
-    "saturation_flags": [{ "platform": "string", "reason": "string" }]
-  },
+  "saturation_flags": [{ "platform": "string", "reason": "string" }],
   "reserve": {
     "pct": 0,
     "monthly_usd": 0,

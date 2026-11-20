@@ -1,4 +1,15 @@
-import { VIDEO_HOOK_RULE } from "./common-rules";
+import { VIDEO_HOOK_RULE, PROOF_RULE } from "./common-rules";
+
+/** Duration mix: ±25% around the user's target, else a platform-neutral spread. */
+export function durationMixRule(target: unknown, maxSeconds: number): string {
+  const t = Number(String(target ?? "").replace(/[^\d.]/g, ""));
+  if (Number.isFinite(t) && t > 0) {
+    const lo = Math.max(5, Math.round(t * 0.75));
+    const hi = Math.min(maxSeconds, Math.round(t * 1.25));
+    return `- Duration: every idea runs ${lo}-${hi}s (the ${t}s target ±25%); set duration_seconds accordingly.`;
+  }
+  return `- Mix duration: 20% under 15s ("quick hits"), 50% 15-45s ("explainers"), 30% 45-${maxSeconds}s ("deep dives").`;
+}
 
 export interface ReelIdeasInput {
   platform: "instagram_reels" | "tiktok" | "youtube_shorts" | "facebook_reels";
@@ -31,10 +42,20 @@ export function buildReelIdeasPrompt(input: ReelIdeasInput): string {
   };
   const plat = platformLabel[input.platform] ?? input.platform;
   const rules = platformRules[input.platform] ?? "";
+  const maxSeconds = input.platform === "tiktok" || input.platform === "youtube_shorts" ? 60 : 90;
+  const reachDrivers: Record<string, string> = {
+    instagram_reels: '"Reels tab / Explore saves" / "Shares to DMs" / "Follower feed"',
+    tiktok: '"FYP completion rate" / "Re-watches" / "Shares"',
+    youtube_shorts: '"Shorts feed retention" / "Suggested from long-form" / "Subscribers feed"',
+    facebook_reels: '"Reels feed shares" / "Saves" / "Follower feed"',
+  };
+  const reachDriver = reachDrivers[input.platform] ?? '"completion rate" / "saves" / "shares"';
 
   return `Generate ${input.reel_count || 12} high-CTR reel ideas for ${plat}.
 
 ${VIDEO_HOOK_RULE}
+
+${PROOF_RULE}
 
 PLATFORM-NATIVE RULES (${plat}):
 ${rules}
@@ -60,7 +81,7 @@ The first 1-3 seconds decide whether anyone watches frame 4. Use ONE of these pr
 - POV: "POV: you just realized [counter-intuitive truth]"
 - CONTRADICTION: "Stop doing [common practice]. Here's why."
 - LISTICLE TEASE: "5 things I wish I knew before [outcome]"
-- NUMBER + PROMISE: "I [outcome] in [time] using just [thing]. Here's the system."
+- NUMBER + PROMISE: "I [outcome] in [time] using just [thing]. Here's the system." — only with a real result the brand brain or input states; otherwise use a process number ("3 steps", "one kettle") instead of an invented outcome.
 - QUESTION-PATTERN-INTERRUPT: "Why are [audience] obsessed with [thing]? It's not what you think."
 - BEFORE/AFTER COLD OPEN: visually show the after, then explain the how
 - STORY: "I almost didn't post this, but…"
@@ -71,7 +92,7 @@ The first 1-3 seconds decide whether anyone watches frame 4. Use ONE of these pr
 VARIETY RULE:
 - No hook formula used more than 2× in the batch.
 - Each idea must serve ONE content pillar — name it.
-- Mix duration: 20% under 15s ("quick hits"), 50% 15-45s ("explainers"), 30% 45-90s ("deep dives").
+${durationMixRule(input.duration_seconds, maxSeconds)}
 - Mix format: 40% talking-head, 30% B-roll-driven, 20% text-on-screen, 10% trend-piggyback.
 - Each CTA names the outcome — never "follow for more" / "like and comment" / "check the link".
 
@@ -84,7 +105,7 @@ FOR EACH REEL idea return:
 - hashtags_extra (additional cluster the user can append if they want — Tier A big / Tier B medium / Tier C niche)
 - content_pillar (which pillar from input or brain.content_pillars)
 - hook_formula (which of the 10 above was used)
-- estimated_reach_driver ("FYP completion-rate" / "Explore saves" / "Suggested from long-form" / "Share-back")
+- estimated_reach_driver (for ${plat}: ${reachDriver})
 - shoot_difficulty ("easy_phone_only" | "needs_b_roll" | "needs_screen_recording" | "needs_guest")
 - when_to_post ("evening_local" | "morning_local" | "lunch_break" | "weekend" — based on platform-typical engagement peaks)
 

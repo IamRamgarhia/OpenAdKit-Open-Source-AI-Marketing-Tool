@@ -3,14 +3,12 @@
 import { GeneratorShell } from "@/components/GeneratorShell";
 import { Section, Pill, Kv } from "@/components/OutputBlocks";
 import { getCurrency } from "@/lib/currency";
-import { buildBudgetPlannerPrompt, type BudgetPlannerInput } from "@/lib/prompts/budget-planner";
+import { buildBudgetPlannerPrompt, plannerEstimate, PROJECTION_PLATFORMS, type BudgetPlannerInput } from "@/lib/prompts/budget-planner";
 import type { GeneratorConfig } from "@/lib/generator-config";
 import { BudgetPlannerSchema } from "@/lib/schemas/generators";
 import { INDUSTRIES } from "@/lib/benchmarks";
-import { estimateVolume, dailyFrom, parseNumber, type Assumption } from "@/lib/budget-estimates";
+import { dailyFrom, parseNumber, type Assumption } from "@/lib/budget-estimates";
 import { arr, obj, strList, txt } from "@/lib/safe-json";
-
-const PROJECTION_PLATFORMS = ["Google Search", "Meta Feed", "TikTok In-Feed", "LinkedIn Sponsored"];
 
 const config: GeneratorConfig<BudgetPlannerInput & Record<string, unknown>> = {
   title: "Ad Budget Planner",
@@ -24,6 +22,7 @@ const config: GeneratorConfig<BudgetPlannerInput & Record<string, unknown>> = {
     { name: "business_type", label: "Business type", kind: "text", required: true, placeholder: "B2B SaaS / ecommerce / local service" },
     { name: "current_aov_or_ltv", label: "AOV / LTV", kind: "text", placeholder: "120 LTV", hint: "Your selected currency." },
     { name: "current_cvr", label: "Site CVR (%)", kind: "text", placeholder: "2.4", hint: "Blank = benchmark CVR (labelled)." },
+    { name: "gross_margin_pct", label: "Gross margin (%)", kind: "text", placeholder: "40", hint: "Optional. Turns the break-even CPA into a profit break-even (AOV × margin)." },
     {
       name: "primary_platform",
       label: "Projection platform",
@@ -41,7 +40,7 @@ const config: GeneratorConfig<BudgetPlannerInput & Record<string, unknown>> = {
     { name: "has_organic", label: "Organic traffic?", kind: "text", placeholder: "10k/mo SEO" },
     { name: "geo", label: "Geo", kind: "text", placeholder: "US + Canada", span: 2 },
   ],
-  initial: { total_monthly: "", goal: "", business_type: "", current_aov_or_ltv: "", current_cvr: "", has_organic: "", geo: "", primary_platform: "Google Search", industry: "", avg_cpc: "" } as any,
+  initial: { total_monthly: "", goal: "", business_type: "", current_aov_or_ltv: "", current_cvr: "", gross_margin_pct: "", has_organic: "", geo: "", primary_platform: "Google Search", industry: "", avg_cpc: "" } as any,
   buildPrompt: (input) => buildBudgetPlannerPrompt(input as unknown as BudgetPlannerInput),
   buildTitle: (i: any) => `Budget Plan · ${i.total_monthly}/mo`,
   expectJson: true,
@@ -71,19 +70,11 @@ function PlannerOutput({ json, input }: { json: any; input: Partial<BudgetPlanne
   const platformSplit = arr(json?.platform_split).filter((p) => p && typeof p === "object");
   const funnel = arr(json?.funnel_split_overall).filter((f) => f && typeof f === "object");
   const breakout = arr(json?.campaign_breakout).filter((c) => c && typeof c === "object");
-  const breakEven = obj(json?.break_even);
-  const flags = arr(breakEven.saturation_flags).filter((f) => f && typeof f === "object");
+  // Older history rows nested the flags under `break_even`.
+  const flags = arr(json?.saturation_flags ?? obj(json?.break_even).saturation_flags).filter((f) => f && typeof f === "object");
   const reserve = obj(json?.reserve);
   const noGo = strList(json?.no_go_list);
-  const est = estimateVolume({
-    monthlyBudget: input?.total_monthly,
-    platform: input?.primary_platform || "Google Search",
-    industry: input?.industry || undefined,
-    cpc: input?.avg_cpc,
-    cvrPct: input?.current_cvr,
-    aov: input?.current_aov_or_ltv,
-    currencyCode: cur.code,
-  });
+  const est = plannerEstimate(input ?? {}, cur.code);
   const budget = parseNumber(input?.total_monthly);
   const splitTotal = platformSplit.reduce((sum: number, p: any) => sum + (parseNumber(p.monthly_usd) ?? 0), 0);
   const splitOff = budget && splitTotal ? Math.abs(splitTotal - budget) / budget > 0.02 : false;
@@ -176,9 +167,16 @@ function PlannerOutput({ json, input }: { json: any; input: Partial<BudgetPlanne
         )}
       </Section>
 
-      <Section title="Break-even">
-        <Kv k="cpa break-even (gross)" v={est?.breakEvenCpa ? `${sym}${fmt(est.breakEvenCpa, 2)}` : "add AOV / LTV"} />
-        <p className="text-[11px] text-ink-muted mt-2">CPA at which revenue equals ad spend, before margin. Your profitable CPA is lower — multiply by your gross margin.</p>
+      <Section title="Break-even · computed from your inputs">
+        <div className="grid md:grid-cols-2 gap-2">
+          <Kv k="break-even CPA at 100% margin" v={est?.revenueBreakEvenCpa ? `${sym}${fmt(est.revenueBreakEvenCpa, 2)}` : "add AOV / LTV"} />
+          <Kv
+            k={est?.grossMarginPct ? `break-even CPA at ${fmt(est.grossMarginPct, 1)}% margin` : "profit break-even CPA"}
+            v={est?.profitBreakEvenCpa ? `${sym}${fmt(est.profitBreakEvenCpa, 2)}` : est?.revenueBreakEvenCpa ? "add gross margin" : "add AOV / LTV"}
+            pos
+          />
+        </div>
+        <p className="text-[11px] text-ink-muted mt-2">At 100% margin the break-even CPA equals AOV (revenue = ad spend). With your gross margin it is AOV × margin — the CPA above which each sale loses money.</p>
         {flags.length ? (
           <div className="mt-3">
             <div className="text-[10px] font-mono uppercase tracking-ui-mega text-neg mb-1">saturation flags · AI judgement</div>

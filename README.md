@@ -4,7 +4,7 @@
 
 # OpenAdKit — Open Source AI Marketing Tool
 
-<!-- Last updated: 2026-11-20 · v2.0.0 · keep this fresh on every meaningful README edit; AI citation engines treat it as a freshness signal -->
+<!-- Last updated: 2026-11-20 · v2.0.1 · keep this fresh on every meaningful README edit; AI citation engines treat it as a freshness signal -->
 
 ### Write, score and plan ads for every platform · bring your own AI key · zero subscriptions
 
@@ -17,7 +17,7 @@
 [![Support](https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F-Support-db2777?style=for-the-badge&labelColor=334155)](https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool#support-the-project)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.0-ffb020.svg)](docs/releases/v2.0.0.md)
+[![Version](https://img.shields.io/badge/version-2.0.1-ffb020.svg)](docs/releases/v2.0.1.md)
 [![Node 20.9+](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg)](https://nodejs.org)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 [![MCP server](https://img.shields.io/badge/MCP-Claude%20%7C%20Cursor-8b5cf6.svg)](docs/MCP.md)
@@ -413,7 +413,7 @@ OpenAdKit includes an **MCP server** — a small connector that lets AI assistan
 - **No AI key needed (prompt mode).** OpenAdKit hands the assistant the exact prompt and output format; Claude writes the result and checks it with `validate_output`, which also enforces platform character limits (for example, 30 characters for a Google headline).
 - **With your own key (generate mode).** Set an AI key such as `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` in the connector's settings and OpenAdKit generates, validates and retries by itself.
 
-A/B sample sizes and budget projections are computed in code either way. Brands come from the clients you saved in the OpenAdKit app.
+A/B sample sizes, budget projections, CTR / CPA math, fatigue changes and bid feasibility are computed in code either way. Brands come from the clients you saved in the OpenAdKit app.
 
 **Connecting it:**
 

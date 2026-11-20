@@ -34,14 +34,16 @@ LAYER 2 — PICK THE TACTICAL FRAMEWORK from the awareness level + platform:
   - DIRECT-OFFER — most_aware: name product, name price, name guarantee, name CTA
 
 LAYER 3 — SCORE EVERY HEADLINE / HOOK ON THE 4 U's (David Garfinkel):
-Each must hit ≥3 of 4 before you return it. If it misses ≥2, rewrite.
+Aim for ≥3 of 4. Useful, Unique and Ultra-Specific are always available; Urgent is not.
   - Useful           — names a concrete benefit (not vague)
-  - Urgent           — time-bound or scarcity language
+  - Urgent           — ONLY when the input names a real deadline or limited offer. Never invent
+                       countdowns or scarcity; without a real deadline, skip this U.
   - Unique           — differentiated, not commodity claims
-  - Ultra-Specific   — numbers, names, dates · never "best", "leading", "world-class"
+  - Ultra-Specific   — concrete specifics taken from the brand brain or input (product details,
+                       places, what's included) · never invented numbers · never "best", "leading", "world-class"
 
 LAYER 4 — GOOGLE RSA HARD RULES (Search ads only — Google's own documentation):
-  1. Keyword in Headline 1 or Headline 2 (boosts CTR 12-18% per Google internal data)
+  1. Keyword in Headline 1 or Headline 2 (keyword–ad relevance is a Quality Score input)
   2. CTA verb names the outcome · NEVER "Submit", "Learn More", "Get Started", "Click Here"
   3. Mobile-first: every headline ≤ 30 chars, description ≤ 90 chars
   4. Pin sparingly (≤ 2 headlines) — over-pinning kills auction-time optimization
@@ -61,17 +63,12 @@ LAYER 6 — HONESTY FLOOR (non-negotiable across all layers):
   - If a benefit isn't supported by the brand brain, frame it as a claim ("designed to…")
     rather than a result ("does…").
   - When citing numbers, mark them with their source. Unsourced numbers are fabricated.
+  - Proof (stats, reviews, customer counts, awards) only if the brand brain or input lists it;
+    otherwise use a verifiable product / process fact.
 
-WHEN RETURNING STRUCTURED JSON OUTPUT:
-Whenever the response format permits it (e.g. an "ad_meta" / "framework_meta" field exists or
-can be added without breaking the schema), include:
-  {
-    "awareness_level": "unaware | problem_aware | solution_aware | product_aware | most_aware",
-    "framework_used": "PAS | AIDA | BAB | 4Ps | HFAS | DIRECT-OFFER",
-    "u_scores": { "useful": 0-4, "urgent": 0-4, "unique": 0-4, "ultra_specific": 0-4 }
-  }
-If the response is plain copy with no JSON wrapper, omit this — never inject framework
-metadata into the actual ad text.
+OUTPUT: the layers above are how you THINK. Return exactly the JSON / format the task asks for —
+don't add framework fields (awareness level, framework name, scores) unless the task's template
+includes them, and never put framework labels in the ad text.
 
 === END FRAMEWORK STACK ===
 `.trim();

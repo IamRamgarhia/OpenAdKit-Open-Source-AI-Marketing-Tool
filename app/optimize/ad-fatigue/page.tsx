@@ -33,9 +33,9 @@ const config: GeneratorConfig<FatigueInput & Record<string, unknown>> = {
     // ----- Performance signals -----
     { name: "current_frequency", label: "Current frequency", kind: "text", required: true, section: "Performance signals (real numbers, not adjectives)", placeholder: "e.g. 3.4", hint: "Meta: >3 is the warning line, >5 is severe. TikTok burns at lower freq." },
     { name: "impressions_week_1", label: "Impressions · week 1", kind: "number", placeholder: "e.g. 42000" },
-    { name: "impressions_week_latest", label: "Impressions · latest week", kind: "number", placeholder: "e.g. 18000", hint: "AI computes reach decay = (latest / week1) − 1." },
+    { name: "impressions_week_latest", label: "Impressions · latest week", kind: "number", placeholder: "e.g. 18000", hint: "The app computes the impressions change (latest vs week 1)." },
     { name: "ctr_week_1", label: "CTR · week 1", kind: "text", placeholder: "e.g. 1.8%" },
-    { name: "ctr_week_latest", label: "CTR · latest week", kind: "text", placeholder: "e.g. 1.1%", hint: "AI computes CTR decay %. >25% decay = moderate fatigue, >40% = severe." },
+    { name: "ctr_week_latest", label: "CTR · latest week", kind: "text", placeholder: "e.g. 1.1%", hint: "The app computes CTR decay %. >25% decay = moderate fatigue, >40% = severe." },
     { name: "cpm_week_1", label: "CPM · week 1", kind: "text", placeholder: "e.g. $14" },
     { name: "cpm_week_latest", label: "CPM · latest week", kind: "text", placeholder: "e.g. $19", hint: "CPM creep is a textbook saturation signal — rising CPM at falling reach = penalty cycle." },
     { name: "conversions_week_1", label: "Conversions · week 1", kind: "number", placeholder: "e.g. 18" },
@@ -91,7 +91,7 @@ function FatigueOutput({ json }: { json: any }) {
       {json?.computed_decay ? (
         <Section title="Decay computed from your weekly numbers">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <Kv k="reach decay" v={json.computed_decay.reach_decay ?? "—"} />
+            <Kv k="impressions change" v={json.computed_decay.impressions_decay ?? json.computed_decay.reach_decay ?? "—"} />
             <Kv k="CTR decay" v={json.computed_decay.ctr_decay ?? "—"} />
             <Kv k="CPM creep" v={json.computed_decay.cpm_creep ?? "—"} />
             <Kv k="conv decay" v={json.computed_decay.conversion_decay ?? "—"} />

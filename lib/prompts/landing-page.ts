@@ -14,12 +14,26 @@ export interface LandingPageInput {
   lp_screenshot?: unknown;
 }
 
-import { PRICING_PSYCHOLOGY } from "./common-rules";
+import { PRICING_PSYCHOLOGY, PROOF_RULE, hasPriceOrOffer } from "./common-rules";
+import { landingMetrics, computedBlock, factLine, fmtPct } from "../ad-metrics";
+
+const BOUNCE_LABEL = {
+  suspiciously_low: "below 40% — suspiciously low, check tracking",
+  typical: "40-70% — typical for paid traffic",
+  high: "over 70% up to 80% — high",
+  very_high: "80%+ — very high",
+} as const;
 
 export function buildLandingPrompt(input: LandingPageInput): string {
+  const m = landingMetrics(input);
+  const computed = computedBlock([
+    factLine("Conversion rate", m.cvrPct === null ? null : fmtPct(m.cvrPct), "conversions ÷ visitors", "visitors and conversions"),
+    factLine("Bounce rate band", m.bounceBand ? `${m.bounceRatePct}% → ${BOUNCE_LABEL[m.bounceBand]}` : null, "directional bands for paid landing pages", "a bounce rate"),
+  ]);
+  const pricing = hasPriceOrOffer(input.ad_promise, input.landing_copy) ? `\n${PRICING_PSYCHOLOGY}\n` : "";
   return `Grade this landing page using real traffic + conversion data, then prescribe the highest-leverage fixes. Message match between ad and page is the #1 lever — every other call gets weighted against it.
-
-${PRICING_PSYCHOLOGY}
+${pricing}
+${PROOF_RULE}
 
 INPUT — page:
 - URL: ${input.landing_page_url || "(not provided)"}
@@ -52,12 +66,11 @@ The user has dropped a full-page screenshot. JUDGE THE VISUAL HIERARCHY directly
 Cite "(from screenshot)" in scores or fixes when the image — not the typed copy — drove the call.
 When typed copy and image conflict, trust the image (it's the live page).
 
-` : ""}PHASE 1 — COMPUTE THE NUMBERS:
-- Conversion rate = conversions / visitors × 100 (2dp).
-- Bounce-vs-benchmark: typical paid LP bounce rate 50-70%. Flag if >75% (very high) or <40% (suspiciously low, likely tracking issue).
-- LCP verdict: ≤ 2.5s = good · 2.5-4s = needs improvement · > 4s = poor (also hurts Google QS).
-- Engagement health: < 20s time-on-page = abandoned · 20-45s = scanning · > 45s = engaged.
-- If a metric can't be computed, mark "could not be computed" — NEVER invent.
+` : ""}PHASE 1 — THE NUMBERS:
+${computed}
+- LCP verdict (Google's Core Web Vitals thresholds): ≤ 2.5s = good · 2.5-4s = needs_improvement · > 4s = poor.
+- Engagement health (rule of thumb): < 20s time-on-page = abandoned · 20-45s = scanning · > 45s = engaged.
+- If a metric has no input, mark it "could not be computed" / "unknown" — NEVER invent.
 
 PHASE 2 — DIAGNOSE MESSAGE MATCH (the #1 lever):
 - Does the H1 echo the ad's promise within 5 words of the same idea?
@@ -68,10 +81,10 @@ PHASE 3 — SCORE 1-10 EACH LEVER, with a NAMED reason (no vague verdicts):
 - message_match: H1 echoes ad promise?
 - clarity: stranger knows what's being sold in 5 seconds?
 - cta_effectiveness: ONE primary CTA, visible above the fold, action-led verb?
-- social_proof: real numbers, named entities, dated reviews — NOT "trusted by thousands"?
-- specificity: ONE concrete benefit with a number?
+- social_proof: real numbers, named entities, dated reviews on the page — NOT "trusted by thousands"? (Score what the page has; any proof you suggest adding must come from the brand brain — otherwise suggest a verifiable product/process fact.)
+- specificity: ONE concrete, checkable benefit?
 - objection_handling: acknowledges & rebuts top 2 objections?
-- friction: anything adding drag (long form, competing CTAs, unclear pricing)?
+- friction: 10 = almost no drag, 1 = heavy drag (long form, competing CTAs, unclear pricing). Like every lever here, HIGHER IS BETTER.
 - above_the_fold: H1 + subhead + visual + CTA all visible without scroll on mobile?
 
 PHASE 4 — RANK FIXES:
@@ -88,14 +101,13 @@ Return ONLY valid JSON:
 {
   "computed_metrics": {
     "conversion_rate": "string (e.g. '1.51%' or 'could not be computed')",
-    "bounce_vs_benchmark": "string (e.g. '76% — above benchmark (50-70%)')",
+    "bounce_vs_benchmark": "string — the computed bounce band above, or 'could not be computed'",
     "lcp_verdict": "good | needs_improvement | poor | unknown",
     "engagement_health": "abandoned | scanning | engaged | unknown",
     "notes": "string — flag any contradictions or signals worth calling out"
   },
   "overall_grade_pulse": {
     "message_match_score": 0,
-    "estimated_post_click_drop_off_pct": 0,
     "single_biggest_fix": "string"
   },
   "scores": {

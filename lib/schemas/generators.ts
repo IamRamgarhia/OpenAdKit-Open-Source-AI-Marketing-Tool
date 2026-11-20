@@ -160,7 +160,9 @@ export const TwitterSchema = tolerant(z
         })
       )
       .optional(),
+    website_card_title: z.string().optional(),
     best_time_window_utc: z.string().optional(),
+
   })
   .passthrough()
   .refine((v) => (v.thread && v.thread.length > 0) || (v.tweets && v.tweets.length > 0), {
@@ -515,6 +517,8 @@ export const BudgetPlannerSchema = tolerant(z
     funnel_split_overall: z.array(z.any()).optional(),
     campaign_breakout: z.array(z.any()).optional(),
     volume_projection: z.record(z.string(), z.any()).optional(),
+    saturation_flags: z.array(z.any()).optional(),
+    // Legacy: older history rows nested saturation_flags under break_even.
     break_even: z.record(z.string(), z.any()).optional(),
     reserve: z.record(z.string(), z.any()).optional(),
     no_go_list: Strings.optional(),
@@ -525,6 +529,8 @@ export const BudgetWasteSchema = tolerant(z
   .object({
     // budget-waste prompt returns null when no stop condition is triggered.
     stop_condition: z.string().nullish(),
+    // Set when conversion tracking isn't confirmed (audit still runs).
+    tracking_warning: z.string().nullish(),
     pulse: z.record(z.string(), z.any()).optional(),
     audit: z.array(z.any()).optional(),
     top_5_fixes_by_roi: z.array(z.any()).optional(),

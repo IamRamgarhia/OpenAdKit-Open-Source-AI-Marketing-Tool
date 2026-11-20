@@ -218,7 +218,14 @@ const PAIRS: Pair[] = [
   P("google shopping", "GoogleShoppingSchema", G.GoogleShoppingSchema, buildShoppingPrompt(input())),
   P("meta", "MetaSchema", G.MetaSchema, buildMetaPrompt(input())),
   P("tiktok", "TiktokSchema", G.TiktokSchema, buildTikTokPrompt(input({ format: "hooks" })), buildTikTokPrompt(input({ format: "scripts" }))),
-  P("twitter", "TwitterSchema", G.TwitterSchema, buildTwitterPrompt(input({ format: "thread" })), buildTwitterPrompt(input({ format: "tweets" }))),
+  P(
+    "twitter",
+    "TwitterSchema",
+    G.TwitterSchema,
+    buildTwitterPrompt(input({ format: "thread" })),
+    buildTwitterPrompt(input({ format: "promoted_tweet", audience_geo: "" })),
+    buildTwitterPrompt(input({ format: "website_card" }))
+  ),
   P(
     "youtube",
     "YoutubeSchema",

@@ -4,7 +4,41 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-11-20
+
 ### Changed
+- **Prompts no longer state unsourced numbers as fact.** Removed or relabelled
+  figures like "keyword in headline = +12-18% CTR", "85% watch muted", Spark
+  "30% lower CPM", "QS 5→7 cuts CPC 16-28%" and hard-coded 2025 CTR
+  benchmarks (now "approximate public industry averages, not your account").
+- **Proof only from the Brand Brain.** Stat / social-proof / testimonial
+  slots (TikTok, Spark, hashtag challenge, YouTube, X, PMax, Shopping, reel
+  hooks, campaign kit) use proof only when the brand lists it, otherwise a
+  verifiable product fact; urgency only with a real deadline in the input.
+  Campaign-kit KPI targets state their basis or say "estimate".
+- **Arithmetic done in code** for the CTR optimizer, Quality Score, landing
+  page, ad fatigue and bid strategy (new `lib/ad-metrics.ts`): passed to the
+  prompt as facts and returned by MCP as `computed_in_code`.
+- **Bid strategy / keyword plan** share one threshold table; Enhanced CPC is
+  no longer recommended; budget ÷ target CPA feasibility is computed.
+- **X / Twitter generator**: per-format rules (links count as 23, website-card
+  headline ≤ 70, video caption, follower ad), 0-2 hashtags, new optional
+  inputs `landing_url` and `audience_geo` (posting window only with a geo).
+- **Budget waste**: new optional `conversion_tracking` input; unconfirmed
+  tracking runs the structural audit with a warning instead of an empty
+  "stop"; the 20 audit questions are listed in the prompt.
+- **Budget planner**: optional gross margin → profit break-even CPA;
+  "break-even CPA at 100% margin" label; saturation flags are top-level.
+- **Campaign kit** plans budget across the brand's own platforms (0% allowed);
+  TikTok-only advice is replaced with Reels / Shorts for Indian audiences
+  (campaign kit, hashtag challenge). MCP now passes the selected brand to
+  each tool's prompt, like the web app.
+- Consistent rules: Instagram ≤ 5 hashtags (one per-platform table), one
+  recent-converter window, platform-aware customer-list names, one retire
+  threshold, YouTube 0-3s hook, display CTA ≤ 12 chars, pricing psychology
+  only when the input has a price and without dollar examples.
+- Ad fatigue reports `impressions_decay` (was `reach_decay`); the landing page
+  no longer shows a model-guessed "drop-off %".
 - **Adding a client by hand needs only the business name.** Platforms,
   content pillars and social links no longer block saving; they're recorded
   as "fill later" automatically.
@@ -14,10 +48,18 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
   the deployment's own origin, like the sitemap; `/support` is crawlable.
 
 ### Added
+- More platform character limits enforced on output (MCP `validate_output`,
+  generate retries, eval): per-size display copy and CTA, responsive display
+  assets, X posts / card headline, TikTok captions, Shopping title and
+  highlights, campaign-kit copy, Quality Score headlines, YouTube headlines.
 - winget manifests for `DiceCodes.OpenAdKit` 2.0.0 (`packaging/winget/`,
   validated with `winget validate`); submit after the release is published.
 
 ### Fixed
+- Output eval: banned-word check skips hyphenated compounds and non-copy
+  fields; invented-stat check ignores percentages in visual / prompt fields.
+- Prompt / schema mismatches: display `cta_button`, hashtags
+  `recommended_set`, budget-waste `audit` key.
 - Returning users with a key no longer see the landing page flash before the
   dashboard on `/` (a pre-paint marker hides it; crawlers still get the
   server-rendered landing page).

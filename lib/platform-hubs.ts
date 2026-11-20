@@ -52,7 +52,7 @@ export const PLATFORM_HUBS: Record<string, PlatformHub> = {
     ],
     best_practices: [
       "Single-theme ad groups (≤ 15 closely related keywords).",
-      "Quality Score ≥ 7 on top spenders → 16-28% CPC reduction.",
+      "Quality Score ≥ 7 on top spenders — higher QS lowers CPC for the same position.",
       "RSA: include the target keyword in at least 2 headlines.",
       "Always add 4+ sitelinks, 6+ callouts, structured snippets — free CTR boost.",
     ],

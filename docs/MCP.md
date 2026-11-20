@@ -35,7 +35,7 @@ Claude looks up the saved brand, runs OpenAdKit's Google RSA tool, and checks ev
 | `generate_tiktok_ads` | TikTok hooks or a full UGC-style video script |
 | `generate_tiktok_spark_ads` | Turn an organic TikTok post into a Spark Ad |
 | `generate_tiktok_hashtag_challenge` | TikTok Branded Hashtag Challenge concept, creator brief and rollout |
-| `generate_x_twitter_ads` | X (Twitter) promoted posts, video, website cards, follower ads or threads |
+| `generate_x_twitter_ads` | X (Twitter) promoted posts, video, website cards, follower ads or threads (optional `landing_url`, `audience_geo`) |
 | `generate_youtube_ads` | YouTube in-stream, bumper (6s) or discovery ad scripts and copy |
 | `generate_linkedin_ads` | LinkedIn sponsored content, message ads, dynamic ads, text ads or lead-gen forms |
 | `generate_display_ads` | Google responsive display ad headlines, descriptions and banner copy |
@@ -51,17 +51,17 @@ Claude looks up the saved brand, runs OpenAdKit's Google RSA tool, and checks ev
 
 | Tool | What it does |
 |---|---|
-| `optimize_ctr` | Diagnose a low click-through rate from real numbers and rewrite the ad |
-| `optimize_quality_score` | Find what drags a keyword's Google Quality Score down and how to fix it |
+| `optimize_ctr` | Diagnose a low click-through rate from real numbers and rewrite the ad — **CTR / CVR / CPC / CPA computed in code** |
+| `optimize_quality_score` | Find what drags a keyword's Google Quality Score down and how to fix it — **CTR / CVR / CPA computed in code** |
 | `optimize_audience_targeting` | Audience structure, exclusions and testing plan |
-| `optimize_ad_fatigue` | Decide whether an ad is fatigued from week-over-week numbers |
-| `optimize_bid_strategy` | Recommend a bid strategy from conversion volume, targets and history |
+| `optimize_ad_fatigue` | Decide whether an ad is fatigued from week-over-week numbers — **week-1 vs latest changes computed in code** |
+| `optimize_bid_strategy` | Recommend a bid strategy from conversion volume, targets and history — **budget ÷ target CPA feasibility computed in code** |
 | `optimize_keywords` | Keyword groups, match types and negatives |
-| `optimize_landing_page` | Grade a landing page against the ad promise, with prioritized fixes |
+| `optimize_landing_page` | Grade a landing page against the ad promise, with prioritized fixes — **conversion rate and bounce band computed in code** |
 | `optimize_ab_test` | A/B test plan — **sample size and duration computed in code** (two-proportion formula, 95% confidence, 80% power) |
-| `optimize_budget_planner` | Split a monthly budget across platforms — **projections computed in code** from your numbers or labelled benchmark midpoints |
+| `optimize_budget_planner` | Split a monthly budget across platforms — **projections and break-even CPA computed in code** from your numbers (optional `gross_margin_pct`) or labelled benchmark midpoints |
 | `optimize_creative_score` | Score ad copy and get specific rewrites (any CTR band is a directional AI estimate) |
-| `optimize_budget_waste` | Find where ad spend leaks and what to fix first |
+| `optimize_budget_waste` | Find where ad spend leaks and what to fix first; optional `conversion_tracking` (yes / no / unsure) — unconfirmed tracking still gets the structural audit, with a warning |
 
 **Research (1)**
 
@@ -73,8 +73,8 @@ Every AI tool also accepts these optional inputs:
 
 | Input | Meaning |
 |---|---|
-| `brand` | A saved client (id or business name from `list_brands`). Its tone, offers, audience and proof are used. |
-| `language` | Output language, e.g. `Spanish`, `Hindi`. Default English. |
+| `client` | A saved client brand (id or business name from `list_brands`). Its tone, offers, audience and proof are used. |
+| `output_language` | Language for the generated copy, e.g. `Spanish`, `Hindi`. Default English. |
 | `tone_override` | Override the brand's tone for this run. |
 | `mode` | `auto` (default), `generate` (require a key) or `prompt` (always return the prompt). |
 
@@ -92,12 +92,14 @@ Every AI tool also accepts these optional inputs:
 ## Two modes: with or without an AI key
 
 **Without an AI key (prompt mode)** — nothing to pay OpenAdKit or a second provider.
-The tool returns OpenAdKit's exact system prompt, task prompt and the JSON Schema of the expected result. The assistant (for example Claude in Claude Desktop) writes the result itself and then calls `validate_output`. That check covers the output's shape and hard platform limits — Google headlines (30), descriptions (90), sitelinks, callouts and display paths; Performance Max headlines and descriptions; display headlines; Meta headlines (40); LinkedIn intro text (600) and headlines (200). Too-long text is rejected unless a shorter `trimmed_alt` that fits is supplied.
+The tool returns OpenAdKit's exact system prompt, task prompt and the JSON Schema of the expected result. The assistant (for example Claude in Claude Desktop) writes the result itself and then calls `validate_output`. That check covers the output's shape and hard platform limits — Google headlines (30), descriptions (90), sitelinks, callouts and display paths; Performance Max headlines and descriptions; display headlines, descriptions and CTA buttons (per banner size) and responsive display assets; Meta headlines (40); LinkedIn intro text (600) and headlines (200); X posts (280, every link counted as 23) and website-card headlines (70); TikTok and Spark Ads captions (100) and hashtag-challenge Discover copy; Google Shopping titles (150) and highlights (60); campaign-kit RSA / Meta / X copy; Quality Score headline suggestions (30); YouTube in-feed headlines (100). Too-long text is rejected unless a shorter `trimmed_alt` that fits is supplied.
 
 **With an AI key (generate mode)** — set one of the key variables below in the server's environment.
 OpenAdKit calls that provider itself, validates the reply (schema + character limits), retries once with the exact problems if it fails, and returns the validated result along with the provider, model, attempts, token usage and estimated cost.
 
-In both modes, the A/B test sample size and the budget projections are calculated in code and returned as `computed_in_code` — the model never makes those numbers up.
+In both modes, arithmetic is done in code and returned as `computed_in_code` — the model never makes those numbers up: A/B sample size and duration, budget projections and break-even CPA, CTR / conversion rate / CPC / CPA (CTR optimizer, Quality Score), landing-page conversion rate and bounce band, week-over-week fatigue changes, and bid-strategy feasibility (budget ÷ target CPA). The same values are written into the prompt as facts.
+
+When a `client` brand is given, the tool's prompt also sees that brand (as in the web app) — for example, the campaign kit plans budget across the brand's own platforms.
 
 ---
 

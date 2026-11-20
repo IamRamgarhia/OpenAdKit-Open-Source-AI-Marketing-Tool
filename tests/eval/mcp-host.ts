@@ -53,7 +53,7 @@ export async function runMcpHost(args: string[]) {
       for (const [name, fx] of Object.entries(INPUTS)) {
         if (only.length && !only.includes(name)) continue;
         const res = body(
-          await client.callTool({ name, arguments: { ...fx.input, ...(fx.brand ? { brand: String(BRANDS[fx.brand].id) } : {}) } }),
+          await client.callTool({ name, arguments: { ...fx.input, ...(fx.brand ? { client: String(BRANDS[fx.brand].id) } : {}) } }),
         );
         if (res.mode !== "prompt") throw new Error(`${name}: expected prompt mode, got ${res.mode}`);
         fs.writeFileSync(path.join(outDir, `${name}.prompt.json`), JSON.stringify(res, null, 2));

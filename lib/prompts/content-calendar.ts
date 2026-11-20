@@ -1,4 +1,4 @@
-import { VIDEO_HOOK_RULE, ANTI_FABRICATION_RULE } from "./common-rules";
+import { VIDEO_HOOK_RULE, ANTI_FABRICATION_RULE, HASHTAG_COUNTS } from "./common-rules";
 
 export interface ContentCalendarInput {
   duration: "1_week" | "2_weeks" | "1_month";
@@ -58,16 +58,19 @@ PRINCIPLES (apply all):
 - One CTA per post. No double-CTAs.
 - Captions front-load: first sentence is the hook (cuts at "see more").
 - 80% value / 20% promotion — be honest, no fabricated stats.
-- Posting time matched to platform best practice: Instagram peaks 11am + 7pm local, LinkedIn 8-10am Tue-Thu, TikTok 7am + 7pm, Twitter 8-10am + 6pm. Adjust for the user's timezone.
+- Posting time: use the user's posting window when given; otherwise common rule-of-thumb windows (Instagram late morning / evening, LinkedIn weekday mornings, TikTok morning / evening, X weekday mornings) in the user's timezone. Label them rule of thumb, not account data.
 
 PLATFORM-SPECIFIC CAPTION RULES:
-- Instagram: first 125 chars visible before "more". 2,200 chars max. ~30 hashtags allowed but 5-10 niche performs best in 2025.
-- TikTok: 100 chars cap. 3-5 hashtags max. Hook = first 3 seconds OF VIDEO, not caption.
-- Twitter / X: 280 chars. 1-2 hashtags max.
-- LinkedIn: 150 chars visible, 3,000 max. 3-5 professional hashtags. No emoji walls.
-- Facebook: 80 chars visible, 63k max. Keep short. 1-2 hashtags.
+- Instagram: first 125 chars visible before "more". 2,200 chars max.
+- TikTok: short caption (keep it under ~100 chars). Hook = first 3 seconds OF VIDEO, not caption.
+- Twitter / X: 280 chars (a link counts as 23).
+- LinkedIn: ~150 chars visible, 3,000 max. No emoji walls.
+- Facebook: ~80 chars visible. Keep short.
 - YouTube Shorts: 100-char title, 5,000-char description. First 100 chars of description matter most.
 - Pinterest: 100-char title, 500-char description. Vertical 2:3 ratio.
+
+HASHTAGS PER POST (same caps everywhere in OpenAdKit):
+${HASHTAG_COUNTS}
 
 FOR EACH POST INCLUDE:
 - Day number + suggested date offset (Day 1, Day 2…)
@@ -76,7 +79,7 @@ FOR EACH POST INCLUDE:
 - Format (image / carousel / reel / short / story / text / live)
 - Hook (the first 1 line that does the heaviest work)
 - Full caption in the platform's native style + length
-- 5-10 hashtags (tiered: 1 broad / 3 medium / 3 niche / 1 branded)
+- Hashtags within that platform's cap above (niche first, plus a branded tag where it fits)
 - Visual creative brief: ONE-paragraph description of what the image/video should be — written so it can be pasted into an AI image/video tool
 - Recommended AI tool for the asset (from this list — match brief to tool):
   STATIC: Midjourney (photoreal/stylized), DALL-E 3 / ChatGPT (text in image), Ideogram (text rendering), Adobe Firefly (commercial-safe), Recraft (brand-vector), Canva (template-driven free)
@@ -127,7 +130,7 @@ Return ONLY valid JSON:
   },
   "asset_budget_estimate": {
     "free_only_path": "string (e.g. 'Canva + DALL-E free tier covers all assets')",
-    "freemium_path": "string (e.g. '~$30 of Midjourney covers all 14 days')",
+    "freemium_path": "string (e.g. 'one month of a paid image tool covers every post' — no prices unless you are sure of them)",
     "premium_path": "string"
   },
   "spare_hooks_for_underperformers": ["string"]

@@ -49,6 +49,7 @@ INPUT:
 GENERATE — minimum requirements + best-practice maximums:
 1. 15 headlines (30 chars). Mix: 5 keyword-led / 4 benefit-led / 3 social-proof / 2 CTA / 1 brand.
 2. 5 long headlines (90 chars). Mix: 2 problem→solution / 2 feature→outcome / 1 social-proof statement.
+   SOCIAL PROOF: use reviews, ratings, customer counts, awards or named clients only if the brand brain lists them. Otherwise write those slots as verifiable product / process facts (what's included, how it works, a stated guarantee) — still tag them "social_proof" only when they are real proof, else "benefit".
 3. 5 descriptions (90 chars).
 4. 3 image prompts — one per required ratio. Describe a STILL composition that survives at thumbnail scale, with text-safe space.
 5. 1 video script (10–15s) — hook (0-3s), value (3-10s), CTA (10-15s).

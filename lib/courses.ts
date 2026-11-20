@@ -137,7 +137,7 @@ Single-Theme Ad Groups (STAGs) and Single-Keyword Ad Groups (SKAGs) are the name
         slug: "quality-score-deep",
         title: "Quality Score, by the three factors that move it",
         read_minutes: 6,
-        takeaway: "Three factors, each rated low/avg/above-avg. Fix the lowest first. Going 5→7 cuts CPC 16-28%.",
+        takeaway: "Three factors, each rated low/avg/above-avg. Fix the lowest first. A higher QS lowers CPC for the same position; how much varies by account.",
         body_md: `# It is not a black box
 
 QS is the average of three sub-scores you can see in Google Ads:

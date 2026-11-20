@@ -17,7 +17,7 @@ STRUCTURE (markdown):
 **In 30 seconds:** {Plain-English explanation, ≤ 50 words.}
 
 ## Why your money cares
-{Concrete dollar impact — example: "Moving Quality Score from 5 → 7 typically reduces CPC 16-28%. On $5k/mo that's $800-$1,400 back."}
+{Concrete money impact, in plain terms — example: "A higher Quality Score lowers what you pay per click for the same position, so the same budget buys more clicks." Only quote a percentage if you can name its source; otherwise describe the direction.}
 
 ## How to improve it
 {3 specific, named actions. Each starts with a verb. No "consider" or "try" — say it.}

@@ -34,7 +34,16 @@ describe("estimateVolume", () => {
     expect(e.cpa).toBeCloseTo(62.5, 10);
     expect(e.revenue).toBeCloseTo(16000, 10);
     expect(e.roas).toBeCloseTo(3.2, 10);
-    expect(e.breakEvenCpa).toBe(200);
+    expect(e.revenueBreakEvenCpa).toBe(200);
+    expect(e.profitBreakEvenCpa).toBeNull();
+  });
+
+  it("break-even CPA uses the gross margin when given", () => {
+    const e = estimateVolume({ monthlyBudget: "5000", platform: "Google Search", cpc: "2.50", aov: "200", grossMarginPct: "40%", currencyCode: "USD" })!;
+    expect(e.revenueBreakEvenCpa).toBe(200);
+    expect(e.grossMarginPct).toBe(40);
+    expect(e.profitBreakEvenCpa).toBeCloseTo(80, 10);
+    expect(estimateVolume({ monthlyBudget: "5000", platform: "Google Search", aov: "200", grossMarginPct: "140", currencyCode: "USD" })!.profitBreakEvenCpa).toBeNull();
   });
 
   it("fills gaps with labelled benchmark midpoints", () => {

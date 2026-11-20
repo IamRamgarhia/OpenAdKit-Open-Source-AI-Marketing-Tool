@@ -68,6 +68,8 @@ export const CampaignKitSchema = tolerant(z
           metric: z.string(),
           target: z.string(),
           by_when: z.string().optional(),
+          basis: z.string().optional(),
+
         })
       )
       .optional(),

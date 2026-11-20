@@ -7,6 +7,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { buildLandingPrompt, type LandingPageInput } from "@/lib/prompts/landing-page";
 import type { GeneratorConfig } from "@/lib/generator-config";
 import { LandingPageSchema } from "@/lib/schemas/generators";
+import { landingMetrics } from "@/lib/ad-metrics";
 
 const config: GeneratorConfig<LandingPageInput & Record<string, unknown>> = {
   title: "Landing Page Grader",
@@ -55,14 +56,17 @@ const config: GeneratorConfig<LandingPageInput & Record<string, unknown>> = {
   buildTitle: (i: any) => `LP · ${i.ad_promise?.slice(0, 30)}`,
   expectJson: true,
   schema: LandingPageSchema,
-  renderJson: (json) => <LpOutput json={json} />,
+  renderJson: (json, input) => <LpOutput json={json} input={input} />,
 };
 
 export default function Page() {
   return <GeneratorShell config={config} scope="optimize/landing-page" />;
 }
 
-function LpOutput({ json }: { json: any }) {
+function LpOutput({ json, input }: { json: any; input?: Partial<LandingPageInput> }) {
+  // Bounce rate is the user's own number (the AI no longer estimates a
+  // "post-click drop-off" it had no way to measure).
+  const bounce = landingMetrics(input ?? {}).bounceRatePct;
   return (
     <div className="space-y-4 stagger">
       {json?.computed_metrics ? (
@@ -83,7 +87,7 @@ function LpOutput({ json }: { json: any }) {
         <Section title="Pulse">
           <div className="grid md:grid-cols-3 gap-2">
             <Stat label="message match" value={`${json.overall_grade_pulse.message_match_score}/10`} />
-            <Stat label="est drop-off" value={`${json.overall_grade_pulse.estimated_post_click_drop_off_pct}%`} tone="neg" />
+            <Stat label="bounce rate · your input" value={bounce !== null ? `${bounce}%` : "—"} tone="neg" />
             <Stat label="biggest fix" value={json.overall_grade_pulse.single_biggest_fix} small />
           </div>
         </Section>

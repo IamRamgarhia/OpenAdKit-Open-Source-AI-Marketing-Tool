@@ -26,6 +26,17 @@ const config: GeneratorConfig<BudgetWasteInput & Record<string, unknown>> = {
       ],
     },
     { name: "monthly_spend", label: "Monthly spend", kind: "text", required: true, placeholder: "5000", hint: "Your selected currency (see Settings)." },
+    {
+      name: "conversion_tracking",
+      label: "Conversion tracking verified?",
+      kind: "select",
+      options: [
+        { value: "unsure", label: "Not sure" },
+        { value: "yes", label: "Yes — set up and verified" },
+        { value: "no", label: "No" },
+      ],
+      hint: "Not sure / No still gets the structural audit, with conversion-based checks marked unknown.",
+    },
     { name: "campaign_summary", label: "Campaigns & setup", kind: "textarea", required: true, rows: 5, placeholder: "Describe your campaigns: structure, audiences, match types, recent CPA, conversion volume.", span: 2 },
     { name: "match_types", label: "Match types used", kind: "text", placeholder: "broad / phrase / exact" },
     { name: "has_negatives", label: "Negative list?", kind: "text", placeholder: "yes / no / partial" },
@@ -38,6 +49,7 @@ const config: GeneratorConfig<BudgetWasteInput & Record<string, unknown>> = {
   initial: {
     platform: "Google Ads",
     monthly_spend: "",
+    conversion_tracking: "unsure",
     campaign_summary: "",
     match_types: "",
     has_negatives: "",
@@ -79,6 +91,12 @@ function BudgetOutput({ json, input }: { json: any; input: Partial<BudgetWasteIn
   }
   return (
     <div className="space-y-4 stagger">
+      {typeof json?.tracking_warning === "string" && json.tracking_warning ? (
+        <Section title="Conversion tracking not confirmed">
+          <p className="text-sm text-live">{json.tracking_warning}</p>
+          <p className="text-[11px] text-ink-muted mt-1">The structural checks below still apply; conversion-based waste can't be measured until tracking is verified.</p>
+        </Section>
+      ) : null}
       {json?.pulse ? (
         <Section title="Pulse">
           <div className={`grid gap-2 ${share !== null ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
