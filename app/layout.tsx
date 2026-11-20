@@ -83,7 +83,8 @@ export const metadata: Metadata = {
       { url: "/favicon.svg", type: "image/svg+xml" },
       { url: "/icon.svg", sizes: "any", type: "image/svg+xml" },
     ],
-    apple: "/icon.svg",
+    // iOS ignores SVG touch icons — it needs a PNG (180×180).
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
   },
   openGraph: {
     title: "OpenAdKit — Open Source AI Marketing Tool",
