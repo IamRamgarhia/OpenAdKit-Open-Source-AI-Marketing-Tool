@@ -21,6 +21,7 @@ import type { LLMMessage, LLMUsage, Provider } from "../lib/providers/types";
 import { buildBrandSystemPrompt, normalizeBrandBrain, type BrandBrain } from "../lib/brand-brain";
 import { stripNulls } from "../lib/schemas/tolerant";
 import type { AiTool } from "../lib/tools/registry";
+import { limitViolations } from "../lib/tools/limits";
 
 /** Env vars checked, in order, when OPENADKIT_PROVIDER is not set. */
 export const KEY_ENV: { provider: string; vars: string[] }[] = [
@@ -149,7 +150,17 @@ export function validateOutput(tool: AiTool, raw: unknown): ValidationResult {
     return { ok: false, issues: ["Not valid JSON. Return only the JSON value, without prose or code fences."] };
   }
   const parsed = tool.schema.safeParse(stripNulls(value));
-  if (parsed.success) return { ok: true, data: parsed.data };
+  if (parsed.success) {
+    // Valid shape, but the ad platforms also enforce character limits.
+    const over = limitViolations(tool.name, parsed.data);
+    if (!over.length) return { ok: true, data: parsed.data };
+    return {
+      ok: false,
+      issues: over
+        .slice(0, 12)
+        .map((v) => `${v.path}: ${v.label} — "${v.text}" is ${v.length} characters. Shorten it to ${v.max} or fewer, or add a trimmed_alt that fits.`),
+    };
+  }
   return {
     ok: false,
     issues: parsed.error.issues.slice(0, 12).map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`),

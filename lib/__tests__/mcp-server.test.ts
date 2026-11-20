@@ -182,3 +182,26 @@ describe("OpenAdKit MCP server — numbers come from code, not the model", () =>
     expect(res.computed_in_code.days).toBe(8);
   });
 });
+
+describe("OpenAdKit MCP server — platform character limits", () => {
+  const rsa = (headline: string) => ({
+    headlines: [{ text: headline, chars: [...headline].length, angle: "keyword", status: "ok" }],
+    descriptions: [{ text: "Gentle whitening with a written quote first.", chars: 44, angle: "benefit_proof", status: "ok" }],
+  });
+
+  it("rejects a schema-valid Google headline that is over 30 characters", async () => {
+    const res = await client.callTool({
+      name: "validate_output",
+      arguments: { tool: "generate_google_search_ads", output: rsa("Know Your Price Before We Start") },
+    });
+    expect(res.isError).toBe(true);
+    expect(parse(res).fix_these[0]).toMatch(/headlines\[0\]\.text: Google headline \(30\).*31 characters/);
+  });
+
+  it("accepts an over-limit field when a fitting trimmed_alt is supplied", async () => {
+    const out = rsa("Know Your Price Before We Start");
+    (out.headlines[0] as Record<string, unknown>).trimmed_alt = "Know the Price Before We Start";
+    const res = await client.callTool({ name: "validate_output", arguments: { tool: "generate_google_search_ads", output: out } });
+    expect(parse(res).valid).toBe(true);
+  });
+});

@@ -85,3 +85,17 @@ describe("product name in prompts", () => {
     expect(prompt).not.toMatch(/adforge/i);
   });
 });
+
+describe("prompts never ask for proof the brand didn't provide", () => {
+  it("social-proof / data-led variants are conditional on Brand Brain evidence", async () => {
+    const { buildGoogleRsaPrompt } = await import("@/lib/prompts/google-ads");
+    const { buildMetaPrompt } = await import("@/lib/prompts/meta-ads");
+    const { buildLinkedInPrompt } = await import("@/lib/prompts/linkedin-ads");
+    const rsa = buildGoogleRsaPrompt({ goal: "Leads", product: "x", keyword: "y" });
+    const meta = buildMetaPrompt({ objective: "Leads", format: "Single image", product: "x", offer: "", cta: "Book now" });
+    const li = buildLinkedInPrompt({ format: "sponsored_content", objective: "Leads", product: "x", audience: "y", cta: "Request Demo" });
+    for (const p of [rsa, meta, li]) expect(p).toMatch(/never invent/i);
+    expect(rsa).not.toMatch(/social-proof \/ specificity-led \(numbers, named, dated\)/);
+    expect(li).not.toMatch(/\(named companies or roles using it\)/);
+  });
+});
