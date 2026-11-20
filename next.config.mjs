@@ -30,6 +30,14 @@ const nextConfig = {
   // Pin tracing to this folder so a stray lockfile in a parent directory
   // can't make Next trace (and bundle) the wrong tree.
   outputFileTracingRoot: root,
+  // No next/image usage anywhere, so don't ship the image optimizer. This
+  // keeps `sharp` (a per-OS native binary) out of the standalone bundle, which
+  // makes the release payload pure JavaScript: one zip runs on Windows, macOS
+  // and Linux with any Node >= 20.9.
+  images: { unoptimized: true },
+  outputFileTracingExcludes: {
+    "*": ["node_modules/sharp/**", "node_modules/@img/**", "node_modules/@swc/core*/**"],
+  },
   turbopack: { root },
   // Security headers for self-hosted / Docker deployments. Vercel applies these
   // via vercel.json, but non-Vercel hosts don't read that file.
