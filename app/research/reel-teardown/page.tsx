@@ -1,6 +1,7 @@
 "use client";
 
 import { GeneratorShell } from "@/components/GeneratorShell";
+import { arr, joinList, obj, strList, txt } from "@/lib/safe-json";
 import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { buildReelTeardownPrompt, type ReelTeardownInput } from "@/lib/prompts/reel-teardown";
@@ -49,19 +50,25 @@ export default function Page() {
 }
 
 function TeardownOutput({ json }: { json: any }) {
-  const fm = json?.format_mix_percentages ?? json?.pattern_read?.format_mix_percentages;
+  // No schema on this tool — every list/object access below goes through
+  // lib/safe-json so a string-where-a-list-was-expected can't crash render.
+  const pr = obj(json?.pattern_read);
+  const wm = obj(json?.weakness_map);
+  const pa = obj(json?.positioning_attack);
+  const beats = arr(json?.beat_their_reel).filter((b) => b && typeof b === "object");
+  const fm = obj(json?.format_mix_percentages ?? pr.format_mix_percentages);
   return (
     <div className="space-y-4 stagger">
-      {json?.pattern_read ? (
+      {Object.keys(pr).length ? (
         <Section title="Pattern read">
           <div className="grid md:grid-cols-2 gap-3 text-xs">
             <div>
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint mb-1.5">hook formulas</div>
               <ul className="space-y-1">
-                {(json.pattern_read.hook_formulas_used ?? []).map((h: any, i: number) => (
+                {arr(pr.hook_formulas_used).map((h: any, i: number) => (
                   <li key={i} className="flex items-center gap-2 border border-base-700 px-2 py-1">
-                    <Pill text={h.formula?.replace(/_/g, " ")} />
-                    <span className="text-ink-muted ml-auto">×{h.count}</span>
+                    <Pill text={txt(typeof h === "string" ? h : h?.formula).replace(/_/g, " ")} />
+                    {txt(h?.count) ? <span className="text-ink-muted ml-auto">×{txt(h.count)}</span> : null}
                   </li>
                 ))}
               </ul>
@@ -69,7 +76,7 @@ function TeardownOutput({ json }: { json: any }) {
             <div>
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint mb-1.5">content pillars</div>
               <ul className="space-y-1">
-                {(json.pattern_read.content_pillars_used ?? []).map((p: string, i: number) => (
+                {strList(pr.content_pillars_used).map((p, i) => (
                   <li key={i} className="border border-base-700 px-2 py-1 text-ink">{p}</li>
                 ))}
               </ul>
@@ -78,22 +85,22 @@ function TeardownOutput({ json }: { json: any }) {
           <div className="mt-3 grid md:grid-cols-3 gap-2 text-xs">
             <div className="border border-base-700 p-2">
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">length pattern</div>
-              <div className="text-ink mt-1">{json.pattern_read.length_pattern}</div>
+              <div className="text-ink mt-1">{txt(pr.length_pattern)}</div>
             </div>
             <div className="border border-base-700 p-2">
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">emotional register</div>
-              <div className="text-ink mt-1">{json.pattern_read.emotional_register}</div>
+              <div className="text-ink mt-1">{txt(pr.emotional_register)}</div>
             </div>
             <div className="border border-base-700 p-2">
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">cta mechanics</div>
-              <div className="text-ink mt-1">{(json.pattern_read.cta_mechanics ?? []).join(" · ")}</div>
+              <div className="text-ink mt-1">{joinList(pr.cta_mechanics)}</div>
             </div>
           </div>
-          {fm ? (
+          {Object.keys(fm).length ? (
             <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-              {Object.entries(fm).map(([k, v]: any) => (
+              {Object.entries(fm).filter(([, v]) => txt(v)).map(([k, v]) => (
                 <div key={k} className="border border-base-700 px-2 py-1.5 text-center">
-                  <div className="font-display italic text-lg text-live tabular">{v}%</div>
+                  <div className="font-display italic text-lg text-live tabular">{txt(v)}%</div>
                   <div className="text-[10px] font-mono uppercase tracking-ui-wide text-ink-faint">{k.replace(/_/g, " ")}</div>
                 </div>
               ))}
@@ -102,47 +109,47 @@ function TeardownOutput({ json }: { json: any }) {
         </Section>
       ) : null}
 
-      {json?.weakness_map ? (
+      {Object.keys(wm).length ? (
         <Section title="Weakness map · where they're exposed">
           <ul className="space-y-1.5 text-xs">
-            <li className="flex gap-2"><span className="text-ink-faint w-44 font-mono uppercase tracking-ui-wide text-[10px]">overused hook</span><span className="text-ink flex-1">{json.weakness_map.overused_hook_formula}</span></li>
-            <li className="flex gap-2"><span className="text-ink-faint w-44 font-mono uppercase tracking-ui-wide text-[10px]">missing pillars</span><span className="text-pos flex-1">{json.weakness_map.missing_pillars?.join(" · ")}</span></li>
-            <li className="flex gap-2"><span className="text-ink-faint w-44 font-mono uppercase tracking-ui-wide text-[10px]">skipped cta</span><span className="text-ink flex-1">{json.weakness_map.skipped_cta_mechanic}</span></li>
-            <li className="flex gap-2"><span className="text-ink-faint w-44 font-mono uppercase tracking-ui-wide text-[10px]">missing emotion</span><span className="text-ink flex-1">{json.weakness_map.missing_emotion}</span></li>
-            {json.weakness_map.weak_proof_examples?.length ? (
-              <li className="flex gap-2"><span className="text-neg w-44 font-mono uppercase tracking-ui-wide text-[10px]">weak proof flagged</span><span className="text-neg flex-1">{json.weakness_map.weak_proof_examples.join(" · ")}</span></li>
+            <li className="flex gap-2"><span className="text-ink-faint w-44 font-mono uppercase tracking-ui-wide text-[10px]">overused hook</span><span className="text-ink flex-1">{txt(wm.overused_hook_formula)}</span></li>
+            <li className="flex gap-2"><span className="text-ink-faint w-44 font-mono uppercase tracking-ui-wide text-[10px]">missing pillars</span><span className="text-pos flex-1">{joinList(wm.missing_pillars)}</span></li>
+            <li className="flex gap-2"><span className="text-ink-faint w-44 font-mono uppercase tracking-ui-wide text-[10px]">skipped cta</span><span className="text-ink flex-1">{txt(wm.skipped_cta_mechanic)}</span></li>
+            <li className="flex gap-2"><span className="text-ink-faint w-44 font-mono uppercase tracking-ui-wide text-[10px]">missing emotion</span><span className="text-ink flex-1">{txt(wm.missing_emotion)}</span></li>
+            {strList(wm.weak_proof_examples).length ? (
+              <li className="flex gap-2"><span className="text-neg w-44 font-mono uppercase tracking-ui-wide text-[10px]">weak proof flagged</span><span className="text-neg flex-1">{joinList(wm.weak_proof_examples)}</span></li>
             ) : null}
           </ul>
         </Section>
       ) : null}
 
-      {json?.positioning_attack ? (
+      {Object.keys(pa).length ? (
         <Section title="Positioning attack plan">
           <div className="grid md:grid-cols-2 gap-2 text-sm">
             <div className="border border-base-700 p-2">
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">angle to own</div>
-              <div className="text-ink mt-1">{json.positioning_attack.angle_to_own}</div>
+              <div className="text-ink mt-1">{txt(pa.angle_to_own)}</div>
             </div>
             <div className="border border-base-700 p-2">
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">hook formula</div>
-              <div className="text-ink mt-1">{json.positioning_attack.hook_formula_to_use}</div>
+              <div className="text-ink mt-1">{txt(pa.hook_formula_to_use)}</div>
             </div>
             <div className="border border-base-700 p-2">
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">proof flip</div>
-              <div className="text-ink mt-1">{json.positioning_attack.proof_type_to_flip_to}</div>
+              <div className="text-ink mt-1">{txt(pa.proof_type_to_flip_to)}</div>
             </div>
             <div className="border border-base-700 p-2">
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">emotion to own</div>
-              <div className="text-ink mt-1">{json.positioning_attack.emotional_register_to_occupy}</div>
+              <div className="text-ink mt-1">{txt(pa.emotional_register_to_occupy)}</div>
             </div>
           </div>
         </Section>
       ) : null}
 
-      {json?.beat_their_reel?.length ? (
-        <Section title={`Beat-their-reel scripts · ${json.beat_their_reel.length}`}>
+      {beats.length ? (
+        <Section title={`Beat-their-reel scripts · ${beats.length}`}>
           <ul className="space-y-3">
-            {json.beat_their_reel.map((b: any, i: number) => (
+            {beats.map((b: any, i: number) => (
               <li key={i} className="border border-base-700 bg-base-900/30 p-4">
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <Pill text={`#${i + 1}`} />
@@ -172,7 +179,7 @@ function TeardownOutput({ json }: { json: any }) {
                     </div>
                     <div>
                       <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">hashtags</div>
-                      <p className="text-xs text-ink-muted">{(b.hashtags ?? []).map((h: string) => `#${h.replace(/^#/, "")}`).join(" ")}</p>
+                      <p className="text-xs text-ink-muted">{strList(b.hashtags).map((h) => `#${h.replace(/^#/, "")}`).join(" ")}</p>
                     </div>
                   </div>
                   <div>

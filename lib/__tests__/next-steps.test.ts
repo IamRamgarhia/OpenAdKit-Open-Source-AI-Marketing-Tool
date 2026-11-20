@@ -7,6 +7,7 @@ import {
   generatorForPlatformLabel,
   platformForHashtagInput,
   platformForReelInput,
+  storagePlatformForLabel,
 } from "../next-steps";
 
 const APP_DIR = path.resolve(__dirname, "..", "..", "app");
@@ -115,6 +116,17 @@ describe("platform helpers", () => {
     expect(generatorForPlatformLabel("Twitter/X")).toBe("/generate/twitter");
     expect(generatorForPlatformLabel("YouTube In-Stream")).toBe("/generate/youtube");
     expect(generatorForPlatformLabel("", "")).toBe("");
+  });
+
+  it("storagePlatformForLabel maps competitor-teardown platforms", () => {
+    expect(storagePlatformForLabel("Meta Feed")).toBe("meta");
+    expect(storagePlatformForLabel("TikTok In-Feed")).toBe("tiktok");
+    expect(storagePlatformForLabel("Google Search")).toBe("google");
+    expect(storagePlatformForLabel("LinkedIn Sponsored")).toBe("linkedin");
+    expect(storagePlatformForLabel("Twitter / X")).toBe("twitter");
+    expect(storagePlatformForLabel("YouTube In-Stream")).toBe("youtube");
+    expect(storagePlatformForLabel("Google Display")).toBe("display");
+    expect(storagePlatformForLabel("???", "google")).toBe("google");
   });
 
   it("hashtag + reel inputs map to a stored platform", () => {

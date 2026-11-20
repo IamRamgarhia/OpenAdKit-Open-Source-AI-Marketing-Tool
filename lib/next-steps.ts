@@ -48,6 +48,19 @@ export function generatorForPlatformLabel(label: unknown, fallback = "/generate/
   return fallback;
 }
 
+/** Storage platform for a free-text format label ("TikTok In-Feed", "Twitter / X"…). */
+export function storagePlatformForLabel(label: unknown, fallback: Platform = "meta"): Platform {
+  const l = String(label ?? "").toLowerCase();
+  if (l.includes("display")) return "display";
+  if (l.includes("google")) return "google";
+  if (l.includes("meta") || l.includes("facebook") || l.includes("instagram")) return "meta";
+  if (l.includes("tiktok")) return "tiktok";
+  if (l.includes("linkedin")) return "linkedin";
+  if (l.includes("youtube")) return "youtube";
+  if (l.includes("twitter") || /(^|[^a-z])x([^a-z]|$)/.test(l)) return "twitter";
+  return fallback;
+}
+
 /** Storage platform for a hashtags-generator input value. */
 export function platformForHashtagInput(v: unknown): Platform {
   switch (String(v ?? "")) {

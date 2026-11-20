@@ -10,11 +10,12 @@ import { CopyButton } from "@/components/CopyButton";
 import { ProviderSwitcher } from "@/components/ProviderSwitcher";
 import { getCurrency } from "@/lib/currency";
 import { useThrottledStream } from "@/lib/stream-hook";
-import { getActiveBrainId, addUsage } from "@/lib/settings";
+import { getActiveBrainId, addUsage, getLanguage, getToneOverride } from "@/lib/settings";
 import { llmStream, estimateCostUsd, tryParseJson } from "@/lib/llm";
 import { validateOrRetry, StructuredLlmError } from "@/lib/llm-structured";
 import { SuggestionsSchema } from "@/lib/schemas/generators";
-import { getBrain, saveAd, type GeneratedAd } from "@/lib/storage";
+import { getBrain, saveAd, listAds, type GeneratedAd } from "@/lib/storage";
+import { withGenMeta } from "@/lib/ad-meta";
 import { buildBrandSystemPrompt, type BrandBrain } from "@/lib/brand-brain";
 import { buildSuggestedCampaignsPrompt } from "@/lib/prompts/suggested-campaigns";
 
@@ -23,6 +24,49 @@ export default function Page() {
     <ApiKeyGate>
       <Inner />
     </ApiKeyGate>
+  );
+}
+
+const CAMPAIGN_TYPE = "Suggested Campaigns";
+const MAX_TOKENS = 5500;
+
+/** Active brain + the most recent saved Suggestions for it. */
+async function loadBrainAndLatest(): Promise<{ brain: BrandBrain | null; latest: GeneratedAd | null }> {
+  const id = getActiveBrainId();
+  const brain = id ? (await getBrain(id)) ?? null : null;
+  if (!brain) return { brain: null, latest: null };
+  const ads = await listAds({ brand_id: brain.id });
+  const latest = ads.find((a) => a.campaign_type === CAMPAIGN_TYPE && a.output_json) ?? null;
+  return { brain, latest };
+}
+
+function buildSuggestionsAd(
+  b: BrandBrain,
+  r: { json: unknown; text: string; modelId: string; providerId?: string; inTok: number; outTok: number; cost: number; prompt: string }
+): GeneratedAd {
+  return withGenMeta(
+    {
+      id: crypto.randomUUID(),
+      brand_id: b.id,
+      platform: "google",
+      campaign_type: CAMPAIGN_TYPE,
+      title: `Suggestions · ${b.name || b.business_name}`,
+      input: {},
+      output_json: r.json,
+      output_text: r.text,
+      model_id: r.modelId,
+      provider_id: r.providerId,
+      usage_input_tokens: r.inTok,
+      usage_output_tokens: r.outTok,
+      cost_usd: r.cost,
+      starred: false,
+      status: "draft",
+      notes: "",
+      created_at: Date.now(),
+      // Persisted so History can regenerate / compare this run.
+      prompt: r.prompt,
+    },
+    { max_tokens: MAX_TOKENS }
   );
 }
 
@@ -36,27 +80,38 @@ function Inner() {
   const stream = useThrottledStream();
   const abortRef = useRef<AbortController | null>(null);
 
-  const ranOnceRef = useRef(false);
+  // When the shown result came from history rather than a fresh run.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
+  // No auto-run: visiting this page used to fire a paid LLM call every time.
+  // Show the latest saved Suggestions for the active brand instead; the user
+  // clicks Generate / Regenerate when they want fresh ones.
   useEffect(() => {
-    const load = async () => {
-      const id = getActiveBrainId();
-      const b = id ? (await getBrain(id)) ?? null : null;
-      setBrain(b);
-      // Auto-run on first arrival. Pass the brain DIRECTLY so we don't depend
-      // on the next React render committing setBrain(b) — the previous
-      // setTimeout(() => run(), 400) closed over `brain` state which was still
-      // null at the render the setTimeout was scheduled in.
-      if (b && !ranOnceRef.current) {
-        ranOnceRef.current = true;
-        runWithBrain(b);
-      }
+    let cancelled = false;
+    const load = (opts: { switched?: boolean } = {}) => {
+      if (opts.switched) abortRef.current?.abort(); // a run for the old client is moot
+      loadBrainAndLatest().then(({ brain: b, latest }) => {
+        if (cancelled) return;
+        setBrain(b);
+        if (opts.switched || !abortRef.current) {
+          setError(null);
+          setSavedId(null);
+          setSchemaRecovered(false);
+          setParsed(latest?.output_json ?? null);
+          setSavedAt(latest?.created_at ?? null);
+        }
+      });
     };
     load();
-    const h = () => load();
-    window.addEventListener("ados:brains-changed", h);
-    return () => window.removeEventListener("ados:brains-changed", h);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const onEdit = () => load();
+    const onSwitch = () => load({ switched: true });
+    window.addEventListener("ados:brains-changed", onEdit);
+    window.addEventListener("ados:active-brain-changed", onSwitch);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ados:brains-changed", onEdit);
+      window.removeEventListener("ados:active-brain-changed", onSwitch);
+    };
   }, []);
 
   function run() {
@@ -72,30 +127,34 @@ function Inner() {
     setParsed(null);
     setSavedId(null);
     setSchemaRecovered(false);
+    setSavedAt(null);
     stream.reset();
     setRunning(true);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const system = buildBrandSystemPrompt(b);
+      const system = buildBrandSystemPrompt(b, { language: getLanguage(), tone_override: getToneOverride() });
       const prompt = buildSuggestedCampaignsPrompt(b);
       const res = await llmStream(
         {
           system,
           messages: [{ role: "user", content: prompt }],
-          maxTokens: 5500,
+          maxTokens: MAX_TOKENS,
           temperature: 0.75,
           signal: controller.signal,
         },
         { onDelta: stream.append }
       );
       let cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
-      addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
+      let inTok = res.usage?.input_tokens ?? 0;
+      let outTok = res.usage?.output_tokens ?? 0;
+      addUsage(cost, inTok, outTok);
       window.dispatchEvent(new Event("ados:usage"));
       // Some providers (Gemini) sometimes return res.text empty even when
       // streaming worked. Fall back to the accumulated stream buffer so the
       // saved ad always has the actual generated content.
-      let finalText = res.text || stream.text;
+      // getText() reads the live buffer; the closure's stream.text is the stale "".
+      let finalText = res.text || stream.getText();
       // Schema-validate + retry once if shape is wrong. Mirrors GeneratorShell
       // so suggestions get the same "no false results" guarantee — without
       // this, a malformed `campaigns` array would crash the renderer's
@@ -108,12 +167,14 @@ function Inner() {
           system,
           originalPrompt: prompt,
           signal: controller.signal,
-          maxTokens: 5500,
+          maxTokens: MAX_TOKENS,
         });
         json = v.data;
         if (v.recovered) {
           setSchemaRecovered(true);
           cost += v.costUsd;
+          inTok += v.usage?.input_tokens ?? 0;
+          outTok += v.usage?.output_tokens ?? 0;
           addUsage(v.costUsd, v.usage?.input_tokens ?? 0, v.usage?.output_tokens ?? 0);
           window.dispatchEvent(new Event("ados:usage"));
           finalText = v.raw;
@@ -128,24 +189,16 @@ function Inner() {
         throw vErr;
       }
       setParsed(json);
-      const ad: GeneratedAd = {
-        id: crypto.randomUUID(),
-        brand_id: b.id,
-        platform: "google",
-        campaign_type: "Suggested Campaigns",
-        title: `Suggestions · ${b.name || b.business_name}`,
-        input: {},
-        output_json: json,
-        output_text: finalText,
-        model_id: res.modelId,
-        usage_input_tokens: res.usage?.input_tokens ?? 0,
-        usage_output_tokens: res.usage?.output_tokens ?? 0,
-        cost_usd: cost,
-        starred: false,
-        status: "draft",
-        notes: "",
-        created_at: Date.now(),
-      };
+      const ad = buildSuggestionsAd(b, {
+        json,
+        text: finalText,
+        modelId: res.modelId,
+        providerId: res.providerId,
+        inTok,
+        outTok,
+        cost,
+        prompt,
+      });
       await saveAd(ad);
       setSavedId(ad.id);
     } catch (e: any) {
@@ -184,6 +237,11 @@ function Inner() {
           {running ? "analyzing brand…" : parsed ? "regenerate suggestions" : "generate suggestions"}
         </button>
         {running ? <button onClick={() => abortRef.current?.abort()} className="btn-ghost"><StopCircle size={12} /></button> : null}
+        {savedAt && !running ? (
+          <span className="text-[10px] text-ink-faint font-mono uppercase tracking-ui-mega flex items-center gap-1" data-testid="suggestions-saved-at">
+            showing saved suggestions · {new Date(savedAt).toLocaleString()}
+          </span>
+        ) : null}
         {savedId ? <span className="text-[10px] text-pos font-mono uppercase tracking-ui-mega flex items-center gap-1"><Save size={11} /> saved to history</span> : null}
       </div>
 
