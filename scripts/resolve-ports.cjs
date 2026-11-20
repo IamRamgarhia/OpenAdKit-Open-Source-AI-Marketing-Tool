@@ -5,7 +5,7 @@
  * unrelated processes) may already occupy the default ports.
  *
  * Decision logic:
- *   1. Read PORT + ADFORGE_SYNC_PORT from .env.local (or hash-derived high-range default; see defaultStartPort()).
+ *   1. Read PORT + OPENADKIT_SYNC_PORT (legacy: ADFORGE_SYNC_PORT) from .env.local (or hash-derived high-range default; see defaultStartPort()).
  *   2. Probe ADFORGE_SYNC_PORT for /health.
  *        - Responds AND has "ingest" AND cwd matches this install   → "reuse"
  *        - Responds AND has "ingest" AND cwd is a different folder  → shift to a free port pair
@@ -61,6 +61,10 @@ function readEnv() {
     if (eq < 0) continue;
     out[t.slice(0, eq).trim()] = t.slice(eq + 1).trim();
   }
+  // OPENADKIT_SYNC_PORT is canonical; ADFORGE_SYNC_PORT is the pre-rebrand
+  // name. Internally this script keeps using the ADFORGE_SYNC_PORT key, but the
+  // value always prefers the new name when both are present.
+  if (out.OPENADKIT_SYNC_PORT) out.ADFORGE_SYNC_PORT = out.OPENADKIT_SYNC_PORT;
   return out;
 }
 
@@ -81,13 +85,16 @@ function writeEnv(updates) {
     else lines.push(`${key}=${value}`);
   };
   setKey("PORT", next.PORT);
-  setKey("ADFORGE_SYNC_PORT", next.ADFORGE_SYNC_PORT);
+  const syncPort = updates.OPENADKIT_SYNC_PORT || next.ADFORGE_SYNC_PORT;
+  setKey("OPENADKIT_SYNC_PORT", syncPort);
+  setKey("ADFORGE_SYNC_PORT", syncPort); // legacy name, still read by older scripts
   // The browser bundle can't read ADFORGE_SYNC_PORT — only NEXT_PUBLIC_* names
   // are inlined by Next at build time. Without this mirror the web app has no
   // way to learn which port the sidecar landed on, which is exactly how the
   // hardcoded-3006 bug happened: the resolver moved the port and the browser
   // kept calling the old one. Keep the two in lockstep. (lib/sync-endpoint.ts)
-  setKey("NEXT_PUBLIC_ADFORGE_SYNC_PORT", next.ADFORGE_SYNC_PORT);
+  setKey("NEXT_PUBLIC_OPENADKIT_SYNC_PORT", syncPort);
+  setKey("NEXT_PUBLIC_ADFORGE_SYNC_PORT", syncPort);
   while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
   fs.writeFileSync(ENV_LOCAL, lines.join("\n") + "\n", "utf8");
 }
