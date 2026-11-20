@@ -85,6 +85,13 @@ Name: "claudedesktop"; Description: "Connect OpenAdKit to Claude Desktop (adds i
 ; don't linger next to the new build.
 Type: filesandordirs; Name: "{app}\app"
 
+[UninstallDelete]
+; Next.js writes a runtime cache (app\.next\server\route-cache) that Inno
+; didn't install and so wouldn't remove, leaving the program folder behind.
+; User data is NOT here (it lives in %APPDATA%\OpenAdKit and the WebView2
+; profile under %LOCALAPPDATA%\OpenAdKit), so removing the payload is safe.
+Type: filesandordirs; Name: "{app}\app"
+
 [Files]
 Source: "{#AppDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

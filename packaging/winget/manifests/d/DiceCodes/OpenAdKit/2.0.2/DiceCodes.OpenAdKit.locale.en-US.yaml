@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.28.0.schema.json
 
 PackageIdentifier: DiceCodes.OpenAdKit
-PackageVersion: 2.0.1
+PackageVersion: 2.0.2
 PackageLocale: en-US
 Publisher: DiceCodes
 PublisherUrl: https://dicecodes.com
@@ -26,7 +26,7 @@ Tags:
 - marketing
 - mcp
 - open-source
-ReleaseNotesUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/releases/tag/v2.0.1
+ReleaseNotesUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/releases/tag/v2.0.2
 Documentations:
 - DocumentLabel: README
   DocumentUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool#readme
