@@ -123,7 +123,7 @@ function Inner() {
           ))}
         </ul>
         <p className="text-[10px] font-mono uppercase tracking-ui-wide text-ink-subtle mt-3">
-          source: cross-confirmed across multiple 2025 ads-platform reports · directional ranges · verify against your own attribution
+          source: compiled from public 2024-25 ads-platform reports · directional ranges, not guarantees · verify against your own attribution
         </p>
       </Section>
     </div>

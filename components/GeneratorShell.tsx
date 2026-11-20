@@ -649,7 +649,7 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
         </section>
 
         <section className="lg:col-span-3 space-y-4">
-          <OutputArea running={running} stream={stream.text} rawText={result?.text ?? ""} parsed={parsed} config={config as unknown as GeneratorConfig<Record<string, unknown>>} hasRun={hasRun} lastError={error} schemaRecovered={schemaRecovered} lastRun={lastRun} />
+          <OutputArea running={running} stream={stream.text} rawText={result?.text ?? ""} renderInput={(result?.input ?? input) as Record<string, unknown>} parsed={parsed} config={config as unknown as GeneratorConfig<Record<string, unknown>>} hasRun={hasRun} lastError={error} schemaRecovered={schemaRecovered} lastRun={lastRun} />
           {savedId && nextSteps.length ? <NextStepsPanel steps={nextSteps} /> : null}
         </section>
       </div>
@@ -918,6 +918,7 @@ const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
   running,
   stream,
   rawText,
+  renderInput,
   parsed,
   config,
   hasRun,
@@ -930,6 +931,7 @@ const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
   /** Final text of the finished run — after a schema retry this is the
    *  corrected reply, not the failed first attempt that `stream` holds. */
   rawText?: string;
+  renderInput?: Record<string, unknown>;
   parsed: any;
   config: GeneratorConfig<I>;
   hasRun: boolean;
@@ -1027,7 +1029,7 @@ const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
             cost readout you have to scroll past the whole result to find is a
             cost readout nobody reads. */}
         {lastRun ? <UsageStrip run={lastRun} /> : null}
-        {config.renderJson(parsed)}
+        {config.renderJson(parsed, (renderInput ?? {}) as I)}
         <div className="flex items-center justify-end gap-2">
           <CopyButton text={rawText || stream} label="copy raw output" />
           <CopyButton text={JSON.stringify(parsed, null, 2)} label="copy parsed json" />

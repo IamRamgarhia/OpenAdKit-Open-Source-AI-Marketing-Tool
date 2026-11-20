@@ -1,5 +1,10 @@
-// Cross-confirmed 2025 directional benchmarks from claude-ads + marketingskills + public industry reports.
-// These are RANGES, not absolutes. Verify against your own attribution before treating as truth.
+// Directional benchmark ranges compiled from public industry reports (2024-25).
+// These are RANGES, not absolutes — they vary widely by account, offer, geo and
+// season. Verify against your own attribution before treating any as truth.
+
+/** Shown wherever these numbers are displayed or used in an estimate. */
+export const BENCHMARK_DISCLAIMER =
+  "Directional industry ranges from public reports — not guarantees. Your own account data always wins.";
 
 export interface Benchmark {
   metric: "ctr" | "cpc_usd" | "cpa_usd" | "cvr" | "roas";
@@ -12,7 +17,7 @@ export interface Benchmark {
 }
 
 export const BENCHMARKS: Benchmark[] = [
-  // Google Search CTR by industry (cross-vertical 2025 ~4.99% avg)
+  // Google Search CTR by industry (directional; most verticals land ~2-5.5%)
   { metric: "ctr", platform: "Google Search", industry: "ecommerce", low: 2.4, high: 3.0, unit: "pct" },
   { metric: "ctr", platform: "Google Search", industry: "finance", low: 2.5, high: 3.3, unit: "pct" },
   { metric: "ctr", platform: "Google Search", industry: "healthcare", low: 3.0, high: 3.6, unit: "pct" },
@@ -27,10 +32,10 @@ export const BENCHMARKS: Benchmark[] = [
   { metric: "ctr", platform: "Meta Feed", low: 0.9, high: 1.5, unit: "pct" },
   { metric: "ctr", platform: "Meta Stories", low: 0.5, high: 0.8, unit: "pct" },
   { metric: "ctr", platform: "Meta Reels", low: 1.0, high: 1.8, unit: "pct" },
-  { metric: "ctr", platform: "Meta Carousel", low: 1.2, high: 2.2, unit: "pct", note: "~72% higher CTR than single image" },
+  { metric: "ctr", platform: "Meta Carousel", low: 1.2, high: 2.2, unit: "pct", note: "Often out-clicks single-image ads — test it on your account" },
   // TikTok
   { metric: "ctr", platform: "TikTok In-Feed", low: 1.5, high: 3.0, unit: "pct" },
-  { metric: "ctr", platform: "TikTok Spark Ads", low: 2.5, high: 3.5, unit: "pct", note: "Inherits organic engagement → +30% over standard In-Feed" },
+  { metric: "ctr", platform: "TikTok Spark Ads", low: 2.5, high: 3.5, unit: "pct", note: "Carries the post's organic engagement; often beats standard In-Feed — directional" },
   // LinkedIn
   { metric: "ctr", platform: "LinkedIn Sponsored", low: 0.4, high: 0.65, unit: "pct" },
   { metric: "ctr", platform: "LinkedIn Lead Gen", low: 0.5, high: 0.95, unit: "pct" },
@@ -59,7 +64,7 @@ export const BENCHMARKS: Benchmark[] = [
   { metric: "roas", platform: "Google Shopping", industry: "ecommerce", low: 3.0, high: 8.0, unit: "ratio" },
   { metric: "roas", platform: "Meta Feed", industry: "ecommerce", low: 2.0, high: 5.0, unit: "ratio" },
   { metric: "roas", platform: "TikTok In-Feed", industry: "ecommerce", low: 1.5, high: 4.0, unit: "ratio" },
-  { metric: "roas", platform: "Meta Advantage+", industry: "ecommerce", low: 1.4, high: 1.7, unit: "ratio", note: "Median across verticals" },
+  { metric: "roas", platform: "Meta Advantage+", industry: "ecommerce", low: 1.4, high: 1.7, unit: "ratio", note: "Limited public data — treat as a rough reference" },
 ];
 
 export const INDUSTRIES = [

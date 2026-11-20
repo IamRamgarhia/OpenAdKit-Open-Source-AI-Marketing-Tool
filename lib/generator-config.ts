@@ -50,7 +50,9 @@ export interface GeneratorConfig<I extends Record<string, unknown>> {
    * This is the core of the "no false results" guarantee.
    */
   schema?: ZodTypeAny;
-  renderJson?: (json: any) => React.ReactNode;
+  /** `input` is the form state the run was made with (for client-side math
+   *  that must come from the user, not the model — see A/B + budget planner). */
+  renderJson?: (json: any, input: I) => React.ReactNode;
   /** Optional renderer that runs against the streaming text BEFORE final JSON parse. */
   renderStreaming?: (text: string) => React.ReactNode;
   /** Skip the (~1.1k-token) framework stack on short-form generators where the

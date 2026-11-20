@@ -9,6 +9,12 @@ import { PageHeader } from "@/components/PageHeader";
 import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { listBrains, saveAd, type GeneratedAd } from "@/lib/storage";
+import { mapWithConcurrency } from "@/lib/concurrency";
+import { withGenMeta } from "@/lib/ad-meta";
+
+/** Clients generated at once. Firing every client in parallel tripped free-tier
+ *  rate limits immediately (10 clients = 10 simultaneous streams). */
+const BATCH_CONCURRENCY = 2;
 import { type BrandBrain, buildBrandSystemPrompt } from "@/lib/brand-brain";
 import { llmStream, estimateCostUsd } from "@/lib/llm";
 import { validateOrRetry, StructuredLlmError } from "@/lib/llm-structured";
@@ -175,7 +181,7 @@ function Inner() {
     setError(null);
     if (!selected.size) return setError("Pick at least one client.");
     // Batch is the single easiest way to blow a month's API budget — N clients
-    // x one call each, fired in parallel. Check the ceiling before firing any.
+    // x one call each. Check the ceiling before firing any.
     try {
       const budget = await assertWithinBudget();
       if (budget.warning && !budget.exceeded) {
@@ -197,11 +203,14 @@ function Inner() {
     }));
     setResults(initial);
 
-    // Run all clients in parallel — each is one LLM call. Promise.allSettled so
-    // one failure doesn't drop the rest. All share the master abort signal so
-    // a Stop click cancels every in-flight call.
-    await Promise.allSettled(
-      chosen.map(async (brain, i) => {
+    // Two clients at a time — each is one LLM call. Settled results so one
+    // failure doesn't drop the rest. All share the master abort signal so a
+    // Stop click cancels in-flight calls and skips the queued ones.
+    await mapWithConcurrency(chosen, BATCH_CONCURRENCY, async (brain, i) => {
+        if (signal.aborted) {
+          setResults((cur) => cur.map((r, idx) => (idx === i ? { ...r, status: "cancelled", error: "Cancelled." } : r)));
+          return;
+        }
         setResults((cur) => cur.map((r, idx) => (idx === i ? { ...r, status: "running", text: "" } : r)));
         try {
           const built = buildPromptFor(assetKind, brain);
@@ -253,8 +262,10 @@ function Inner() {
             outTokens += v.usage?.output_tokens ?? 0;
           }
           addUsage(cost, inTokens, outTokens);
+          // Live StatusBar update per client, not once at the very end.
+          window.dispatchEvent(new Event("ados:usage"));
 
-          const ad: GeneratedAd = {
+          const ad: GeneratedAd = withGenMeta({
             id: crypto.randomUUID(),
             brand_id: brain.id,
             platform: built.platform,
@@ -273,7 +284,7 @@ function Inner() {
             created_at: Date.now(),
             prompt: built.prompt,
             provider_id: res.providerId,
-          };
+          }, { max_tokens: built.max });
           await saveAd(ad);
 
           setResults((cur) =>
@@ -301,8 +312,7 @@ function Inner() {
             )
           );
         }
-      })
-    );
+    });
     window.dispatchEvent(new Event("ados:usage"));
     setRunning(false);
   }
@@ -316,7 +326,7 @@ function Inner() {
       <PageHeader
         scope="batch"
         title="Multi-Client Batch Mode"
-        subtitle="Pick any number of clients → generate the same asset for every one in a single parallel run. Each output uses that client's own brand brain — same template, different voices."
+        subtitle="Pick any number of clients → generate the same asset for every one in a single run (two clients at a time, to stay under provider rate limits). Each output uses that client's own brand brain — same template, different voices."
         showLive={running}
       />
 
@@ -494,7 +504,7 @@ function Inner() {
             <div className="flex gap-2">
               <button onClick={runBatch} disabled={running || selected.size === 0} className="btn-primary flex-1">
                 {running ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                {running ? `Running ${selected.size} in parallel…` : `Generate for ${selected.size} client${selected.size === 1 ? "" : "s"}`}
+                {running ? `Running ${selected.size} (2 at a time)…` : `Generate for ${selected.size} client${selected.size === 1 ? "" : "s"}`}
               </button>
               {running ? (
                 <button onClick={stopBatch} className="btn-ghost" title="Cancel all in-flight calls">
@@ -503,7 +513,7 @@ function Inner() {
               ) : null}
             </div>
             <p className="text-[10px] text-ink-subtle font-mono uppercase tracking-ui-wide">
-              All runs fire in parallel. Each client's brand brain is used to color its own output.
+              Runs go two at a time to stay under provider rate limits. Each client's brand brain is used to color its own output.
             </p>
           </div>
         </section>
