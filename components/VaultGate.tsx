@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Lock, Loader2 } from "lucide-react";
 import {
   isVaultEnabled,
@@ -8,6 +8,10 @@ import {
   unlockVault,
   primePlaintextCache,
 } from "@/lib/key-vault";
+import { subscribeWindowEvents } from "@/lib/hooks/use-has-key";
+
+const subscribeVault = subscribeWindowEvents(["ados:vault-changed"]);
+const vaultNeedsUnlock = () => isVaultEnabled() && !isVaultUnlocked();
 
 /**
  * Session unlock prompt for the optional encrypted key vault.
@@ -19,20 +23,12 @@ import {
  * blocking those would be worse than the risk it protects against.
  */
 export function VaultGate() {
-  const [needsUnlock, setNeedsUnlock] = useState(false);
+  // External-store read: false on the server / hydration pass, then the live
+  // vault state, re-read whenever the vault changes.
+  const needsUnlock = useSyncExternalStore(subscribeVault, vaultNeedsUnlock, () => false);
   const [passphrase, setPassphrase] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const sync = useCallback(() => {
-    setNeedsUnlock(isVaultEnabled() && !isVaultUnlocked());
-  }, []);
-
-  useEffect(() => {
-    sync();
-    window.addEventListener("ados:vault-changed", sync);
-    return () => window.removeEventListener("ados:vault-changed", sync);
-  }, [sync]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,7 +44,9 @@ export function VaultGate() {
       // deep in the generation path don't each need to become async.
       await primePlaintextCache();
       setPassphrase("");
-      sync();
+      // unlockVault / primePlaintextCache dispatch ados:vault-changed, which
+      // re-reads needsUnlock through the store subscription.
+      window.dispatchEvent(new Event("ados:vault-changed"));
     } finally {
       setBusy(false);
     }
