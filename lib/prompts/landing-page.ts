@@ -102,7 +102,6 @@ Return ONLY valid JSON:
   "computed_metrics": {
     "conversion_rate": "string (e.g. '1.51%' or 'could not be computed')",
     "bounce_vs_benchmark": "string — the computed bounce band above, or 'could not be computed'",
-
     "lcp_verdict": "good | needs_improvement | poor | unknown",
     "engagement_health": "abandoned | scanning | engaged | unknown",
     "notes": "string — flag any contradictions or signals worth calling out"
@@ -111,7 +110,6 @@ Return ONLY valid JSON:
     "message_match_score": 0,
     "single_biggest_fix": "string"
   },
-
   "scores": {
     "message_match": { "score": 0, "reason": "string" },
     "clarity": { "score": 0, "reason": "string" },

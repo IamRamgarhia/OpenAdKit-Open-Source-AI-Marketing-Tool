@@ -116,7 +116,6 @@ Return ONLY valid JSON:
     "reason": "string — anchored to conversion volume",
     "learning_phase_days": 0,
     "switch_to_smart_when": "string (e.g. '30+ conversions / 30 days → Target CPA')"
-
   }
 }`;
 }

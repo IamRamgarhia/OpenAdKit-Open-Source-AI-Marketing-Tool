@@ -7,26 +7,41 @@ export interface BhcInput {
   geo: string;
 }
 
-import { VIDEO_HOOK_RULE } from "./common-rules";
+import { VIDEO_HOOK_RULE, ANTI_FABRICATION_RULE, PROOF_RULE, mentionsIndia } from "./common-rules";
+
+const BUDGET_LABEL: Record<string, string> = {
+  "100k_300k": "100k–300k (USD-equivalent)",
+  "300k_1m": "300k–1M (USD-equivalent)",
+  gt_1m: "over 1M (USD-equivalent)",
+};
 
 export function buildBhcPrompt(input: BhcInput): string {
+  const india = mentionsIndia(input.geo, input.target_audience);
+  const marketGuard = india
+    ? `
+MARKET CHECK (overrides everything below): TikTok is not available in India (banned since 2020). A Branded Hashtag Challenge cannot run there. Set viability.score ≤ 2, recommend_proceed = false, and in alternative_if_not recommend an Instagram Reels / YouTube Shorts creator challenge instead. Still fill the brief, written so it can be adapted to Reels / Shorts, and say so in viability.reasoning.
+`
+    : "";
   return `Generate a TikTok Branded Hashtag Challenge brief.
 
 ${VIDEO_HOOK_RULE}
 
-CONTEXT — Branded Hashtag Challenges are TikTok's user-generated participation campaigns. They:
-- Require minimum $100k typical spend (entry tier), $300k+ for proper amplification, $1M+ for cultural-moment scale
-- Run 6 days featured on the Discover page (paid)
-- Best outcomes: 1M+ video creations, billion-level impressions
-- Worst outcomes: zero participation, full spend on featured-discover slot only — i.e. high-risk
+${ANTI_FABRICATION_RULE}
 
-DECISION GUARD: if user input suggests this won't work (niche B2B / no cultural angle / passive product), flag it.
+${PROOF_RULE}
+
+CONTEXT — Branded Hashtag Challenges are TikTok's sponsored user-generated participation campaigns:
+- They are a premium, sales-negotiated product: pricing is quoted by TikTok per market and changes — check current rates with a TikTok rep; don't quote figures as fact.
+- The challenge is promoted for a fixed featured period (historically about 6 days) on the Discover page.
+- Outcomes vary widely: strong concepts get large participation, weak ones can spend the featured slot with little participation — high-risk.
+${marketGuard}
+DECISION GUARD: if the input suggests this won't work (niche B2B / no cultural angle / passive product / market where TikTok isn't available), flag it.
 
 INPUT:
 - Brand: ${input.brand}
 - Product / message: ${input.product_or_message}
 - Audience: ${input.target_audience}
-- Budget band: ${input.budget_band}
+- Budget band: ${BUDGET_LABEL[input.budget_band] ?? input.budget_band}
 - Desired action: ${input.desired_action}
 - Geo: ${input.geo}
 
@@ -38,7 +53,7 @@ GENERATE:
    - Memorable in ≤ 3 syllables when spoken
    - Has to make sense without context
    - Not a verb that's already in common use (low-distinctiveness)
-   - Pre-check: NOT already used at scale by another brand
+   - You cannot check live usage: list possible conflicts as "unverified — check before launch" (search the tag on TikTok first)
    - Bilingual-friendly if relevant geo
 
 3. **Participation mechanics** — what do users DO to participate?
@@ -63,7 +78,7 @@ GENERATE:
 7. **Six-day timeline** — what happens each of the 6 featured days?
 
 8. **Success metrics + kill criteria** — when to declare win vs cut losses early
-   - Day 1 floor: minimum participations
+   - Day 1 floor: minimum participations (a directional target the brand sets — label it so, not a forecast)
    - Day 3 checkpoint
    - End-of-week win threshold
 
@@ -80,7 +95,7 @@ Return ONLY valid JSON:
   "hashtag": {
     "tag": "#string",
     "rationale": "string",
-    "potential_conflicts": ["string — other brands or trends using similar"]
+    "potential_conflicts": ["string — possible conflict, marked 'unverified — check before launch'"]
   },
   "participation_mechanic": {
     "instruction": "string ≤ 1 sentence",

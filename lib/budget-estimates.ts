@@ -123,7 +123,6 @@ export function estimateVolume(args: {
     revenueBreakEvenCpa: aov.value,
     grossMarginPct: margin,
     profitBreakEvenCpa: aov.value !== null && margin !== null ? aov.value * (margin / 100) : null,
-
   };
 }
 

@@ -43,6 +43,7 @@ import { buildReelIdeasPrompt } from "../prompts/reel-ideas";
 import { planAbTest } from "../ab-math";
 import { fatigueDecay, landingMetrics } from "../ad-metrics";
 
+import type { BrandBrain } from "../brand-brain";
 import * as G from "../schemas/generators";
 import { CampaignKitSchema } from "../schemas/campaign-kit";
 import { ContentCalendarSchema } from "../schemas/content-calendar";
@@ -59,8 +60,10 @@ export interface AiTool {
   /** Web-app route with the same tool, for "open in OpenAdKit" links. */
   route: string;
   input: ZodRawShape;
+  /** Same signature as a page's GeneratorConfig.buildPrompt: the brand (when
+   *  one is selected) lets a prompt adapt, e.g. campaign-kit surfaces. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  buildPrompt: (input: any) => string;
+  buildPrompt: (input: any, brain?: BrandBrain | null) => string;
   schema: ZodTypeAny;
   maxTokens: number;
   temperature: number;
@@ -206,7 +209,7 @@ export const AI_TOOLS: AiTool[] = [
   {
     name: "generate_x_twitter_ads",
     title: "X (Twitter) ads",
-    description: "Promoted posts, video, website cards, follower ads or threads for X.",
+    description: "Promoted posts, video, website cards, follower ads or threads for X. Posts are checked against 280 characters with links counted as 23.",
     category: "generate",
     route: "/generate/twitter",
     input: {
@@ -216,6 +219,8 @@ export const AI_TOOLS: AiTool[] = [
       product: s("Product."),
       objective: s("Objective."),
       voice: s("Voice, e.g. 'witty', 'authoritative'."),
+      landing_url: os("Landing page URL (optional). Counted as 23 characters in a post."),
+      audience_geo: os("Audience country / region (optional). Without it no posting-time window is given."),
     },
     buildPrompt: buildTwitterPrompt,
     schema: G.TwitterSchema,
@@ -683,7 +688,6 @@ export const AI_TOOLS: AiTool[] = [
         .enum(["yes", "no", "unsure"])
         .optional()
         .describe("Is conversion tracking set up and verified? Anything but 'yes' still runs the structural audit, with conversion-based checks marked unknown."),
-
       match_types: os("Match types in use."),
       has_negatives: os("Negative keyword status."),
       schedule: os("Ad schedule."),

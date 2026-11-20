@@ -113,7 +113,6 @@ Given the readiness verdict + the volume rules above:
 - Brand-new campaign with no conversion history: Manual CPC (or capped Maximize Clicks for 1-2 weeks), then re-evaluate.
 - Never recommend Enhanced CPC (retired for Search).
 
-
 PHASE 3 — DECIDE:
 1. recommended_strategy: the strategy name from above.
 2. reason: must CITE the user's actual conversion numbers + the gate that drove the call.

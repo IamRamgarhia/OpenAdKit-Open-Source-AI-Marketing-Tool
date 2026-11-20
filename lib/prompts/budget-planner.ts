@@ -65,7 +65,8 @@ function projectionFacts(est: VolumeEstimate | null, cc: string): string {
 export function buildBudgetPlannerPrompt(input: BudgetPlannerInput): string {
   const cc = getCurrencyCode();
   const est = plannerEstimate(input, cc);
-  return `Build a monthly ad budget allocation plan. Amounts in ${cc} — every split must add up to the total.
+  const keyNote = cc === "USD" ? "" : ` (keys ending in "_usd" are legacy names — their values are in ${cc})`;
+  return `Build a monthly ad budget allocation plan. Amounts in ${cc}${keyNote} — every split must add up to the total.
 
 INPUT:
 - Currency: ${cc} (ALL amounts in the output should be in ${cc})
@@ -111,7 +112,6 @@ Return ONLY valid JSON:
     { "campaign_name": "string", "platform": "string", "funnel_stage": "string", "monthly_usd": 0, "learning_phase_note": "string" }
   ],
   "saturation_flags": [{ "platform": "string", "reason": "string" }],
-
   "reserve": {
     "pct": 0,
     "monthly_usd": 0,

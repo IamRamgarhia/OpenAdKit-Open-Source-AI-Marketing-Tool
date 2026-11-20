@@ -50,12 +50,10 @@ export default function Page() {
 }
 
 function HashtagOutput({ json }: { json: any }) {
-  // The AI emits a platform-keyed bucket like `recommended_set_for_tiktok`.
-  // Discover the key dynamically rather than hardcoding the platform — earlier
-  // versions referenced the static config.initial.platform which always read
-  // "instagram", so non-IG platforms always showed an empty recommended set.
+  // The prompt now asks for `recommended_set` (the schema key). Older history
+  // rows used a platform-keyed bucket like `recommended_set_for_tiktok`.
   const recommendedKey = json ? Object.keys(json).find((k) => k.startsWith("recommended_set_for_")) : null;
-  const recommended = (recommendedKey ? json[recommendedKey] : null) || json?.recommended_set || [];
+  const recommended = json?.recommended_set || (recommendedKey ? json[recommendedKey] : null) || [];
   const allTags = [
     ...(json?.tiers?.broad ?? []).map((x: any) => x.tag),
     ...(json?.tiers?.medium ?? []).map((x: any) => x.tag),

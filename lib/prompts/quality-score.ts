@@ -138,7 +138,6 @@ Return ONLY valid JSON:
     "current": 0,
     "after_fixes": "string — directional range labelled 'estimate'",
     "cpc_savings_estimate": "string (qualitative, no percentages)",
-
     "reasoning": "string — anchored to which factors moved"
   }
 }`;

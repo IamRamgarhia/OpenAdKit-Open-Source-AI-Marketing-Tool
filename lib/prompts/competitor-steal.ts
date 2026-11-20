@@ -6,12 +6,14 @@ export interface CompetitorStealInput {
   platform: string;
 }
 
-import { PRICING_PSYCHOLOGY } from "./common-rules";
+import { PRICING_PSYCHOLOGY, PROOF_RULE, hasPriceOrOffer } from "./common-rules";
 
 export function buildCompetitorStealPrompt(input: CompetitorStealInput): string {
+  // Pricing tactics only help when a price / offer is actually in play.
+  const pricing = hasPriceOrOffer(input.competitor_ads_pasted, input.our_usp, input.our_product) ? `\n${PRICING_PSYCHOLOGY}\n` : "";
   return `You are a senior media buyer and direct-response copywriter doing a competitive teardown.
-
-${PRICING_PSYCHOLOGY}
+${pricing}
+${PROOF_RULE}
 
 INPUT:
 - Our product: ${input.our_product}

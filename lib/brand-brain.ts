@@ -152,6 +152,7 @@ function stableBrainId(b: any): string {
 const list = (arr: string[] | null | undefined) => (arr && arr.length ? arr.join(" | ") : "(none specified)");
 
 import { FRAMEWORK_STACK } from "./prompts/framework-stack";
+import { BANNED_WORDS_RULE } from "./prompts/common-rules";
 
 export interface SystemPromptOverrides {
   language?: string;
@@ -173,8 +174,8 @@ that respects all platform character limits given in the user prompt.
 ${framework}
 HONESTY: Never fabricate stats, testimonials, named partnerships, awards, or certifications.
 OUTPUT: Do not include internal or system XML tags, scratchpad markup, or reasoning transcripts — finished copy only.
-AVOID: streamline, optimize, innovative, utilize, leverage, synergy, transform, "best", "#1", "leading" — unless verifiable.
-WEAK CTAs to replace: "Submit", "Sign Up", "Learn More", "Click Here", "Get Started" → use outcome-named action verbs ("Start My Free Trial", "Get the Checklist").${lang}${toneOverride}`;
+
+${BANNED_WORDS_RULE}${lang}${toneOverride}`;
   }
   const objectionBlock = brain.objections?.length
     ? brain.objections
@@ -249,9 +250,5 @@ HONESTY CONSTRAINT (non-negotiable):
 - If a benefit cannot be supported by the brand brain, frame it as a claim ("designed to…") rather than a result ("does…").
 - Never invent industry awards, certifications, or third-party validations.
 
-WORDS / PHRASES TO AVOID (flagged as low-quality output):
-- Vague verbs: streamline, optimize, innovative, utilize, facilitate, leverage, synergy, transform
-- Hedge words: almost, very, really, quite, somewhat, pretty
-- Generic CTAs: "Submit", "Sign Up", "Learn More", "Click Here", "Get Started" — replace with action verbs that name the outcome ("Start My Free Trial", "Get the Checklist").
-- Superlatives without proof: "best", "#1", "leading", "world-class", "cutting-edge" — only when the brand brain has verifiable evidence.${lang}${toneOverride}`;
+${BANNED_WORDS_RULE}${lang}${toneOverride}`;
 }

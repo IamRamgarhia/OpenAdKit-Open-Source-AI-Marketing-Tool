@@ -88,7 +88,6 @@ function LpOutput({ json, input }: { json: any; input?: Partial<LandingPageInput
           <div className="grid md:grid-cols-3 gap-2">
             <Stat label="message match" value={`${json.overall_grade_pulse.message_match_score}/10`} />
             <Stat label="bounce rate · your input" value={bounce !== null ? `${bounce}%` : "—"} tone="neg" />
-
             <Stat label="biggest fix" value={json.overall_grade_pulse.single_biggest_fix} small />
           </div>
         </Section>

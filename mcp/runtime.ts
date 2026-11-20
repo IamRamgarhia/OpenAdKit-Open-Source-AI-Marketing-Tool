@@ -126,7 +126,7 @@ export function buildMessages(tool: AiTool, input: Record<string, unknown>, opts
     tone_override: opts.toneOverride,
     skip_framework_stack: tool.skipFrameworkStack,
   });
-  const prompt = tool.buildPrompt(input);
+  const prompt = tool.buildPrompt(input, opts.brand ?? null);
   return { system, prompt };
 }
 

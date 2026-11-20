@@ -39,7 +39,7 @@ INPUT:
 
 GENERATE:
 1. Optimized title — apply the priority rule order. Self-count.
-2. Optimized description — open with the buyer-facing answer (NOT "Welcome to our store"), include attributes naturally, end with social proof or guarantee.
+2. Optimized description — open with the buyer-facing answer (NOT "Welcome to our store"), include attributes naturally, end with a guarantee, return policy or review figure only if the brand brain or input lists it; otherwise end with a concrete product fact (origin, what's in the box, care instructions). Never invent ratings or reviews.
 3. Highlight bullets — 5 short attribute hits (≤ 60 chars each).
 4. Recommended additional structured-data attributes the user should populate in Merchant Center (Item GTIN, MPN, Color, Size, Material, Age Group, Gender, etc.) — name the field + suggested value or "needs source".
 5. Top 10 long-tail search queries this listing should rank for, based on the attributes.

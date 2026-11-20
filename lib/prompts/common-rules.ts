@@ -200,7 +200,6 @@ BID STRATEGY BY CONVERSION VOLUME (conservative rules of thumb — cite them as 
 - Meta / TikTok: an ad set needs roughly ${BID_THRESHOLDS.meta_tiktok_learning_min_7d} optimization events in 7 days to exit learning; cost caps / bid caps only after that.
 `.trim();
 
-
 export const WAVE_BATCH_RULE = `
 WAVE-BATCHED GENERATION (volume that learns, not flat lists):
 - Wave 1: 3-5 distinct angles, 5 variations each (15-25 variants).
@@ -217,4 +216,22 @@ BOTTLENECK FIRST (Theory of Constraints applied to ad funnels):
 - If traffic is fine but CVR < 1% → landing/offer is the bottleneck. More targeting won't help.
 - If both look OK but CPA is bad → cost-per-click or audience cost is the bottleneck.
 - Address only the bottleneck. Other improvements are local optima that don't move global revenue.
+`.trim();
+
+/**
+ * TikTok has been unavailable in India since 2020, so TikTok-only advice for
+ * an Indian audience is wasted. True when any value points at India.
+ */
+export function mentionsIndia(...values: unknown[]): boolean {
+  const text = values.filter((v) => typeof v === "string").join(" ");
+  return /₹|\b(?:india|indian|inr|bharat|mumbai|delhi|bengaluru|bangalore|pune|hyderabad|chennai|kolkata|ahmedabad|jaipur|lucknow|noida|gurgaon|gurugram)\b/i.test(text);
+}
+
+/** Hashtags per post, one table for the hashtag tool and the content calendar. */
+export const HASHTAG_COUNTS = `
+- Instagram: up to 5 per post (Instagram's current cap) — mix niche + branded
+- Facebook: 1-2
+- LinkedIn: 3-5 professional tags; no emoji-style tags
+- TikTok: 3-5 — over-tagging dilutes the signal
+- X / Twitter: 1-2
 `.trim();

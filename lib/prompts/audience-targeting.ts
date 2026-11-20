@@ -155,7 +155,6 @@ Return ONLY valid JSON:
   ],
   "platform_specific_features_to_enable": [
     { "feature": "string — a feature that exists on ${input.platform}", "use": true, "rationale": "string" }
-
   ]
 }`;
 }

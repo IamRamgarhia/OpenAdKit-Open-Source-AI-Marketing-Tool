@@ -98,7 +98,6 @@ function BudgetOutput({ json, input }: { json: any; input: Partial<BudgetWasteIn
         </Section>
       ) : null}
       {json?.pulse ? (
-
         <Section title="Pulse">
           <div className={`grid gap-2 ${share !== null ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
             <PulseCard label="waste / month" value={`${sym}${(json.pulse.waste_per_month_usd?.value ?? 0).toLocaleString()}`} contrib={json.pulse.waste_per_month_usd?.top_contributor} fix={json.pulse.waste_per_month_usd?.fix_pointer} tone="neg" />

@@ -22,7 +22,7 @@ export const COST_SAVERS: CostSaverPlatform[] = [
       { tactic: "Exclude mobile apps from Display Network", why: "Mobile app placements are the largest waste source on GDN — accidental clicks dominate.", expected_savings: "30-60% on Display", effort: "low" },
       { tactic: "Turn off Google Search Partners if CTR is below 1%", why: "Search Partners delivers lower-intent traffic at higher CPC for many advertisers.", expected_savings: "10-25%", effort: "low" },
       { tactic: "Set frequency caps on Display campaigns", why: "Without caps, the same user can see your ad 20+ times — wasted impressions.", expected_savings: "5-15%", effort: "low" },
-      { tactic: "Improve Quality Score by 2 points on top spenders", why: "QS 5 → 7 typically reduces CPC 16-28% per Google's own data.", expected_savings: "Up to 28% per keyword", effort: "medium" },
+      { tactic: "Improve Quality Score by 2 points on top spenders", why: "A higher Quality Score lowers CPC for the same ad position (Google's auction uses it). The size of the drop varies by account.", expected_savings: "Directional: lower CPC on the improved keywords", effort: "medium" },
       { tactic: "Pause keywords with > 50 clicks and 0 conversions", why: "Statistical confidence that this term doesn't convert. Pull it.", expected_savings: "5-15%", effort: "low" },
       { tactic: "Use single-theme ad groups (≤ 15 closely related keywords)", why: "Tighter themes → higher Quality Score → lower CPC.", expected_savings: "10-20%", effort: "medium" },
       { tactic: "Add long-tail variants of your top converters", why: "Long-tails have 50-80% lower CPC at often higher conversion rate.", expected_savings: "Net spend efficiency 10-25%", effort: "medium" },

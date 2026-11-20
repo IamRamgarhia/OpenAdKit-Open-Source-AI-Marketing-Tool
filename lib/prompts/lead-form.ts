@@ -10,7 +10,7 @@ export function buildLeadFormPrompt(input: LeadFormInput): string {
   return `Design a high-converting native lead form for ${input.platform}.
 
 NATIVE LEAD FORM RULES (cross-platform):
-- Every additional question drops conversion 5-10%. Ask the MINIMUM that lets sales follow up.
+- Every additional question costs completions. Ask the MINIMUM that lets sales follow up.
 - Pre-fillable fields (name, email, phone, company) cost less than custom questions.
 - Custom questions should be QUALIFYING — not "what's your favorite color".
 - Multiple-choice beats free-text for completion rate; free-text beats nothing.
@@ -30,7 +30,10 @@ INPUT:
 
 GENERATE:
 1. Intro headline + greeting (platform-appropriate length, front-load the value).
-2. Questions array — minimum viable to qualify for sales motion. If self_serve, 2-3 questions max. If high_touch, 4-5 with at least one BANT-flavored qualifier.
+2. Questions array — minimum viable to qualify for the sales motion, counting every field (pre-filled contact fields included) and staying within the platform's recommended maximum above:
+   - self_serve: 2-3 questions.
+   - hybrid: 3-4 questions.
+   - high_touch_sales: up to the platform's recommended maximum (LinkedIn: 4, Meta: 5), with at least one BANT-flavored qualifier.
 3. Privacy policy line (placeholder URL).
 4. Thank-you screen — what does the lead see immediately? What CTA shows up next?
 5. Auto-responder email subject + 3-line body (calendly placeholder, expectation set).

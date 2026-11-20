@@ -10,8 +10,6 @@ import { INDUSTRIES } from "@/lib/benchmarks";
 import { dailyFrom, parseNumber, type Assumption } from "@/lib/budget-estimates";
 import { arr, obj, strList, txt } from "@/lib/safe-json";
 
-
-
 const config: GeneratorConfig<BudgetPlannerInput & Record<string, unknown>> = {
   title: "Ad Budget Planner",
   subtitle: "AI platform + funnel split and what NOT to spend on. Volume, CPA, ROAS and break-even are computed from your numbers (or labelled benchmarks) — not guessed by the AI.",
@@ -180,7 +178,6 @@ function PlannerOutput({ json, input }: { json: any; input: Partial<BudgetPlanne
         </div>
         <p className="text-[11px] text-ink-muted mt-2">At 100% margin the break-even CPA equals AOV (revenue = ad spend). With your gross margin it is AOV × margin — the CPA above which each sale loses money.</p>
         {flags.length ? (
-
           <div className="mt-3">
             <div className="text-[10px] font-mono uppercase tracking-ui-mega text-neg mb-1">saturation flags · AI judgement</div>
             <ul className="text-xs text-ink space-y-0.5">{flags.map((f: any, i: number) => (

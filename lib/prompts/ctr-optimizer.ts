@@ -133,7 +133,6 @@ Return ONLY valid JSON:
   },
   "verdict": "above_avg | at_avg | below_avg | severely_below",
   "industry_benchmark_cited": "string (e.g. 'B2B SaaS Google Search ~2.5% — approximate public industry average, not your account')",
-
   "diagnosis_summary": "string (2-3 sentences) — grounded in the computed metrics, not generic",
   "search_term_signals": [
     { "intent": "buying | research | problem_aware | low_intent | branded | wrong_audience",

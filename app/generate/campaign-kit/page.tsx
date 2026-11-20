@@ -23,7 +23,7 @@ const config: GeneratorConfig<CampaignKitInput & Record<string, unknown>> = {
     { name: "budget_monthly", label: "Budget / month", kind: "text", required: true, placeholder: "$5,000" },
   ],
   initial: { campaign_name: "", product: "", primary_offer: "", audience: "", goal: "", budget_monthly: "" } as any,
-  buildPrompt: (input) => buildCampaignKitPrompt(input as unknown as CampaignKitInput),
+  buildPrompt: (input, brain) => buildCampaignKitPrompt(input as unknown as CampaignKitInput, brain),
   buildTitle: (i: any) => `Kit · ${i.campaign_name}`,
   expectJson: true,
   schema: CampaignKitSchema,
@@ -53,17 +53,19 @@ function KitOutput({ json }: { json: any }) {
         <Pill label="cta" text={json?.meta_feed?.cta} tone="live" />
       </Section>
 
-      <Section title="TikTok">
-        <Block label="hooks" items={json?.tiktok?.hooks} />
-        {json?.tiktok?.ugc_brief ? (
-          <div className="mt-3 border-t border-base-700 pt-2">
-            <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint mb-1">ugc brief</div>
-            <p className="text-sm text-ink whitespace-pre-line">{json.tiktok.ugc_brief}</p>
-          </div>
-        ) : null}
-      </Section>
+      {json?.tiktok?.hooks?.length || json?.tiktok?.ugc_brief ? (
+        <Section title="TikTok">
+          <Block label="hooks" items={json?.tiktok?.hooks} />
+          {json?.tiktok?.ugc_brief ? (
+            <div className="mt-3 border-t border-base-700 pt-2">
+              <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint mb-1">ugc brief</div>
+              <p className="text-sm text-ink whitespace-pre-line">{json.tiktok.ugc_brief}</p>
+            </div>
+          ) : null}
+        </Section>
+      ) : null}
 
-      {json?.youtube_in_stream ? (
+      {json?.youtube_in_stream && ["hook", "value", "cta"].some((k) => json.youtube_in_stream[k]?.vo) ? (
         <Section title="YouTube In-Stream (15s)">
           {["hook", "value", "cta"].map((k) => {
             const v = json.youtube_in_stream[k];
@@ -78,14 +80,14 @@ function KitOutput({ json }: { json: any }) {
         </Section>
       ) : null}
 
-      {json?.linkedin ? (
+      {json?.linkedin?.intro || json?.linkedin?.headline ? (
         <Section title="LinkedIn">
           <p className="text-sm text-ink whitespace-pre-line">{json.linkedin.intro}</p>
           <p className="text-sm font-medium text-ink mt-2">{json.linkedin.headline}</p>
         </Section>
       ) : null}
 
-      {json?.twitter?.length ? (
+      {json?.twitter?.filter?.((t: unknown) => typeof t === "string" && t.trim()).length ? (
         <Section title="Twitter / X">
           <Block label="tweets" items={json.twitter} />
         </Section>
@@ -130,6 +132,8 @@ function KitOutput({ json }: { json: any }) {
                 <div className="text-[9px] font-mono uppercase tracking-ui-mega text-ink-faint">{k.metric}</div>
                 <div className="font-mono text-live text-lg tabular">{k.target}</div>
                 <div className="text-[11px] text-ink-muted mt-1">{k.by_when}</div>
+                {k.basis ? <div className="text-[10px] text-ink-faint mt-1">basis: {k.basis}</div> : null}
+
               </li>
             ))}
           </ul>

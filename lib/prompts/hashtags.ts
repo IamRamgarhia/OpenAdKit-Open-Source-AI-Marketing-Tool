@@ -1,4 +1,4 @@
-import { ANTI_FABRICATION_RULE } from "./common-rules";
+import { ANTI_FABRICATION_RULE, HASHTAG_COUNTS } from "./common-rules";
 
 export interface HashtagInput {
   title: string;
@@ -18,14 +18,11 @@ LANGUAGE RULES:
 - If ${input.language} uses a non-Latin script (Hindi, Arabic, Japanese, etc.), include BOTH the native-script version AND a romanized/transliterated variant for cross-platform reach.
 - Where there's a widely-used English equivalent (#travel, #fashion), include that too for discovery — clearly labeled.
 
-PLATFORM RULES (apply the ones relevant to ${input.platform}):
-- Instagram: ~30 hashtag soft limit, broad+niche+branded mix wins
-- TikTok: 3-5 hashtags optimal — over-tagging dilutes algorithm signal
-- Twitter/X: 1-2 max — more than 2 drops engagement measurably
-- LinkedIn: 3-5 professional hashtags; avoid emoji-style tags
-- YouTube: up to 15 in description; first 3 most weighted
-- Pinterest: 20 max but quality over quantity
-- "any": cover all platform sizes — output is a master list, user picks
+PLATFORM RULES — hashtags per post (apply the ones relevant to ${input.platform}):
+${HASHTAG_COUNTS}
+- YouTube: a few relevant tags in the description; the first 3 show above the title
+- Pinterest: a few relevant tags at most; keywords in the description matter more
+- "any": the tiers are a master list; recommended_set follows the strictest cap above (≤ 5)
 
 TIERS (return all four):
 
@@ -70,7 +67,7 @@ Return ONLY valid JSON:
   "english_crossover": [
     { "tag": "#string", "use_for": "string (when to add this for international reach)" }
   ],
-  "recommended_set_for_${input.platform}": ["#string"],
+  "recommended_set": ["#string — the set to paste for ${input.platform}, within its cap above"],
   "avoid": [
     { "tag": "string (no #)", "reason": "string" }
   ],

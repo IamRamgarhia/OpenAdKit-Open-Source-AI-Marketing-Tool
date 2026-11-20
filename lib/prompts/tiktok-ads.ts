@@ -11,13 +11,17 @@ export interface TikTokInput {
   vibe: string;
 }
 
-import { VIDEO_HOOK_RULE, CHAR_COUNT_SELF_VALIDATION, ANTI_FABRICATION_RULE } from "./common-rules";
+import { VIDEO_HOOK_RULE, CHAR_COUNT_SELF_VALIDATION, ANTI_FABRICATION_RULE, PROOF_RULE } from "./common-rules";
 
 export function buildTikTokPrompt(input: TikTokInput): string {
   if (input.format === "hooks") {
     return `Generate 50 TikTok ad hooks for: ${input.product}
 
 ${VIDEO_HOOK_RULE}
+
+${ANTI_FABRICATION_RULE}
+
+${PROOF_RULE}
 
 Target audience: ${input.audience}
 Brand vibe: ${input.vibe || "(let Claude pick — native, raw, not polished)"}
@@ -33,10 +37,10 @@ Distribute across these proven formulas:
 - Stop scrolling if ___
 - Things I wish I knew before ___
 - The reason your [X] isn't working
-- I tried ___ for 30 days and ___
+- First-person trial ("I switched to ___ and ___") — describe the experience, never an invented duration or result
 - Pattern interrupt (unexpected opener)
 - Question hook
-- Shocking stat hook
+- Specific-fact hook — a concrete fact from the brand brain (a stat ONLY if the brand brain lists one)
 - Before/after hook
 - Confession hook ("I'm not supposed to say this but…")
 
@@ -46,7 +50,7 @@ Return ONLY valid JSON:
     {
       "hook": "string (the opening line, ≤ 12 words)",
       "continuation": "string (2 sentences after the hook)",
-      "formula": "pov | stop_scrolling | wish_i_knew | reason | tried_30_days | pattern_interrupt | question | stat | before_after | confession",
+      "formula": "pov | stop_scrolling | wish_i_knew | reason | first_person_trial | pattern_interrupt | question | specific_fact | before_after | confession",
       "seconds_to_hook": 1
     }
   ],
@@ -57,6 +61,8 @@ Return ONLY valid JSON:
   return `Generate a TikTok UGC ad script for: ${input.product}
 
 ${VIDEO_HOOK_RULE}
+
+${PROOF_RULE}
 
 Target audience: ${input.audience}
 Brand vibe: ${input.vibe || "native, authentic, slightly chaotic"}
@@ -71,7 +77,7 @@ Generate 3 distinct UGC scripts. For each:
 - creator_brief: what to wear, where to film, what NOT to do.
 - script_beats: array of beats with timestamp + spoken_line + visual + on_screen_text.
 - caption (≤ ${TIKTOK_LIMITS.text} chars — VALIDATE per the rule below).
-- hashtags: 5–8, mix broad and niche.
+- hashtags: 3–5, relevant to the video (over-tagging dilutes the signal).
 - b_roll: 3 shot ideas.
 
 ${CHAR_COUNT_SELF_VALIDATION}
