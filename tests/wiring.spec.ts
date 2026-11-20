@@ -203,7 +203,8 @@ test.describe("Public pages + landing", () => {
 
   test("robots.txt repeats Disallow lines inside every AI-crawler group", async ({ request }) => {
     const txt = await (await request.get(`${BASE_URL}/robots.txt`)).text();
-    const groups = txt.split(/\n(?=User-agent:)/).filter((g) => g.startsWith("User-agent:"));
+    // Field names are case-insensitive (Next writes "User-Agent").
+    const groups = txt.split(/\n(?=User-agent:)/i).filter((g) => /^User-agent:/i.test(g));
     expect(groups.length).toBeGreaterThan(5);
     for (const g of groups) {
       expect(g, g.split("\n")[0]).toContain("Disallow: /generate/");
@@ -232,6 +233,30 @@ test.describe("Onboarding + dashboard", () => {
     await page.goto(`${BASE_URL}/`);
     await expect(page.getByText("Recent generations")).toBeVisible();
     expect(new URL(page.url()).pathname).toBe("/");
+  });
+
+  test("returning users with a key never see the landing page flash", async ({ page, context }) => {
+    await withKey(context);
+    // Record whether the landing page was ever visible from the first paint on.
+    await context.addInitScript(() => {
+      (window as unknown as { __landingSeen: boolean }).__landingSeen = false;
+      const check = () => {
+        const el = document.querySelector(".oak-landing");
+        if (el && getComputedStyle(el).visibility !== "hidden") {
+          (window as unknown as { __landingSeen: boolean }).__landingSeen = true;
+        }
+      };
+      new MutationObserver(check).observe(document, { childList: true, subtree: true, attributes: true });
+      document.addEventListener("DOMContentLoaded", check);
+    });
+    await page.goto(`${BASE_URL}/`);
+    await expect(page.getByText("Recent generations")).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __landingSeen: boolean }).__landingSeen)).toBe(false);
+  });
+
+  test("new visitors (no key) see the landing page", async ({ page }) => {
+    await page.goto(`${BASE_URL}/`);
+    await expect(page.locator(".oak-landing")).toBeVisible();
   });
 
   test("dashboard 'recent' links use /history?focus= and expand the row", async ({ page, context }) => {

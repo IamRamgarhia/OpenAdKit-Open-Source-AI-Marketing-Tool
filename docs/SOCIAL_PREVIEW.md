@@ -16,7 +16,7 @@ This file documents what to make + how to upload.
 
 ## What to put on it
 
-Mirror the `docs/banner.svg` design (already in this repo) but exported as PNG at 1280×640. Note: `docs/banner.svg` itself still says "17 generators" and "v0.1" — update those labels before exporting. Specifically:
+Mirror the `docs/banner.svg` design (already in this repo) but exported as PNG at 1280×640. Specifically:
 
 - **Brand mark**: 80×80 saffron `#ffb020` square with italic serif "A" in `#08080a`
 - **Wordmark**: "OpenAdKit" in Instrument Serif / Georgia italic, ~84 px, color `#e7e7ea`

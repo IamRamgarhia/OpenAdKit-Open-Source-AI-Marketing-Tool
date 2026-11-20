@@ -2,15 +2,10 @@ import type { MetadataRoute } from "next";
 import { PLATFORM_HUBS } from "@/lib/platform-hubs";
 import { CONCEPTS } from "@/lib/learn-content";
 import { COURSES } from "@/lib/courses";
+import { SITE_URL } from "@/lib/site-url";
 
-// Same resolution as app/layout.tsx's metadataBase, so self-hosted deploys and
-// forks don't publish a sitemap full of the upstream author's URLs.
-const BASE = (
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : "") ||
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
-  "https://openadkit.dicecodes.com"
-).replace(/\/+$/, "");
+// Forks and self-hosted deploys publish their own origin (lib/site-url.ts).
+const BASE = SITE_URL;
 
 // Use the latest git commit timestamp (resolved at build time via
 // NEXT_PUBLIC_BUILD_ID-style env vars on Vercel) or a hardcoded baseline.
@@ -38,6 +33,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE}/learn/frameworks`, lastModified, changeFrequency: "monthly", priority: 0.6 },
     { url: `${BASE}/launch-guide`, lastModified, changeFrequency: "monthly", priority: 0.7 },
     { url: `${BASE}/providers`, lastModified, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${BASE}/support`, lastModified, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/strategy/decision-tree`, lastModified, changeFrequency: "monthly", priority: 0.6 },
   ];
   const platformPages: MetadataRoute.Sitemap = Object.keys(PLATFORM_HUBS).map((slug) => ({

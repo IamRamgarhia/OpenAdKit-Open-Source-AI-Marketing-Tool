@@ -14,7 +14,7 @@ const config: GeneratorConfig<EmailSubjectInput & Record<string, unknown>> = {
   // No "email" bucket exists in the stored Platform union; "display" matches
   // the sidebar's "Email + Display" group (it was "google", which filed
   // email work under Search and drove Google-only next steps).
-  platform: "display",
+  platform: "email",
   campaign_type: "Email Subjects",
   maxTokens: 2500,
   skip_framework_stack: true,

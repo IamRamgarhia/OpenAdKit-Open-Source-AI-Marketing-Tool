@@ -263,8 +263,18 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${sans.variable} ${mono.variable} ${display.variable}`}>
+    <html lang="en" className={`dark ${sans.variable} ${mono.variable} ${display.variable}`} suppressHydrationWarning>
       <head>
+        {/* Before first paint: mark returning users who have an AI key, so the
+            server-rendered landing page at "/" is hidden for them instead of
+            flashing before the dashboard. Crawlers and new visitors have no
+            key and see the landing page as normal. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&/^ados\\.provider\\..+\\.key$/.test(k)&&localStorage.getItem(k)){document.documentElement.setAttribute('data-has-key','1');break}}}catch(e){}",
+          }}
+        />
         {/* Three JSON-LD blocks for AI Overviews + Perplexity + ChatGPT
             browse + Google rich results. Server-rendered so crawlers that
             don't execute JS still see them. */}

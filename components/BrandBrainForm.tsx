@@ -351,17 +351,18 @@ export function BrandBrainForm({ initial }: Props) {
       setError("Business name is required.");
       return;
     }
-    if (blocking.length) {
-      setError(
-        `Still missing: ${blocking.map((m) => m.label).join(", ")}. Either fill them in or tick "Fill later" on each row.`
-      );
-      return;
-    }
+    // Only the business name is required. Missing essentials (platforms,
+    // pillars, social links) no longer block saving: they're recorded as
+    // "fill later" so the app can nudge for them, instead of making a user
+    // tick three boxes before their first client exists.
     setSaving(true);
     try {
+      const pendingKeys = new Set(brain.pending_user_input ?? []);
+      for (const m of blocking) pendingKeys.add(m.key);
       const toSave: BrandBrain = {
         ...brain,
         name: brain.name || brain.business_name,
+        pending_user_input: [...pendingKeys],
       };
       await saveBrain(toSave, { reason: "before manual edit" });
       setActiveBrainId(toSave.id);

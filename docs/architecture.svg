@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" width="1200" height="480" role="img" aria-labelledby="arctitle arcdesc">
   <title id="arctitle">OpenAdKit architecture</title>
-  <desc id="arcdesc">Diagram showing the OpenAdKit browser-only architecture: Next.js app talks directly to LLM providers, Jina Reader for URL ingest, and a local-sync sidecar that persists data to a JSON file in the project folder.</desc>
+  <desc id="arcdesc">Diagram showing the OpenAdKit architecture: the Next.js app (in the desktop window or your browser) talks directly to LLM providers, Jina Reader for URL ingest, and a local sidecar that syncs your data to a snapshot file in your user data folder, checks for updates, and serves the MCP server paths.</desc>
 
   <defs>
     <pattern id="grid2" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -30,24 +30,24 @@
 
   <!-- Title -->
   <text x="40" y="42" class="label h" font-style="italic" font-family="Georgia, serif" font-size="28">Architecture</text>
-  <text x="40" y="64" class="label meta">~/openadkit · browser-only · BYOK · 100% local data</text>
+  <text x="40" y="64" class="label meta">~/openadkit · desktop or browser · BYOK · 100% local data</text>
 
   <!-- Big browser frame -->
   <rect x="40" y="92" width="780" height="350" rx="2" fill="#0a0a0d" stroke="#2a2a32" stroke-width="1.5"/>
-  <text x="60" y="118" class="label meta">YOUR BROWSER · localhost:3005</text>
+  <text x="60" y="118" class="label meta">DESKTOP WINDOW OR BROWSER · 127.0.0.1</text>
   <line x1="40" y1="128" x2="820" y2="128" stroke="#2a2a32"/>
 
   <!-- Next.js app box -->
   <rect x="70" y="150" width="280" height="100" class="box-accent"/>
   <text x="86" y="172" class="label h" font-size="16">Next.js App</text>
-  <text x="86" y="194" class="label sub" font-size="13">17 generators · 11 optimizers</text>
+  <text x="86" y="194" class="label sub" font-size="13">18 generators · 11 optimizers</text>
   <text x="86" y="212" class="label sub" font-size="13">9 AI providers · BYOK</text>
   <text x="86" y="230" class="label meta">app/ · components/ · lib/</text>
 
   <!-- IndexedDB + localStorage -->
   <rect x="70" y="280" width="280" height="120" class="box"/>
   <text x="86" y="302" class="label h" font-size="16">Local browser storage</text>
-  <text x="86" y="324" class="label sub" font-size="13">IndexedDB (Dexie v3)</text>
+  <text x="86" y="324" class="label sub" font-size="13">IndexedDB (Dexie v5)</text>
   <text x="86" y="342" class="label sub" font-size="13">localStorage (settings + keys)</text>
   <text x="86" y="360" class="label meta">brains · ads · campaigns · templates</text>
   <text x="86" y="376" class="label meta">checklists · custom items · prefs</text>
@@ -55,16 +55,16 @@
   <!-- Sidecar inside browser frame -->
   <rect x="500" y="150" width="280" height="100" class="box-accent"/>
   <text x="516" y="172" class="label h" font-size="16">Local-sync sidecar</text>
-  <text x="516" y="194" class="label sub" font-size="13">Node.js · ~150 lines · zero-dep</text>
-  <text x="516" y="212" class="label sub" font-size="13">127.0.0.1:3006</text>
+  <text x="516" y="194" class="label sub" font-size="13">Node.js · zero-dep · update checks</text>
+  <text x="516" y="212" class="label sub" font-size="13">127.0.0.1 · port chosen per install</text>
   <text x="516" y="230" class="label meta">scripts/local-sync.cjs</text>
 
   <!-- data file -->
   <rect x="500" y="280" width="280" height="120" class="box"/>
-  <text x="516" y="302" class="label h" font-size="16">data/snapshot.json</text>
+  <text x="516" y="302" class="label h" font-size="16">snapshot.json · user data folder</text>
   <text x="516" y="324" class="label sub" font-size="13">All your work, in one file</text>
-  <text x="516" y="342" class="label sub" font-size="13">Zip the folder · move anywhere</text>
-  <text x="516" y="370" class="label meta">PORTABLE · GITIGNORED</text>
+  <text x="516" y="342" class="label sub" font-size="13">Merged per row · deletes stay deleted</text>
+  <text x="516" y="370" class="label meta">API KEYS NEVER SYNCED</text>
 
   <!-- External services (right side) -->
   <text x="870" y="118" class="label meta">EXTERNAL · OUTBOUND ONLY</text>

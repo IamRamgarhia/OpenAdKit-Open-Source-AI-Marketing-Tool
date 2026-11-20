@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.28.0.schema.json
+
+PackageIdentifier: DiceCodes.OpenAdKit
+PackageVersion: 2.0.0
+InstallerType: inno
+Scope: user
+InstallModes:
+- interactive
+- silent
+- silentWithProgress
+UpgradeBehavior: install
+ProductCode: OpenAdKit_is1
+ReleaseDate: 2026-11-20
+MinimumOSVersion: 10.0.0.0
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/releases/download/v2.0.0/OpenAdKit-Windows-Setup.exe
+  InstallerSha256: 4356BD4E0C15F47EB363FA685CDAD9E060E99BE6A493C267A7754FAC6E377318
+ManifestType: installer
+ManifestVersion: 1.28.0
