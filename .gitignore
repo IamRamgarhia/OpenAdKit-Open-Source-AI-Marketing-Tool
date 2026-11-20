@@ -45,3 +45,4 @@ server.log
 server.err.log
 dist/
 .installer-cache/
+mcp/dist/
