@@ -8,10 +8,11 @@
  * the fields the UI ACTUALLY reads to avoid spurious retries.
  */
 import { z } from "zod";
+import { tolerant, ModelNumber } from "./tolerant";
 
 const LeverScore = z.object({
   // Models sometimes return "7.5" as a string; the renderer coerces, so accept both.
-  score: z.union([z.number(), z.string()]),
+  score: z.union([ModelNumber, z.string()]),
   reason: z.string().optional(),
 });
 
@@ -22,10 +23,10 @@ const Fix = z.object({
   expected_lift: z.string(),
 });
 
-export const CreativeScoreSchema = z
+export const CreativeScoreSchema = tolerant(z
   .object({
     // Accept string scores ("7.5") — the renderer coerces via Number().
-    overall_score: z.union([z.number(), z.string()]),
+    overall_score: z.union([ModelNumber, z.string()]),
     // Plain string, not a strict enum: "Iterate" casing / novel tiers shouldn't
     // burn a retry. The renderer null-coalesces and lowercases for tone lookup.
     tier: z.string(),
@@ -43,4 +44,4 @@ export const CreativeScoreSchema = z
     predicted_ctr_band: z.string().optional(),
     honest_verdict: z.string().optional(),
   })
-  .passthrough();
+  .passthrough());

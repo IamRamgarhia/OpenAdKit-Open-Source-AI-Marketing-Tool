@@ -5,10 +5,11 @@
  * Everything else is optional + passthrough so unexpected fields aren't lost.
  */
 import { z } from "zod";
+import { tolerant, ModelNumber } from "./tolerant";
 
 const Strings = z.array(z.string());
 
-export const CampaignKitSchema = z
+export const CampaignKitSchema = tolerant(z
   .object({
     master_hook: z.string(),
     master_usp: z.string().optional(),
@@ -56,7 +57,7 @@ export const CampaignKitSchema = z
       .array(
         z.object({
           platform: z.string(),
-          pct: z.number(),
+          pct: ModelNumber,
           rationale: z.string().optional(),
         })
       )
@@ -71,4 +72,4 @@ export const CampaignKitSchema = z
       )
       .optional(),
   })
-  .passthrough();
+  .passthrough());

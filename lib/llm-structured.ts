@@ -24,6 +24,7 @@ import { z, type ZodTypeAny } from "zod";
 import { llmCall } from "@/lib/llm";
 import { tryParseJson, estimateCostUsd } from "@/lib/providers";
 import type { LLMUsage, LLMMessage, Provider } from "@/lib/providers/types";
+import { stripNulls } from "@/lib/schemas/tolerant";
 
 // Mirrors lib/llm.ts RunOptions — kept local because that type isn't exported.
 interface BaseLlmOpts {
@@ -96,6 +97,41 @@ function summarizeIssues(issues: z.ZodIssue[]): string {
     .join("\n");
 }
 
+/** Validate a parsed candidate, treating null-valued keys as absent. Prompts
+ *  (and models unprompted) use `null` for "not applicable"; optional Zod fields
+ *  reject it, which used to burn a retry on almost every run. */
+function safeParseLlm<S extends ZodTypeAny>(schema: S, candidate: unknown) {
+  return schema.safeParse(stripNulls(candidate));
+}
+
+/**
+ * Append the corrective turn. If the previous reply was empty, we must NOT
+ * send `{role:"assistant", content:""}` — Anthropic rejects empty assistant
+ * content with a 400. Fold the hint into the last user turn instead so roles
+ * keep alternating for providers that require it.
+ */
+function appendCorrection(messages: LLMMessage[], previousReply: string, hint: string): void {
+  const prev = previousReply.slice(0, 8000);
+  if (prev.trim()) {
+    messages.push({ role: "assistant", content: prev });
+    messages.push({ role: "user", content: hint });
+    return;
+  }
+  const emptyHint = `Your previous reply was empty. ${hint}`;
+  const last = messages[messages.length - 1];
+  if (last && last.role === "user") {
+    const content =
+      typeof last.content === "string"
+        ? `${last.content}
+
+${emptyHint}`
+        : [...last.content, { type: "text" as const, text: emptyHint }];
+    messages[messages.length - 1] = { role: "user", content };
+  } else {
+    messages.push({ role: "user", content: emptyHint });
+  }
+}
+
 const JSON_HINT =
   "Reply with ONLY a valid JSON value matching the requested shape. " +
   "No prose, no markdown, no commentary, no code fences. " +
@@ -142,7 +178,7 @@ export async function llmCallStructured<S extends ZodTypeAny>(
 
     const candidate = tryParseJson<unknown>(lastRaw);
     if (candidate !== null) {
-      const parsed = opts.schema.safeParse(candidate);
+      const parsed = safeParseLlm(opts.schema, candidate);
       if (parsed.success) {
         return {
           data: parsed.data,
@@ -162,13 +198,12 @@ export async function llmCallStructured<S extends ZodTypeAny>(
 
     // Build the corrective re-prompt so the next loop iteration self-heals.
     if (attempt < maxAttempts) {
-      messages.push({ role: "assistant", content: lastRaw.slice(0, 8000) });
       const fixHint = lastIssues
         ? `Your previous reply did not match the required JSON shape. Fix these issues and return ONLY the corrected JSON:\n\n${summarizeIssues(
             lastIssues
           )}`
         : "Your previous reply was not valid JSON. Return ONLY a valid JSON value matching the requested shape — no prose, no markdown, no code fences.";
-      messages.push({ role: "user", content: fixHint });
+      appendCorrection(messages, lastRaw, fixHint);
     }
   }
 
@@ -195,7 +230,7 @@ export function validateLlmJson<S extends ZodTypeAny>(
 ): { ok: true; data: z.infer<S> } | { ok: false; issues: z.ZodIssue[] | null; raw: string } {
   const candidate = tryParseJson<unknown>(raw);
   if (candidate === null) return { ok: false, issues: null, raw };
-  const parsed = schema.safeParse(candidate);
+  const parsed = safeParseLlm(schema, candidate);
   if (parsed.success) return { ok: true, data: parsed.data };
   return { ok: false, issues: parsed.error.issues, raw };
 }
@@ -254,13 +289,11 @@ export async function validateOrRetry<S extends ZodTypeAny>(opts: {
         first.issues
       )}`
     : "Your previous reply was not valid JSON. Return ONLY a valid JSON value matching the requested shape — no prose, no markdown, no code fences.";
+  const retryMessages: LLMMessage[] = [{ role: "user", content: opts.originalPrompt }];
+  appendCorrection(retryMessages, opts.raw || "", fixHint);
   const retry = await llmCall({
     system: opts.system,
-    messages: [
-      { role: "user", content: opts.originalPrompt },
-      { role: "assistant", content: (opts.raw || "").slice(0, 8000) },
-      { role: "user", content: fixHint },
-    ],
+    messages: retryMessages,
     maxTokens: opts.maxTokens ?? 3000,
     temperature: 0.2,
     signal: opts.signal,
