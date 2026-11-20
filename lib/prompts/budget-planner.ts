@@ -80,7 +80,7 @@ INPUT:
 - Main platform under consideration: ${input.primary_platform || "not specified"}
 - Gross margin: ${input.gross_margin_pct ? `${input.gross_margin_pct}%` : "not given"}
 
-PROJECTION COMPUTED BY THE APP for ${input.primary_platform || "Google Search"} (facts — the user sees these next to your plan):
+PROJECTION COMPUTED BY THE APP for ${projectionPlatform(input.primary_platform)} (facts — the user sees these next to your plan):
 ${projectionFacts(est, cc)}
 Use them qualitatively when justifying the split — e.g. "at a projected CPA above the break-even CPA, keep prospecting spend small until CVR improves". Do not restate them as new numbers or compute others.
 

@@ -413,7 +413,7 @@ OpenAdKit includes an **MCP server** — a small connector that lets AI assistan
 - **No AI key needed (prompt mode).** OpenAdKit hands the assistant the exact prompt and output format; Claude writes the result and checks it with `validate_output`, which also enforces platform character limits (for example, 30 characters for a Google headline).
 - **With your own key (generate mode).** Set an AI key such as `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` in the connector's settings and OpenAdKit generates, validates and retries by itself.
 
-A/B sample sizes and budget projections are computed in code either way. Brands come from the clients you saved in the OpenAdKit app.
+A/B sample sizes, budget projections, CTR / CPA math, fatigue changes and bid feasibility are computed in code either way. Brands come from the clients you saved in the OpenAdKit app.
 
 **Connecting it:**
 
