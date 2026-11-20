@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
- * Cross-platform launcher: runs the local-sync sidecar AND the Next.js dev server
- * in parallel. One Ctrl+C kills both cleanly.
+ * Contributor launcher: runs the local-sync sidecar AND the Next.js DEV server
+ * (hot reload) in parallel. One Ctrl+C kills both cleanly. End users get the
+ * production server via OpenAdKit.bat / OpenAdKit.command instead.
  *
- * Honors PORT + ADFORGE_SYNC_PORT from .env.local (or current env).
+ * Ports come from .env.local (written by scripts/resolve-ports.cjs, which runs
+ * first if .env.local is missing) or the current environment.
  *
  * Used by:  npm run start:all
  *
@@ -34,10 +36,16 @@ function loadEnvLocal() {
     if (process.env[key] === undefined) process.env[key] = val;
   }
 }
+if (!fs.existsSync(path.join(PROJECT_ROOT, ".env.local"))) {
+  require("child_process").spawnSync(process.execPath, [path.join(__dirname, "resolve-ports.cjs")], {
+    cwd: PROJECT_ROOT,
+    stdio: "ignore",
+  });
+}
 loadEnvLocal();
 
-const PORT = process.env.PORT || "3005";
-const SYNC_PORT = process.env.ADFORGE_SYNC_PORT || "3006";
+const PORT = process.env.PORT || "41573";
+const SYNC_PORT = process.env.OPENADKIT_SYNC_PORT || process.env.ADFORGE_SYNC_PORT || "41574";
 
 const isWin = process.platform === "win32";
 const npx = isWin ? "npx.cmd" : "npx";
@@ -49,7 +57,13 @@ const sync = spawn(process.execPath, [path.join(__dirname, "local-sync.cjs")], {
   // run-all spawns Next itself (below), so tell the sidecar NOT to also
   // auto-start its own `next dev` — otherwise two servers race for the same
   // PORT and the second dies with EADDRINUSE. (Audit finding.)
-  env: { ...process.env, ADFORGE_SYNC_PORT: SYNC_PORT, ADFORGE_NO_AUTOSTART: "1" },
+  env: {
+    ...process.env,
+    OPENADKIT_SYNC_PORT: SYNC_PORT,
+    ADFORGE_SYNC_PORT: SYNC_PORT,
+    OPENADKIT_NO_AUTOSTART: "1",
+    ADFORGE_NO_AUTOSTART: "1",
+  },
 });
 
 console.log(`[openadkit] starting Next.js dev server on http://localhost:${PORT}`);
@@ -76,6 +90,6 @@ sync.on("exit", (code) => {
 });
 next.on("exit", (code) => {
   console.log(`[openadkit] next dev exited with code ${code}`);
-  try { sync.kill(); } catch {}
-  process.exit(code ?? 0);
+  killTree(sync);
+  setTimeout(() => process.exit(code ?? 0), 500);
 });

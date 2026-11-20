@@ -70,7 +70,8 @@ fi
 
 # 5. Resolve ports (multi-install conflict detection)
 echo "Checking for port conflicts..."
-RESOLVED=$(node scripts/resolve-ports.cjs 2>/dev/null)
+# `|| true` keeps `set -e` from aborting before the fallback below runs.
+RESOLVED=$(node scripts/resolve-ports.cjs 2>/dev/null || true)
 ACTION=$(echo "$RESOLVED" | grep -oE 'ACTION=[a-z_]+' | head -1 | cut -d= -f2)
 SYNC_PORT=$(echo "$RESOLVED" | grep -oE 'SYNC=[0-9]+' | head -1 | cut -d= -f2)
 WEB_PORT=$(echo "$RESOLVED" | grep -oE 'PORT=[0-9]+' | head -1 | cut -d= -f2)
@@ -90,9 +91,11 @@ if [ "$ACTION" = "error" ]; then
 fi
 
 if [ "$ACTION" = "reuse" ]; then
-  echo "Sidecar already running on :$SYNC_PORT for this install. Opening browser..."
-  if command -v open >/dev/null 2>&1; then open "http://127.0.0.1:$SYNC_PORT/" &
-  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "http://127.0.0.1:$SYNC_PORT/" &
+  echo "OpenAdKit is already running for this install. Opening it..."
+  if [ "${OPENADKIT_NO_BROWSER:-}" != "1" ]; then
+    if command -v open >/dev/null 2>&1; then open "http://127.0.0.1:$WEB_PORT/" &
+    elif command -v xdg-open >/dev/null 2>&1; then xdg-open "http://127.0.0.1:$WEB_PORT/" &
+    fi
   fi
   exit 0
 fi
@@ -104,8 +107,8 @@ if [ "$ACTION" = "restart_stale" ]; then
   # handles; the new sidecar would otherwise fail to bind. (Audit finding #41.)
   DEADLINE=$(( $(date +%s) + 10 ))
   while [ $(date +%s) -lt $DEADLINE ]; do
-    # nc -z returns 0 if port is OPEN. We want it CLOSED (free).
-    if ! nc -z 127.0.0.1 "$SYNC_PORT" >/dev/null 2>&1; then
+    # Free once nothing answers (curl is always present; nc is not on every Linux).
+    if ! curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$SYNC_PORT/health"; then
       break
     fi
     sleep 0.3
@@ -121,6 +124,7 @@ if [ "$ACTION" = "shifted" ]; then
 fi
 
 # 6. Hand off to the sidecar (visible log, Ctrl+C exits)
+export OPENADKIT_SYNC_PORT="$SYNC_PORT"
 export ADFORGE_SYNC_PORT="$SYNC_PORT"
 export PORT="$WEB_PORT"
 exec bash scripts/start.sh

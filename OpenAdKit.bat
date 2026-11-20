@@ -64,16 +64,22 @@ REM (no .env.local) and asks the OS for ports the kernel just confirmed are
 REM free. That avoids the 3000-range collision storm entirely.
 if not exist data mkdir data
 
-REM Desktop shortcut on first run
+REM Desktop shortcut on first run. The folder reaches PowerShell through an
+REM environment variable, never spliced into the command text, so a path with
+REM an apostrophe (C:\Users\O'Brien) or "!" can't break the quoting.
+REM Delayed expansion is switched off for this block so a "!" in the path survives.
+setlocal DisableDelayedExpansion
+set "OAK_DIR=%~dp0"
 powershell -NoProfile -Command ^
+  "$dir = $env:OAK_DIR.TrimEnd([char]92);" ^
   "$d = [Environment]::GetFolderPath('Desktop');" ^
   "$lnk = Join-Path $d 'OpenAdKit.lnk';" ^
   "if (-not (Test-Path $lnk)) {" ^
-  "  $t = Join-Path '%CD%' 'OpenAdKit.bat';" ^
   "  $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk);" ^
-  "  $s.TargetPath = $t; $s.WorkingDirectory = '%CD%';" ^
+  "  $s.TargetPath = (Join-Path $dir 'OpenAdKit.bat'); $s.WorkingDirectory = $dir;" ^
   "  $s.Description = 'Launch OpenAdKit'; $s.WindowStyle = 7; $s.Save();" ^
   "}" 2>nul
+endlocal
 
 REM --- Resolve ports (handles multi-install conflicts) ---
 echo Checking for port conflicts...
@@ -100,8 +106,8 @@ if "!ACTION!"=="error" (
 )
 
 if "!ACTION!"=="reuse" (
-    echo Sidecar already running on :!SYNC! for this install. Opening browser...
-    start "" "http://127.0.0.1:!SYNC!/"
+    echo OpenAdKit is already running for this install. Opening it...
+    if not "%OPENADKIT_NO_BROWSER%"=="1" start "" "http://127.0.0.1:!PORT!/"
     exit /b 0
 )
 
@@ -123,7 +129,7 @@ if "!ACTION!"=="shifted" (
 REM --- Spawn sidecar detached + hidden ---
 echo Starting OpenAdKit sidecar on :!SYNC!...
 powershell -NoProfile -Command ^
-  "$env:ADFORGE_SYNC_PORT='!SYNC!'; $env:PORT='!PORT!';" ^
+  "$env:OPENADKIT_SYNC_PORT='!SYNC!'; $env:ADFORGE_SYNC_PORT='!SYNC!'; $env:PORT='!PORT!';" ^
   "Start-Process -FilePath 'node' -ArgumentList 'scripts\local-sync.cjs' -WorkingDirectory (Get-Location) -WindowStyle Hidden"
 if errorlevel 1 (
     echo [ERROR] Failed to launch the sidecar. Try scripts\start.bat for a visible log.
@@ -134,7 +140,7 @@ if errorlevel 1 (
 REM --- Wait for sidecar /health on SYNC port, THEN wait for Next dev on WEB port ---
 REM The sidecar auto-starts the Next dev server on boot, so by the time
 REM /health returns 200 the web app is either already up or compiling.
-echo Starting OpenAdKit web app (first run takes 20-40s while Next compiles)...
+echo Starting OpenAdKit web app...
 set /a TRIES=0
 :wait_sidecar
 set /a TRIES+=1
@@ -160,7 +166,7 @@ goto :wait_web_loop
 
 :ready
 REM Open browser DIRECTLY to the app, not the launcher panel.
-start "" "http://127.0.0.1:!PORT!/"
+if not "%OPENADKIT_NO_BROWSER%"=="1" start "" "http://127.0.0.1:!PORT!/"
 exit /b 0
 
 :fallback_launcher
@@ -168,8 +174,8 @@ REM Web app didn't come up in time — open the control panel so user can see
 REM the build log and retry. Better than failing silently.
 echo.
 echo [WARN] Web app didn't respond within 90 seconds. Opening control panel.
-echo   Click the Start button there once the Next build finishes.
-start "" "http://127.0.0.1:!SYNC!/"
+echo   Use Restart there, or run scripts\start.bat to see the log.
+if not "%OPENADKIT_NO_BROWSER%"=="1" start "" "http://127.0.0.1:!SYNC!/"
 exit /b 0
 
 :fail

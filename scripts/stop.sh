@@ -1,44 +1,43 @@
 #!/usr/bin/env bash
-# OpenAdKit stop — kills the Next dev server + local-sync sidecar.
-# Run: bash stop.sh
+# OpenAdKit stop (macOS / Linux). Asks the sidecar to shut down cleanly
+# (it stops the web app first), then frees the ports if anything is left.
+#   bash scripts/stop.sh
 
-cd "$(dirname "$0")"
-
+cd "$(dirname "$0")/.."
 echo "Stopping OpenAdKit..."
 
-# Kill PID we saved on start
-if [ -f .ados-sync.pid ]; then
-  PID=$(cat .ados-sync.pid)
-  if [ -n "$PID" ]; then
-    kill "$PID" 2>/dev/null || true
+read_env() {
+  if [ -f .env.local ]; then
+    grep -E "^$1=" .env.local | tail -1 | cut -d= -f2 | tr -d '[:space:]'
   fi
-  rm -f .ados-sync.pid
+}
+WEB_PORT="$(read_env PORT)"
+SYNC_PORT="$(read_env OPENADKIT_SYNC_PORT)"
+[ -z "$SYNC_PORT" ] && SYNC_PORT="$(read_env ADFORGE_SYNC_PORT)"
+
+if [ -z "$WEB_PORT$SYNC_PORT" ]; then
+  echo "No .env.local found — OpenAdKit has not been started from this folder."
+  exit 0
 fi
 
-# Belt-and-suspenders: kill anything bound to our ports
+if [ -n "$SYNC_PORT" ]; then
+  if curl -sf -X POST --max-time 2 "http://127.0.0.1:$SYNC_PORT/quit" >/dev/null 2>&1; then
+    sleep 2
+  fi
+fi
+
 kill_port() {
-  local port=$1
-  local pids
+  local pids=""
   if command -v lsof >/dev/null 2>&1; then
-    pids=$(lsof -ti tcp:$port 2>/dev/null || true)
+    pids=$(lsof -ti "tcp:$1" -sTCP:LISTEN 2>/dev/null || true)
   elif command -v fuser >/dev/null 2>&1; then
-    pids=$(fuser -n tcp $port 2>/dev/null | awk '{print $1}' || true)
+    pids=$(fuser -n tcp "$1" 2>/dev/null || true)
   fi
   for p in $pids; do
-    echo "Killing PID $p (port $port)"
-    kill -9 "$p" 2>/dev/null || true
+    echo "Stopping PID $p (port $1)"
+    kill "$p" 2>/dev/null || true
   done
 }
-
-# Read the ACTUAL ports from .env.local — the launcher/resolver writes these
-# and they are NOT 3005/3006 on most installs. (Audit finding.)
-if [ -f .env.local ]; then
-  WEB_PORT=$(grep -E '^PORT=' .env.local | tail -1 | cut -d= -f2 | tr -d '[:space:]')
-  SYNC_PORT=$(grep -E '^ADFORGE_SYNC_PORT=' .env.local | tail -1 | cut -d= -f2 | tr -d '[:space:]')
-  [ -n "$WEB_PORT" ] && kill_port "$WEB_PORT"
-  [ -n "$SYNC_PORT" ] && kill_port "$SYNC_PORT"
-else
-  echo "No .env.local found — nothing to stop (run the launcher first)."
-fi
-
+[ -n "$WEB_PORT" ] && kill_port "$WEB_PORT"
+[ -n "$SYNC_PORT" ] && kill_port "$SYNC_PORT"
 echo "Done."

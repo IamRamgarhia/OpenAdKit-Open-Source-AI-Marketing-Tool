@@ -22,7 +22,8 @@ import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-const BASE_URL = process.env.BASE_URL ?? "http://localhost:57828";
+// Same default as playwright.config.ts; override with BASE_URL.
+const BASE_URL = process.env.BASE_URL ?? "http://localhost:3005";
 
 // --- key discovery ----------------------------------------------------------
 function loadEnv(): Record<string, string> {

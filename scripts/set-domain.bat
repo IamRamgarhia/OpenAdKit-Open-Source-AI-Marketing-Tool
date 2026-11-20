@@ -11,6 +11,14 @@ setlocal EnableDelayedExpansion
 set "HOSTS=%WINDIR%\System32\drivers\etc\hosts"
 set "ENTRY=127.0.0.1   openadkit.local   # OpenAdKit local"
 
+REM Current web port from .env.local (repo root is one level up from scripts\).
+set "PORT=your-port"
+if exist "%~dp0..\.env.local" (
+    for /f "usebackq tokens=1,2 delims==" %%A in ("%~dp0..\.env.local") do (
+        if /I "%%A"=="PORT" set "PORT=%%B"
+    )
+)
+
 REM Admin check
 net session >nul 2>&1
 if errorlevel 1 (
@@ -42,7 +50,7 @@ echo.
 echo  Added:  %ENTRY%
 echo.
 echo  Now run OpenAdKit on port 80 to use  http://openadkit.local/
-echo  Edit .env.local and set  PORT=80,  then run start.bat as administrator.
+echo  Edit .env.local and set  PORT=80,  then run scripts\start.bat as administrator.
 echo.
 echo  Or keep your current port and use  http://openadkit.local:!PORT!/
 echo.
