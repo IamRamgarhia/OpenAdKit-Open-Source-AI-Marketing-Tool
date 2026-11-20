@@ -628,7 +628,7 @@ function SettingsInner() {
                 <strong>Hosted mode:</strong> brand brains + history live only in this browser's
                 IndexedDB. Clearing site data wipes everything. Export below and re-import on
                 a new browser / device to move your work. Want auto-backup to disk?{" "}
-                <a href="https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool#install-in-60-seconds" target="_blank" rel="noreferrer" className="underline">
+                <a href="https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool#download--install" target="_blank" rel="noreferrer" className="underline">
                   install locally
                 </a>.
               </div>

@@ -16,12 +16,12 @@ This file documents what to make + how to upload.
 
 ## What to put on it
 
-Mirror the `docs/banner.svg` design (already in this repo) but exported as PNG at 1280×640. Specifically:
+Mirror the `docs/banner.svg` design (already in this repo) but exported as PNG at 1280×640. Note: `docs/banner.svg` itself still says "17 generators" and "v0.1" — update those labels before exporting. Specifically:
 
 - **Brand mark**: 80×80 saffron `#ffb020` square with italic serif "A" in `#08080a`
 - **Wordmark**: "OpenAdKit" in Instrument Serif / Georgia italic, ~84 px, color `#e7e7ea`
-- **Tagline (one line)**: "Open-source AI ad ops cockpit · every platform · BYOK · zero subscriptions" — `#e7e7ea`, 22 px, semibold
-- **Feature row**: `● 17 generators · ● 11 optimizers · ● 9 AI providers · ● browser-only · ● MIT · ● $0/month`
+- **Tagline (one line)**: "Open source AI marketing tool · every ad platform · BYOK · zero subscriptions" — `#e7e7ea`, 22 px, semibold
+- **Feature row**: `● 18 generators · ● 11 optimizers · ● 9 AI providers · ● Windows · macOS · Linux · ● MIT · ● $0/month`
 - **Bottom credit**: small mono caps — "BUILT BY DICECODES · DICECODES.COM"
 - **Background**: near-black gradient (`#08080a → #101013`) with a subtle saffron radial glow at top-left and a faint grid pattern
 - **Right third**: simplified ad-mockup card (saffron top stripe, gray placeholder rectangles, faux CTA button) — same as the banner SVG
@@ -52,6 +52,6 @@ Verify by pasting `https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Mark
 
 ## When to refresh
 
-- After any major release (v0.x → v1.0)
+- After any major release (e.g. v2.0.0)
 - After significant feature additions worth front-page billing
 - After branding changes
