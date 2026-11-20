@@ -11,7 +11,10 @@ import { EmailSubjectsSchema } from "@/lib/schemas/generators";
 const config: GeneratorConfig<EmailSubjectInput & Record<string, unknown>> = {
   title: "Email subject lines",
   subtitle: "12 angle-distinct subjects + preheaders. Mobile-cutoff-aware. Spam-risk flagged.",
-  platform: "google",
+  // No "email" bucket exists in the stored Platform union; "display" matches
+  // the sidebar's "Email + Display" group (it was "google", which filed
+  // email work under Search and drove Google-only next steps).
+  platform: "display",
   campaign_type: "Email Subjects",
   maxTokens: 2500,
   skip_framework_stack: true,
