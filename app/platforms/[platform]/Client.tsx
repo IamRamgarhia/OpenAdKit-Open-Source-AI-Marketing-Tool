@@ -1,18 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
 import { Section, Pill } from "@/components/OutputBlocks";
 import { ExternalLink, ArrowLeft, ArrowRight, Rocket, Sparkles, Activity } from "lucide-react";
 import { PLATFORM_HUBS } from "@/lib/platform-hubs";
 
 export default function PlatformClient({ platform }: { platform: string }) {
-  return (
-    <ApiKeyGate>
-      <Inner platform={platform} />
-    </ApiKeyGate>
-  );
+  return <Inner platform={platform} />;
 }
 
 function Inner({ platform }: { platform: string }) {

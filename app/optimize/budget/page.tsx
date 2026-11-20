@@ -3,7 +3,7 @@
 import { GeneratorShell } from "@/components/GeneratorShell";
 import { Section, Pill, Kv } from "@/components/OutputBlocks";
 import { getCurrency } from "@/lib/currency";
-import { buildBudgetWastePrompt, type BudgetWasteInput } from "@/lib/prompts/budget-waste";
+import { buildBudgetWastePrompt, parseImpressionShare, type BudgetWasteInput } from "@/lib/prompts/budget-waste";
 import type { GeneratorConfig } from "@/lib/generator-config";
 import { BudgetWasteSchema } from "@/lib/schemas/generators";
 
@@ -33,6 +33,7 @@ const config: GeneratorConfig<BudgetWasteInput & Record<string, unknown>> = {
     { name: "device_targeting", label: "Devices", kind: "text", placeholder: "all / mobile-only / etc" },
     { name: "geo_targeting", label: "Geo", kind: "text", placeholder: "US / 10mi from store / etc" },
     { name: "excludes_customers", label: "Excludes existing customers?", kind: "text", placeholder: "yes / no" },
+    { name: "impression_share_pct", label: "Impression share (%)", kind: "text", placeholder: "e.g. 42", hint: "From the platform's Search impression share column. Blank = demand-captured is not shown." },
   ],
   initial: {
     platform: "Google Ads",
@@ -44,12 +45,13 @@ const config: GeneratorConfig<BudgetWasteInput & Record<string, unknown>> = {
     device_targeting: "",
     geo_targeting: "",
     excludes_customers: "",
+    impression_share_pct: "",
   } as any,
   buildPrompt: (input) => buildBudgetWastePrompt(input as unknown as BudgetWasteInput),
   buildTitle: (i: any) => `Budget · ${i.platform}`,
   expectJson: true,
   schema: BudgetWasteSchema,
-  renderJson: (json) => <BudgetOutput json={json} />,
+  renderJson: (json, input) => <BudgetOutput json={json} input={input} />,
 };
 
 export default function Page() {
@@ -63,8 +65,10 @@ const priorityTone: Record<string, "neg" | "live" | "default" | "pos"> = {
   low: "default",
 };
 
-function BudgetOutput({ json }: { json: any }) {
+function BudgetOutput({ json, input }: { json: any; input: Partial<BudgetWasteInput> }) {
   const sym = getCurrency().symbol;
+  // Demand captured comes from the user's impression share, never the model.
+  const share = parseImpressionShare(input?.impression_share_pct);
   if (json?.stop_condition) {
     return (
       <Section title="STOP">
@@ -76,12 +80,17 @@ function BudgetOutput({ json }: { json: any }) {
   return (
     <div className="space-y-4 stagger">
       {json?.pulse ? (
-        <Section title="Pulse — 3 numbers">
-          <div className="grid md:grid-cols-3 gap-2">
+        <Section title="Pulse">
+          <div className={`grid gap-2 ${share !== null ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
             <PulseCard label="waste / month" value={`${sym}${(json.pulse.waste_per_month_usd?.value ?? 0).toLocaleString()}`} contrib={json.pulse.waste_per_month_usd?.top_contributor} fix={json.pulse.waste_per_month_usd?.fix_pointer} tone="neg" />
-            <PulseCard label="demand captured" value={`${json.pulse.demand_captured_pct?.value ?? 0}%`} contrib={json.pulse.demand_captured_pct?.top_contributor} fix={json.pulse.demand_captured_pct?.fix_pointer} tone="live" />
+            {share !== null ? (
+              <PulseCard label="demand captured · your impression share" value={`${share}%`} contrib={json.pulse.demand_captured_pct?.top_contributor} fix={json.pulse.demand_captured_pct?.fix_pointer} tone="live" />
+            ) : null}
             <PulseCard label="cpa efficiency" value={`${json.pulse.cpa_efficiency_ratio?.value ?? 0}×`} contrib={json.pulse.cpa_efficiency_ratio?.top_contributor} fix={json.pulse.cpa_efficiency_ratio?.fix_pointer} tone="info" />
           </div>
+          {share === null ? (
+            <p className="text-[11px] text-ink-muted mt-2">Add your impression share to see how much available demand you capture — it isn't estimated.</p>
+          ) : null}
         </Section>
       ) : null}
 

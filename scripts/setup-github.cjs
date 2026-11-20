@@ -14,7 +14,7 @@
  *   node scripts/setup-github.cjs
  *
  * Or override the repo target:
- *   node scripts/setup-github.cjs IamRamgarhia/Free-open-source-AI-marketing-tool
+ *   node scripts/setup-github.cjs IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool
  *
  * Idempotent — run as many times as needed.
  */

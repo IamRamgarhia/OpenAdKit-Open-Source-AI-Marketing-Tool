@@ -43,3 +43,6 @@ playwright-report/
 # Local dev server logs (created by manual next start)
 server.log
 server.err.log
+dist/
+.installer-cache/
+mcp/dist/

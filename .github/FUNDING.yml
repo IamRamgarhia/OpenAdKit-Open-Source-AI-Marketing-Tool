@@ -1,9 +1,8 @@
-# OpenAdKit is free + MIT-licensed.
-# We make money from custom builds at Dicecodes, not sponsorships.
-# If you want to support development, the most useful things you can do are:
-#   1. Star the repo (visibility signal)
-#   2. Open thoughtful issues
-#   3. Send a PR (see CONTRIBUTING.md)
-#   4. Hire Dicecodes for a custom build — https://dicecodes.com
-
-custom: ["https://dicecodes.com"]
+# OpenAdKit is free and MIT-licensed, built by DiceCodes.
+# Ways to support it (also in the app under Support & about):
+#   - UPI (India): princeramgarhiaa-1@okaxis
+#   - PayPal (international): link below
+#   - Star the repo, report bugs, or hire DiceCodes for custom work.
+custom:
+  - https://www.paypal.com/donate/?business=princeramgarhiaa@gmail.com&currency_code=USD&item_name=Support%20OpenAdKit
+  - https://dicecodes.com

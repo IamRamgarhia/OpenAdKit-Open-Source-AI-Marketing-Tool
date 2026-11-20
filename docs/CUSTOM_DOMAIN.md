@@ -58,8 +58,8 @@ PORT=80
 ```
 
 Then start with admin/sudo:
-- Windows: right-click `start.bat` → Run as administrator
-- Mac/Linux: `sudo bash start.sh`
+- Windows: right-click `scripts\start.bat` → Run as administrator
+- Mac/Linux: `sudo bash scripts/start.sh`
 
 Open `http://openadkit.local/` and you're in.
 

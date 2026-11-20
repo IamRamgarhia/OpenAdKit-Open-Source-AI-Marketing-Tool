@@ -1,4 +1,5 @@
-import { COURSES } from "@/lib/courses";
+import type { Metadata } from "next";
+import { COURSES, findLesson } from "@/lib/courses";
 import LessonClient from "./Client";
 
 export function generateStaticParams() {
@@ -13,6 +14,20 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
-export default function Page({ params }: { params: { course: string; lesson: string } }) {
-  return <LessonClient course={params.course} lesson={params.lesson} />;
+type Params = Promise<{ course: string; lesson: string }>;
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { course, lesson } = await params;
+  const found = findLesson(course, lesson);
+  if (!found) return {};
+  return {
+    title: `${found.lesson.title} — ${found.course.name}`,
+    description: found.lesson.takeaway,
+    alternates: { canonical: `/learn/courses/${found.course.slug}/${found.lesson.slug}` },
+  };
+}
+
+export default async function Page({ params }: { params: Params }) {
+  const { course, lesson } = await params;
+  return <LessonClient course={course} lesson={lesson} />;
 }

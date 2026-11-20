@@ -14,7 +14,8 @@
  *
  * The port now flows one way:
  *   resolve-ports.cjs / local-sync.cjs
- *     -> .env.local (ADFORGE_SYNC_PORT + NEXT_PUBLIC_ADFORGE_SYNC_PORT)
+ *     -> .env.local (OPENADKIT_SYNC_PORT + NEXT_PUBLIC_OPENADKIT_SYNC_PORT,
+ *        plus the legacy ADFORGE_* mirrors)
  *     -> Next inlines NEXT_PUBLIC_* at build time
  *     -> getSyncOrigin() here
  *     -> every browser-side caller
@@ -28,8 +29,12 @@
 
 import { isHostedMode } from "./env";
 
-/** Port baked in at build time by Next from .env.local, when present. */
-const BUILD_TIME_PORT = process.env.NEXT_PUBLIC_ADFORGE_SYNC_PORT;
+/** Port baked in at build time by Next from .env.local, when present.
+ *  NEXT_PUBLIC_OPENADKIT_SYNC_PORT is canonical; the pre-rebrand
+ *  NEXT_PUBLIC_ADFORGE_SYNC_PORT is still honoured as a fallback. Each name is
+ *  referenced literally so Next can inline it. */
+const BUILD_TIME_PORT =
+  process.env.NEXT_PUBLIC_OPENADKIT_SYNC_PORT || process.env.NEXT_PUBLIC_ADFORGE_SYNC_PORT;
 
 /** Historical/default ports worth probing when the build-time value is absent
  *  or wrong. 3006 is what the shell installers still write; 41574 is the
@@ -44,10 +49,13 @@ function originFor(port: string): string {
   return `http://127.0.0.1:${port}`;
 }
 
-/** Ordered, de-duplicated list of origins worth trying. */
-export function candidateSyncOrigins(): string[] {
+/** Ordered, de-duplicated list of origins worth trying. `runtimePort` (from
+ *  the web server's /api/runtime) is the authoritative value for this launch
+ *  and goes first; the build-time port and historical defaults follow. */
+export function candidateSyncOrigins(runtimePort?: string | number | null): string[] {
   const ports: string[] = [];
-  if (BUILD_TIME_PORT) ports.push(BUILD_TIME_PORT);
+  if (runtimePort) ports.push(String(runtimePort));
+  if (BUILD_TIME_PORT && !ports.includes(BUILD_TIME_PORT)) ports.push(BUILD_TIME_PORT);
   for (const p of FALLBACK_PORTS) if (!ports.includes(p)) ports.push(p);
   return ports.map(originFor);
 }
@@ -90,7 +98,14 @@ export async function resolveSyncOrigin(force = false): Promise<string | null> {
     const cached = readCachedOrigin();
     if (cached) return cached;
   }
-  for (const origin of candidateSyncOrigins()) {
+  let runtimePort: number | null = null;
+  try {
+    const r = await fetch("/api/runtime", { cache: "no-store" });
+    if (r.ok) runtimePort = (await r.json())?.sync_port ?? null;
+  } catch {
+    /* static hosting / older server — fall back to the build-time list */
+  }
+  for (const origin of candidateSyncOrigins(runtimePort)) {
     try {
       const res = await fetch(`${origin}/health`, { method: "GET", cache: "no-store" });
       if (!res.ok) continue;

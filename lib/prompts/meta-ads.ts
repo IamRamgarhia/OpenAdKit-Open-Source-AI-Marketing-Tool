@@ -43,7 +43,7 @@ INPUT:
 GENERATE 3 variants × this structure, each labeled by angle:
 - Variant A — pain-point lead
 - Variant B — desire / aspiration lead
-- Variant C — social proof / VOC lead
+- Variant C — social proof / VOC lead (use the Brand Brain's VOC quotes and proof only; if none exist, lead with a concrete, verifiable promise instead — never invent reviews, ratings or numbers)
 
 For each variant include:
 - primary_text (front-load the hook in the first ${META_LIMITS.primary_above_fold} chars)

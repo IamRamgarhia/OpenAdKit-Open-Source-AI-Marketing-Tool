@@ -44,9 +44,9 @@ INPUT:
 - Preferred CTA: ${input.cta || "(pick from LinkedIn's set)"}
 
 GENERATE 3 variants × these angles:
-- Variant A: Industry-specific outcome (data-led)
+- Variant A: Industry-specific outcome (data-led only with data from the Brand Brain or input; otherwise state the concrete outcome without numbers)
 - Variant B: Thought-leadership angle (perspective / contrarian POV)
-- Variant C: Peer / community proof (named companies or roles using it)
+- Variant C: Peer / community proof (name customers ONLY if the Brand Brain lists them; otherwise speak to peer roles and the integrations/process they already use — never invent customer names)
 
 For each variant include:
 - intro_text (front-load value before the "see more" cut at 150 chars)

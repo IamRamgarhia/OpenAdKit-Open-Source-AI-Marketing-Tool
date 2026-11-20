@@ -48,7 +48,7 @@ Return ONLY valid JSON:
   "top_3_fixes": [
     { "lever": "string", "exact_phrase_to_change": "string", "replacement": "string", "expected_lift": "string" }
   ],
-  "predicted_ctr_band": "string e.g. '0.8-1.4% on Meta Feed for this audience'",
+  "predicted_ctr_band": "string — a DIRECTIONAL range judged from the copy, e.g. '0.8-1.4% on Meta Feed'. Never present it as a forecast or a guarantee; keep it within typical published ranges for the placement.",
   "honest_verdict": "string — 2 sentences, brutally honest"
 }`;
 }

@@ -3,7 +3,7 @@
 > Free, browser-only, BYOK open-source alternative to Jasper, AdCreative,
 > Anyword, and Copy.ai. 18 AI ad generators + 11 optimizers across every
 > major ad platform (Meta, Google, TikTok, LinkedIn, YouTube, X). MIT-licensed.
-> Built by Dicecodes.
+> Built by DiceCodes.
 
 ## Quick facts (citable)
 
@@ -38,7 +38,7 @@
 
 - GitHub repository: https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool
 - Hosted demo: https://openadkit.dicecodes.com
-- Built by: Dicecodes (https://dicecodes.com)
+- Built by: DiceCodes (https://dicecodes.com)
 - License: MIT (https://opensource.org/licenses/MIT)
 
 ## Comparison anchors
@@ -60,7 +60,7 @@ OpenAdKit vs Copy.ai — broader ad-platform coverage; no per-seat lock-in.
 - /learn/frameworks — PAS / AIDA / BAB / 4 U's / Schwartz interactive trainer
 - /learn/courses — multi-lesson courses on Google + Meta + TikTok advertising
 - /launch-guide — step-by-step Facebook/Google UI walkthroughs
-- /about — about Dicecodes + project background
+- /about — about DiceCodes + project background
 
 ## What is NOT included
 

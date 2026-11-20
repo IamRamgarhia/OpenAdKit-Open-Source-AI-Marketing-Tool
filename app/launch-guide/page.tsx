@@ -1,6 +1,7 @@
 "use client";
 
 import { GeneratorShell } from "@/components/GeneratorShell";
+import { arr, obj, strList, txt } from "@/lib/safe-json";
 import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { ExternalLink, AlertTriangle } from "lucide-react";
@@ -56,34 +57,41 @@ export default function Page() {
 }
 
 function GuideOutput({ json }: { json: any }) {
+  // No schema on this tool — guard every list/object (lib/safe-json).
+  const isObj = (x: unknown) => Boolean(x && typeof x === "object");
+  const preflight = arr(json?.preflight_checklist).filter(isObj);
+  const sections = arr(json?.sections).filter(isObj);
+  const dontTouch = strList(json?.do_not_touch_during_learning_phase);
+  const postLaunch = obj(json?.post_launch);
+  const links = arr(json?.links).filter((l: any) => isObj(l) && /^https?:\/\//i.test(txt(l.url)));
   return (
     <div className="space-y-4 stagger">
-      {json?.estimated_time_minutes ? (
+      {txt(json?.estimated_time_minutes) ? (
         <Section title="Time estimate">
           <div className="flex items-center gap-4">
             <div>
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">launch time</div>
-              <div className="font-display italic text-3xl text-live tabular">~{json.estimated_time_minutes} min</div>
+              <div className="font-display italic text-3xl text-live tabular">~{txt(json.estimated_time_minutes)} min</div>
             </div>
-            {json?.estimated_launch_cost_first_week_usd ? (
+            {txt(json?.estimated_launch_cost_first_week_usd) ? (
               <div>
                 <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">est. first-week cost</div>
-                <div className="font-display italic text-3xl text-pos tabular">${json.estimated_launch_cost_first_week_usd}</div>
+                <div className="font-display italic text-3xl text-pos tabular">${txt(json.estimated_launch_cost_first_week_usd)}</div>
               </div>
             ) : null}
           </div>
         </Section>
       ) : null}
 
-      {json?.preflight_checklist?.length ? (
+      {preflight.length ? (
         <Section title="Pre-flight checklist · do these BEFORE you start">
           <ul className="space-y-1.5">
-            {json.preflight_checklist.map((c: any, i: number) => (
+            {preflight.map((c: any, i: number) => (
               <li key={i} className="flex items-start gap-2 border border-base-700 px-3 py-2 text-xs">
                 <input type="checkbox" className="mt-1 accent-live" />
                 <div className="flex-1">
-                  <div className="text-ink">{c.item}</div>
-                  <div className="text-ink-muted text-[11px] mt-0.5">{c.why}</div>
+                  <div className="text-ink">{txt(c.item)}</div>
+                  <div className="text-ink-muted text-[11px] mt-0.5">{txt(c.why)}</div>
                 </div>
                 {c.blocker_if_missing ? <Pill text="blocker" tone="neg" /> : <Pill text="recommended" />}
               </li>
@@ -92,30 +100,30 @@ function GuideOutput({ json }: { json: any }) {
         </Section>
       ) : null}
 
-      {json?.sections?.map((s: any, i: number) => (
-        <Section key={i} title={`${i + 1}. ${s.section_name}`}>
+      {sections.map((s: any, i: number) => (
+        <Section key={i} title={`${i + 1}. ${txt(s.section_name)}`}>
           <ol className="space-y-2">
-            {s.steps?.map((step: any) => (
-              <li key={step.step_number} className="border border-base-700 bg-base-900/30 p-3 text-sm">
+            {arr(s.steps).filter(isObj).map((step: any, j: number) => (
+              <li key={`${txt(step.step_number)}-${j}`} className="border border-base-700 bg-base-900/30 p-3 text-sm">
                 <div className="flex items-start gap-3">
-                  <span className="font-display italic text-xl text-live tabular leading-none mt-0.5">{step.step_number}</span>
+                  <span className="font-display italic text-xl text-live tabular leading-none mt-0.5">{txt(step.step_number) || j + 1}</span>
                   <div className="flex-1">
-                    <div className="text-ink font-medium">{step.action}</div>
+                    <div className="text-ink font-medium">{txt(step.action)}</div>
                     {step.recommended_value ? (
                       <div className="mt-1.5 inline-block border border-pos/40 bg-pos/5 text-pos px-2 py-0.5 text-xs font-mono">
-                        → {step.recommended_value}
+                        → {txt(step.recommended_value)}
                       </div>
                     ) : null}
                     {step.screenshot_anchor ? (
                       <div className="mt-1.5 text-[11px] font-mono uppercase tracking-ui-wide text-info">
-                        look for: {step.screenshot_anchor}
+                        look for: {txt(step.screenshot_anchor)}
                       </div>
                     ) : null}
                     <div className="grid md:grid-cols-2 gap-2 mt-2">
                       {step.why_this_matters ? (
                         <div className="border border-base-700 p-2">
                           <div className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-faint">why this matters</div>
-                          <div className="text-ink-muted text-[11px] mt-0.5">{step.why_this_matters}</div>
+                          <div className="text-ink-muted text-[11px] mt-0.5">{txt(step.why_this_matters)}</div>
                         </div>
                       ) : null}
                       {step.common_mistake ? (
@@ -123,7 +131,7 @@ function GuideOutput({ json }: { json: any }) {
                           <div className="text-[10px] font-mono uppercase tracking-ui-mega text-neg flex items-center gap-1">
                             <AlertTriangle size={9} /> common mistake
                           </div>
-                          <div className="text-ink-muted text-[11px] mt-0.5">{step.common_mistake}</div>
+                          <div className="text-ink-muted text-[11px] mt-0.5">{txt(step.common_mistake)}</div>
                         </div>
                       ) : null}
                     </div>
@@ -135,34 +143,34 @@ function GuideOutput({ json }: { json: any }) {
         </Section>
       ))}
 
-      {json?.do_not_touch_during_learning_phase?.length ? (
+      {dontTouch.length ? (
         <Section title="DO NOT touch during the first 7 days (learning phase)">
           <ul className="space-y-1 text-sm text-ink">
-            {json.do_not_touch_during_learning_phase.map((d: string, i: number) => (
+            {dontTouch.map((d, i) => (
               <li key={i} className="flex gap-2"><span className="text-neg">✕</span>{d}</li>
             ))}
           </ul>
         </Section>
       ) : null}
 
-      {json?.post_launch ? (
+      {Object.keys(postLaunch).length ? (
         <Section title="Post-launch — what to do on day 1 / 3 / 7">
           {(["day_1", "day_3", "day_7"] as const).map((k) => (
             <div key={k} className="mb-3 last:mb-0">
               <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-1">{k.replace("_", " ")}</div>
-              <ul className="text-sm text-ink space-y-0.5">{json.post_launch[k]?.map((a: string, i: number) => <li key={i}>✓ {a}</li>)}</ul>
+              <ul className="text-sm text-ink space-y-0.5">{strList(postLaunch[k]).map((a, i) => <li key={i}>✓ {a}</li>)}</ul>
             </div>
           ))}
         </Section>
       ) : null}
 
-      {json?.links?.length ? (
+      {links.length ? (
         <Section title="Reference links">
           <ul className="space-y-1 text-sm">
-            {json.links.map((l: any, i: number) => (
+            {links.map((l: any, i: number) => (
               <li key={i}>
-                <a href={l.url} target="_blank" rel="noreferrer" className="text-info hover:underline inline-flex items-center gap-1">
-                  {l.label} <ExternalLink size={10} />
+                <a href={txt(l.url)} target="_blank" rel="noopener noreferrer" className="text-info hover:underline inline-flex items-center gap-1">
+                  {txt(l.label) || txt(l.url)} <ExternalLink size={10} />
                 </a>
               </li>
             ))}

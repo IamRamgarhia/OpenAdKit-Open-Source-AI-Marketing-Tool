@@ -3,7 +3,8 @@
  * endpoint, so we track requests locally against documented free-tier limits
  * from lib/provider-limits.ts. Two surfaces:
  *
- *   1. Soft tracking: every successful LLM call logs a timestamp. We show
+ *   1. Soft tracking: every LLM call that reaches the provider (success or
+ *      HTTP failure) logs a timestamp. We show
  *      "12 / 15 req this minute · resets in 24s" in the StatusBar.
  *
  *   2. Hard signal: when a 429 fires with a Retry-After header, we record
@@ -57,6 +58,21 @@ export function recordRequest(providerId: string | undefined | null): void {
   writeLog(entries);
   // Successful request means we're no longer blocked.
   clearBlocked(providerId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("ados:quota-changed"));
+  }
+}
+
+/** Call this after a request that reached the provider but FAILED (HTTP error,
+ *  429, truncated or refused completion, schema-retry that errored). Providers
+ *  count these against RPM/RPD too, so leaving them out under-reported usage
+ *  exactly when the user was closest to a limit. Unlike recordRequest it does
+ *  NOT clear a blocked_until — a 429 is what sets that. */
+export function recordFailedAttempt(providerId: string | undefined | null): void {
+  if (!providerId) return;
+  const entries = readLog();
+  entries.push({ pid: providerId, ts: Date.now() });
+  writeLog(entries);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("ados:quota-changed"));
   }

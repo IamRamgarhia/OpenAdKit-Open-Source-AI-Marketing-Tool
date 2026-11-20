@@ -51,7 +51,7 @@ echo
 echo "Added:  $ENTRY"
 echo
 echo "Now run OpenAdKit on port 80 to use  http://openadkit.local/"
-echo "Edit .env.local and set  PORT=80,  then run start.sh with sudo."
+echo "Edit .env.local and set  PORT=80,  then run  sudo bash scripts/start.sh"
 echo
 echo "Or keep your current port and use  http://openadkit.local:<your-port>/"
 echo

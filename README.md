@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.svg" alt="OpenAdKit — free open-source AI ad generator, ad copy tool, and marketing cockpit. 18 generators, 11 optimizers, 9 AI providers including Claude, GPT, Gemini, Groq, OpenAI, DeepSeek. Browser-only, BYOK, MIT-licensed. Open-source alternative to Jasper, AdCreative, Anyword, and Copy.ai. Built by Dicecodes." width="100%" />
+<img src="docs/banner.svg" alt="OpenAdKit — free open-source AI ad generator, ad copy tool, and marketing cockpit. 18 generators, 11 optimizers, 9 AI providers including Claude, GPT, Gemini, Groq, OpenAI, DeepSeek. Browser-only, BYOK, MIT-licensed. Open-source alternative to Jasper, AdCreative, Anyword, and Copy.ai. Built by DiceCodes." width="100%" />
 
 # OpenAdKit — Open Source AI Marketing Tool
 
@@ -8,13 +8,13 @@
 
 ### The open source AI marketing tool · every ad platform · bring your own AI key · zero subscriptions
 
-*The open-source alternative to Jasper, AdCreative, Anyword, Pencil & Copy.ai · runs in your browser · MIT-licensed · built by [Dicecodes](https://dicecodes.com)*
+*The open-source alternative to Jasper, AdCreative, Anyword, Pencil & Copy.ai · runs in your browser · MIT-licensed · built by [DiceCodes](https://dicecodes.com)*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.1.0-ffb020.svg)](CHANGELOG.md)
 [![Node 20.9+](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg)](https://nodejs.org)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
-[![Built by Dicecodes](https://img.shields.io/badge/built%20by-Dicecodes-ffb020.svg)](https://dicecodes.com)
+[![Built by DiceCodes](https://img.shields.io/badge/built%20by-DiceCodes-ffb020.svg)](https://dicecodes.com)
 [![Browser-only](https://img.shields.io/badge/browser--only-yes-blue.svg)](#privacy--security)
 [![BYOK](https://img.shields.io/badge/BYOK-9%20providers-purple.svg)](#9-ai-providers-supported)
 [![GitHub stars](https://img.shields.io/github/stars/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool?style=social)](https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool/stargazers)
@@ -521,7 +521,7 @@ openadkit/
 │   ├── brand/                   Multi-client Brand Brains
 │   ├── benchmarks/              Industry CTR/CPC/CVR/ROAS
 │   ├── strategy/                What to run · decision tree
-│   ├── about/                   Built by Dicecodes
+│   ├── about/                   Built by DiceCodes
 │   └── settings/                Provider keys · prefs · wipe
 │
 ├── components/
@@ -699,7 +699,7 @@ Click **⚠ Report a problem on GitHub** in the launcher — it pre-fills [githu
 ## Frequently Asked Questions
 
 ### Is OpenAdKit really free?
-Yes. **Forever, no asterisk.** Released under the **MIT license**. We make money from custom builds at [Dicecodes](https://dicecodes.com) — not from this tool. You only pay your chosen AI provider, and several of them (Groq, Gemini Flash, Cerebras, OpenRouter `:free` models) cost **$0/month** for typical OpenAdKit usage.
+Yes. **Forever, no asterisk.** Released under the **MIT license**. We make money from custom builds at [DiceCodes](https://dicecodes.com) — not from this tool. You only pay your chosen AI provider, and several of them (Groq, Gemini Flash, Cerebras, OpenRouter `:free` models) cost **$0/month** for typical OpenAdKit usage.
 
 ### Is OpenAdKit a real Jasper / AdCreative / Copy.ai alternative?
 For ad-copy generation across Google, Meta, TikTok, LinkedIn, YouTube, and X — yes. OpenAdKit has 18 generators covering every major ad format, plus 11 data-driven optimizers, multi-client brand brains, competitor teardowns, content calendars, and a 10-minute launch wizard. The one thing it doesn't do is *image generation* — for that, OpenAdKit writes prompts for Midjourney / Runway / DALL-E / Pika instead of running its own image model.
@@ -714,7 +714,7 @@ Stored in your browser's `localStorage`, same as 1Password's browser extension s
 **Groq** for speed, **Gemini 3.6 Flash** for free-tier generosity, or **OpenRouter** for free community models (`google/gemma-4-31b-it:free`, `nvidia/nemotron-3-super-120b-a12b:free`). All four are first-class. Add multiple keys in Settings and switch between them per project.
 
 ### Can I run OpenAdKit on a server / for my whole team?
-Out of the box it's designed for one person on one machine. You *can* expose it on a LAN by changing the bind from `127.0.0.1` to `0.0.0.0` in `scripts/local-sync.cjs`, but it has no auth layer — anyone on the network would have full access including your API keys. For team use, fork it and add your own auth, or wait for a multi-user fork (or [hire us](mailto:Contact@dicecodes.com) to build one).
+Out of the box it's designed for one person on one machine. You *can* expose it on a LAN by changing the bind from `127.0.0.1` to `0.0.0.0` in `scripts/local-sync.cjs`, but it has no auth layer — anyone on the network would have full access including your API keys. For team use, fork it and add your own auth, or wait for a multi-user fork (or [hire us](mailto:contact@dicecodes.com) to build one).
 
 ### How do I move OpenAdKit to another machine?
 Zip the entire folder → copy to the new machine → run `OpenAdKit.bat` / `OpenAdKit.command`. Every brand brain, ad, campaign, checklist, and performance log comes with you in `data/snapshot.json`. API keys are excluded by default (re-paste them on the new machine for safety).
@@ -749,11 +749,11 @@ Pattern grounding: OpenAdKit prompts borrow patterns (with attribution) from ope
 
 ## About
 
-OpenAdKit is built by **[Dicecodes](https://dicecodes.com)** — a digital studio combining creative design with advanced technology for measurable business growth.
+OpenAdKit is built by **[DiceCodes](https://dicecodes.com)** — a digital studio combining creative design with advanced technology for measurable business growth.
 
 We make money from custom builds, not from this tool. **OpenAdKit will always be free.**
 
-Need a private fork, a white-labeled agency edition, or something we haven't built? **[Get in touch →](https://dicecodes.com)** · 📧 [Contact@dicecodes.com](mailto:Contact@dicecodes.com) · 💬 [WhatsApp +91 98884 04991](https://wa.me/919888404991)
+Need a private fork, a white-labeled agency edition, or something we haven't built? **[Get in touch →](https://dicecodes.com)** · 📧 [contact@dicecodes.com](mailto:contact@dicecodes.com) · 💬 [WhatsApp +91 98884 04991](https://wa.me/919888404991)
 
 ---
 
@@ -761,4 +761,4 @@ Need a private fork, a white-labeled agency edition, or something we haven't bui
 
 MIT. See [LICENSE](LICENSE).
 
-<sub>*Built by Dicecodes · Open source forever · No backend · No telemetry · Your key, your data, your folder.*</sub>
+<sub>*Built by DiceCodes · Open source forever · No backend · No telemetry · Your key, your data, your folder.*</sub>

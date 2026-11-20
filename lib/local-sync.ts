@@ -3,13 +3,16 @@
  *
  * Auto-detects the sidecar via lib/sync-endpoint.ts, which resolves the port
  * the launcher actually chose instead of assuming 3006. When available:
- *   - On app start, fetches the snapshot and merges into IndexedDB + localStorage
+ *   - On app start, fetches the snapshot and MERGES it into IndexedDB (per-row
+ *     last-write-wins on updated_at, hard deletes via tombstones — see
+ *     mergeSnapshot() in lib/storage.ts) + a filtered set of localStorage prefs
  *   - On every brain/ad/campaign change, debounce-pushes the full snapshot back
  *
  * If the sidecar isn't running, this whole module no-ops silently — the app
  * still works the same way, just without folder-portable persistence.
  *
- * API keys are NOT synced by default (security). Toggle in Settings to include.
+ * API keys, the key-vault's salt/check, quota counters and sync bookkeeping are
+ * NEVER written to (or read from) the snapshot — see isSyncablePrefKey().
  */
 
 import { isHostedMode } from "./env";
@@ -37,6 +40,11 @@ export async function detectSync(): Promise<boolean> {
   return Boolean(origin);
 }
 
+/**
+ * @deprecated API keys are never synced any more (see isSyncablePrefKey); the
+ * flag is kept only so the existing Settings toggle doesn't break. It has no
+ * effect on what is written to the snapshot.
+ */
 export function isSyncIncludingKeys(): boolean {
   if (!isBrowser()) return false;
   try {
@@ -45,6 +53,7 @@ export function isSyncIncludingKeys(): boolean {
     return false;
   }
 }
+/** @deprecated See isSyncIncludingKeys — no effect on the snapshot. */
 export function setSyncIncludeKeys(v: boolean): void {
   if (!isBrowser()) return;
   try {
@@ -72,8 +81,33 @@ interface Snapshot {
   checklist?: unknown[];
   custom_items?: unknown[];
   brain_versions?: unknown[];
+  tombstones?: unknown[];
   prefs?: Record<string, string>;
-  keys?: Record<string, string>; // only present if user opts in
+}
+
+/**
+ * Which localStorage entries may travel in the snapshot (in either direction).
+ *
+ * Excluded, always:
+ *  - ados.vault.*  — per-browser key-vault salt / verifier / enabled flag.
+ *                    Syncing these into a second browser replaced its salt,
+ *                    making every key it had encrypted undecryptable.
+ *  - API keys      — ados.provider.<id>.key, ados.jina_key, legacy
+ *                    ados.api_key, and anything else named like a
+ *                    key/secret/token/password. The snapshot is a plain JSON
+ *                    file on disk; keys never go there, opt-in or not.
+ *  - ados.quota.*  — per-browser rate-limit bookkeeping.
+ *  - ados.sync_*   — this module's own per-browser state.
+ */
+export function isSyncablePrefKey(k: string): boolean {
+  if (!k.startsWith("ados.")) return false;
+  if (k.startsWith("ados.vault.")) return false;
+  if (k.startsWith("ados.quota.")) return false;
+  if (k.startsWith("ados.sync_")) return false;
+  if (/^ados\.provider\..+\.key$/.test(k)) return false;
+  if (k === "ados.jina_key" || k === "ados.api_key") return false;
+  if (/(^|[._])(api_?key|key|secret|token|password)$/i.test(k)) return false;
+  return true;
 }
 
 function collectPrefs(): Record<string, string> {
@@ -83,10 +117,7 @@ function collectPrefs(): Record<string, string> {
     const ls = window.localStorage;
     for (let i = 0; i < ls.length; i++) {
       const k = ls.key(i);
-      if (!k) continue;
-      if (!k.startsWith("ados.")) continue;
-      if (k.startsWith("ados.provider.") && k.endsWith(".key") && !isSyncIncludingKeys()) continue;
-      if (k === "ados.jina_key" && !isSyncIncludingKeys()) continue;
+      if (!k || !isSyncablePrefKey(k)) continue;
       out[k] = ls.getItem(k) ?? "";
     }
   } catch {}
@@ -107,6 +138,7 @@ async function buildSnapshot(): Promise<Snapshot> {
     checklist: parsed.checklist,
     custom_items: parsed.custom_items,
     brain_versions: parsed.brain_versions,
+    tombstones: parsed.tombstones ?? [],
     prefs: collectPrefs(),
   };
 }
@@ -125,23 +157,26 @@ async function applySnapshot(snap: Snapshot): Promise<void> {
   if (snap.prefs && isBrowser() && snapshotIsNewer) {
     try {
       for (const [k, v] of Object.entries(snap.prefs)) {
-        if (typeof v === "string") window.localStorage.setItem(k, v);
+        // Same filter on the way IN: a snapshot written by an older version
+        // may still carry vault salts / keys / quota state.
+        if (typeof v === "string" && isSyncablePrefKey(k)) window.localStorage.setItem(k, v);
       }
     } catch {}
   }
-  const { importAll, getBrain } = await import("./storage");
-  await importAll(
-    JSON.stringify({
-      version: 1,
-      brains: snap.brains ?? [],
-      ads: snap.ads ?? [],
-      campaigns: snap.campaigns ?? [],
-      templates: snap.templates ?? [],
-      checklist: snap.checklist ?? [],
-      custom_items: snap.custom_items ?? [],
-      brain_versions: snap.brain_versions ?? [],
-    })
-  );
+  // Per-row merge (newer updated_at wins, tombstones suppress deleted rows).
+  // This used to be importAll(), i.e. a blind bulkPut: an older snapshot
+  // reverted newer local edits and resurrected hard-deleted rows on every pull.
+  const { mergeSnapshot, getBrain } = await import("./storage");
+  await mergeSnapshot({
+    brains: snap.brains ?? [],
+    ads: snap.ads ?? [],
+    campaigns: snap.campaigns ?? [],
+    templates: snap.templates ?? [],
+    checklist: snap.checklist ?? [],
+    custom_items: snap.custom_items ?? [],
+    brain_versions: snap.brain_versions ?? [],
+    tombstones: snap.tombstones ?? [],
+  });
   // Reconcile active brain: if the snapshot restored an active_brain ID that points
   // at a now-deleted brain, clear it so downstream tools don't run with null context. (Audit finding #4.)
   if (isBrowser()) {
@@ -163,7 +198,12 @@ export async function pullSnapshot(): Promise<{ ok: boolean; merged: boolean; by
     const r = await fetch(`${getSyncOrigin()}/snapshot`, { method: "GET", cache: "no-store" });
     if (!r.ok) return { ok: false, merged: false, reason: `sidecar returned ${r.status}` };
     const snap = (await r.json()) as Snapshot;
-    if (snap && (snap.brains?.length || snap.ads?.length || snap.campaigns?.length)) {
+    const SYNCED_ARRAYS = [
+      "brains", "ads", "campaigns", "templates", "checklist", "custom_items", "brain_versions", "tombstones",
+    ] as const;
+    const hasData =
+      !!snap && typeof snap === "object" && SYNCED_ARRAYS.some((k) => Array.isArray(snap[k]) && snap[k]!.length > 0);
+    if (hasData) {
       await applySnapshot(snap);
       return { ok: true, merged: true };
     }
@@ -173,46 +213,78 @@ export async function pullSnapshot(): Promise<{ ok: boolean; merged: boolean; by
   }
 }
 
+type PushResult = { ok: boolean; bytes?: number; reason?: string };
+
 // In-flight guard so two tabs that both fire `ados:brains-changed` don't both
 // build a stale snapshot from their local IndexedDB and overwrite each other.
 // Web Locks API serializes the actual push across tabs in the same browser.
 // (Audit finding #28.)
-let _pushInFlight: Promise<{ ok: boolean; bytes?: number; reason?: string }> | null = null;
+//
+// Coalescing: a push requested while one is in flight used to just get the
+// in-flight promise back — but that push's snapshot was built BEFORE the new
+// change, so the change sat unsynced until the next debounce/5-minute tick.
+// Now such a request marks the state dirty and the running job performs one
+// more push (built from fresh data) before resolving. Any number of requests
+// during one push collapse into a single follow-up.
+let _pushInFlight: Promise<PushResult> | null = null;
+let _pushDirty = false;
 
-export async function pushSnapshotNow(): Promise<{ ok: boolean; bytes?: number; reason?: string }> {
-  if (_pushInFlight) return _pushInFlight;
-  const job = (async () => {
-    const ok = await detectSync();
-    if (!ok) return { ok: false, reason: "sync sidecar not running" };
-    const runPush = async () => {
-      try {
-        const snap = await buildSnapshot();
-        const body = JSON.stringify(snap);
-        const r = await fetch(`${getSyncOrigin()}/snapshot`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        });
-        if (!r.ok) return { ok: false, reason: `sidecar returned ${r.status}` };
-        if (isBrowser()) {
-          try {
-            window.localStorage.setItem(LS_LAST_SYNC, String(Date.now()));
-          } catch {}
-        }
-        return { ok: true, bytes: body.length };
-      } catch (e: any) {
-        return { ok: false, reason: e?.message ?? "unknown" };
+async function pushOnce(): Promise<PushResult> {
+  const ok = await detectSync();
+  if (!ok) return { ok: false, reason: "sync sidecar not running" };
+  const runPush = async (): Promise<PushResult> => {
+    try {
+      const snap = await buildSnapshot();
+      const body = JSON.stringify(snap);
+      const r = await fetch(`${getSyncOrigin()}/snapshot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      if (!r.ok) return { ok: false, reason: `sidecar returned ${r.status}` };
+      if (isBrowser()) {
+        try {
+          window.localStorage.setItem(LS_LAST_SYNC, String(Date.now()));
+        } catch {}
       }
-    };
-    // Use the cross-tab lock when available so concurrent pushes from two tabs
-    // serialize on the sidecar. Falls back to in-tab guard on older browsers.
-    if (isBrowser() && (navigator as any).locks?.request) {
-      return (navigator as any).locks.request("openadkit:snapshot-push", { mode: "exclusive" }, runPush);
+      return { ok: true, bytes: body.length };
+    } catch (e: any) {
+      return { ok: false, reason: e?.message ?? "unknown" };
     }
-    return runPush();
+  };
+  // Use the cross-tab lock when available so concurrent pushes from two tabs
+  // serialize on the sidecar. Falls back to in-tab guard on older browsers.
+  if (isBrowser() && (navigator as any)?.locks?.request) {
+    return (navigator as any).locks.request("openadkit:snapshot-push", { mode: "exclusive" }, runPush);
+  }
+  return runPush();
+}
+
+export function pushSnapshotNow(): Promise<PushResult> {
+  if (_pushInFlight) {
+    // Resolves after the follow-up push that includes the caller's change.
+    _pushDirty = true;
+    return _pushInFlight;
+  }
+  const job = (async () => {
+    try {
+      let result: PushResult;
+      do {
+        _pushDirty = false;
+        result = await pushOnce();
+        // Stop on failure: the periodic/debounced push will retry, and looping
+        // against a dead sidecar would just spin.
+      } while (_pushDirty && result.ok);
+      return result;
+    } finally {
+      // Cleared synchronously with the final dirty check, so there's no gap in
+      // which a new request could attach to a job that has already finished.
+      _pushInFlight = null;
+      _pushDirty = false;
+    }
   })();
   _pushInFlight = job;
-  try { return await job; } finally { _pushInFlight = null; }
+  return job;
 }
 
 export function debouncedPush(): void {

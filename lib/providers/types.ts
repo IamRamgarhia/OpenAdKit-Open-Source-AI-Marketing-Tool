@@ -121,10 +121,85 @@ export interface Provider {
  */
 export const SSE_EVENT_DELIMITER = /\r?\n\r?\n/;
 
+/** Machine-readable reason for an LLMError that isn't an HTTP failure. */
+export type LLMErrorCode = "truncated" | "refused";
+
 export class LLMError extends Error {
-  constructor(message: string, public status?: number, public providerId?: string) {
+  constructor(message: string, public status?: number, public providerId?: string, public code?: LLMErrorCode) {
     super(message);
     this.name = "LLMError";
+  }
+}
+
+/** The model hit the output-length cap before finishing. A truncated JSON reply
+ *  can never validate, so surfacing it beats a confusing schema failure. */
+export function truncatedError(providerId: string): LLMError {
+  return new LLMError(
+    "The AI's reply was cut off at the length limit before it finished, so the result would be incomplete. Try again, or pick a model with a larger output limit.",
+    undefined,
+    providerId,
+    "truncated"
+  );
+}
+
+/** The provider's safety system (or the model itself) declined the request. */
+export function refusedError(providerId: string, detail?: string | null): LLMError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new LLMError(
+    `The AI provider declined to answer this request${suffix}. Rephrase the brief, or try a different model.`,
+    undefined,
+    providerId,
+    "refused"
+  );
+}
+
+/**
+ * Read an SSE body and hand every parsed `data:` JSON payload to `onEvent`.
+ *
+ * Handles CRLF/LF delimiters (SSE_EVENT_DELIMITER), flushes the TextDecoder at
+ * end-of-stream, and parses a final event that arrives WITHOUT a trailing blank
+ * line — previously that last event (often the one carrying finish reason and
+ * usage) was silently dropped. Unparseable lines are skipped; an LLMError thrown
+ * by `onEvent` propagates.
+ */
+export async function readSseJson(body: ReadableStream<Uint8Array>, onEvent: (evt: any) => void): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const handle = (ev: string) => {
+    const dataLines = ev
+      .split(/\r?\n/)
+      .filter((l) => l.startsWith("data:"))
+      .map((l) => l.slice(5).replace(/^ /, ""));
+    for (const raw of dataLines) {
+      const line = raw.trim();
+      if (!line || line === "[DONE]") continue;
+      let evt: unknown;
+      try {
+        evt = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      onEvent(evt);
+    }
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(SSE_EVENT_DELIMITER);
+      buffer = events.pop() ?? "";
+      for (const ev of events) handle(ev);
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      for (const ev of buffer.split(SSE_EVENT_DELIMITER)) handle(ev);
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {}
   }
 }
 
@@ -170,6 +245,11 @@ const AUTH_FAILURE_TEXT =
 
 export function classifyKeyCheckError(err: unknown, providerName: string, modelId: string): KeyCheckResult {
   const status = err instanceof LLMError ? err.status : undefined;
+  // Key checks send a tiny max_tokens on purpose; running out of it means a
+  // real completion came back, so the key works.
+  if (err instanceof LLMError && (err.code === "truncated" || err.code === "refused")) {
+    return { ok: true, authenticated: true, modelId, message: "Verified — key works." };
+  }
   const raw = err instanceof Error && err.message ? err.message : "Unknown error";
   // Providers often end messages with a period; we append our own.
   const detail = raw.replace(/\.\s*$/, "");

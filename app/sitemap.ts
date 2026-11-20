@@ -3,7 +3,14 @@ import { PLATFORM_HUBS } from "@/lib/platform-hubs";
 import { CONCEPTS } from "@/lib/learn-content";
 import { COURSES } from "@/lib/courses";
 
-const BASE = "https://openadkit.dicecodes.com";
+// Same resolution as app/layout.tsx's metadataBase, so self-hosted deploys and
+// forks don't publish a sitemap full of the upstream author's URLs.
+const BASE = (
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : "") ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+  "https://openadkit.dicecodes.com"
+).replace(/\/+$/, "");
 
 // Use the latest git commit timestamp (resolved at build time via
 // NEXT_PUBLIC_BUILD_ID-style env vars on Vercel) or a hardcoded baseline.
@@ -15,7 +22,8 @@ const STATIC_CONTENT_REVISION = "2026-05-28";
 
 // Surface only the public, evergreen routes to search engines. Gated app
 // routes (generators, optimizers, settings) sit behind ApiKeyGate and produce
-// near-empty pages for crawlers. (Audit finding #50.)
+// near-empty pages for crawlers. (Audit finding #50.) Keep in sync with the
+// Allow lines in public/robots.txt.
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = STATIC_CONTENT_REVISION;
   const fixed: MetadataRoute.Sitemap = [
@@ -29,6 +37,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE}/learn/courses`, lastModified, changeFrequency: "monthly", priority: 0.7 },
     { url: `${BASE}/learn/frameworks`, lastModified, changeFrequency: "monthly", priority: 0.6 },
     { url: `${BASE}/launch-guide`, lastModified, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${BASE}/providers`, lastModified, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${BASE}/strategy/decision-tree`, lastModified, changeFrequency: "monthly", priority: 0.6 },
   ];
   const platformPages: MetadataRoute.Sitemap = Object.keys(PLATFORM_HUBS).map((slug) => ({
     url: `${BASE}/platforms/${slug}`,

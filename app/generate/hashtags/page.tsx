@@ -5,12 +5,15 @@ import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { buildHashtagPrompt, type HashtagInput } from "@/lib/prompts/hashtags";
 import type { GeneratorConfig } from "@/lib/generator-config";
+import { platformForHashtagInput } from "@/lib/next-steps";
 import { HashtagsSchema } from "@/lib/schemas/generators";
 
 const config: GeneratorConfig<HashtagInput & Record<string, unknown>> = {
   title: "Hashtag Generator",
   subtitle: "Tiered (broad / medium / niche / branded) in any language, platform-tuned, banned-tag filtered.",
   platform: "tiktok",
+  // Stored platform follows the selected one (was always "tiktok").
+  platformFor: (i: any) => platformForHashtagInput(i.platform),
   campaign_type: "Hashtags",
   maxTokens: 2500,
   temperature: 0.6,

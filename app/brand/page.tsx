@@ -35,11 +35,13 @@ function BrandInner() {
   const [loading, setLoading] = useState(true);
   const importRef = useRef<HTMLInputElement>(null);
 
-  async function refresh() {
-    const list = await listBrains();
+  function apply(list: BrandBrain[]) {
     setBrains(list);
     setActiveBrandIdState(getActiveBrainId());
     setLoading(false);
+  }
+  async function refresh() {
+    apply(await listBrains());
   }
 
   function activateBrand(id: string) {
@@ -54,9 +56,14 @@ function BrandInner() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `brain-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json`;
+    a.download = `openadkit-brain-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json`;
+    a.style.display = "none";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 0);
   }
 
   async function uploadBrain(file: File) {
@@ -71,9 +78,15 @@ function BrandInner() {
   }
 
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+    listBrains().then((list) => {
+      if (!cancelled) apply(list);
+    });
     // Route /brand?first=1 to the dedicated onboarding page.
     if (isFirst) router.replace("/brand/new");
+    return () => {
+      cancelled = true;
+    };
   }, [isFirst, router]);
 
   // Editing flow — when the user clicks "Edit" on a brand card, the existing

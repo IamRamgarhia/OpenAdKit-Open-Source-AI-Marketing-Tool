@@ -112,12 +112,12 @@ describe("estimateCostUsd", () => {
   });
 
   it("prices a known model correctly", () => {
-    // Sonnet 5: $3 in / $15 out per million.
+    // Sonnet 5: $2 in / $10 out per million (was mis-listed at 3/15).
     const cost = estimateCostUsd("anthropic", "claude-sonnet-5", {
       input_tokens: 1_000_000,
       output_tokens: 1_000_000,
     });
-    expect(cost).toBeCloseTo(18, 6);
+    expect(cost).toBeCloseTo(12, 6);
   });
 
   it("bills cache writes at 1.25x and cache reads at 0.1x input rate", () => {
@@ -127,8 +127,8 @@ describe("estimateCostUsd", () => {
       cache_creation_input_tokens: 1_000_000,
       cache_read_input_tokens: 1_000_000,
     });
-    // 3 * 1.25 + 3 * 0.1 = 3.75 + 0.30
-    expect(cost).toBeCloseTo(4.05, 6);
+    // 2 * 1.25 + 2 * 0.1 = 2.50 + 0.20
+    expect(cost).toBeCloseTo(2.7, 6);
   });
 
   it("treats missing usage fields as zero rather than NaN", () => {

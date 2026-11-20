@@ -14,11 +14,26 @@
  *      POST /web/start     → spawns `next dev` as a child process
  *      POST /web/stop      → kills the Next child process
  *      POST /web/restart   → stop, wait, start
- *      GET  /config        → returns current PORT + ADFORGE_SYNC_PORT from .env.local
+ *      GET  /config        → returns current PORT + OPENADKIT_SYNC_PORT from .env.local
  *      POST /config        → updates .env.local (port + sync port)
  *      GET  /health        → liveness probe
  *
  * Bound to 127.0.0.1 only — never network-reachable.
+ *
+ * Env (OPENADKIT_* preferred; legacy ADFORGE_* still read as a fallback):
+ *   OPENADKIT_SYNC_PORT   (ADFORGE_SYNC_PORT, ADOS_SYNC_PORT)  listen port
+ *   OPENADKIT_DATA_DIR    (ADFORGE_DATA_DIR)                   snapshot dir
+ *   OPENADKIT_NO_AUTOSTART=1 (ADFORGE_NO_AUTOSTART)            don't spawn web
+ *
+ * THREAT MODEL / AUTH: there is deliberately no token or password. The guards
+ * below (Host allow-list against DNS rebinding, Origin allow-list against
+ * cross-site POSTs, 127.0.0.1-only bind) are designed to stop *browsers* —
+ * i.e. a malicious web page open in any tab. They do NOT stop another local,
+ * non-browser process running as any user on this machine: such a process can
+ * send whatever Host/Origin it likes (or none) and read/write the snapshot,
+ * change ports, or trigger /update/apply. That is accepted: a local process
+ * already has the same access to the user's files and browser profile. Do not
+ * expose this port beyond loopback (no port-forwarding, no 0.0.0.0 bind).
  *
  * Run:   node scripts/local-sync.cjs
  * Stop:  Ctrl+C
@@ -36,7 +51,17 @@ const { spawn } = require("child_process");
 // Nothing well-known binds there, so collision-free for users with many local
 // dev servers. The launcher's resolve-ports.cjs always sets this via env var
 // before exec; this default only fires if you start the sidecar by hand.
-const PORT = Number(process.env.ADFORGE_SYNC_PORT || process.env.ADOS_SYNC_PORT || 41574);
+// Env naming: OPENADKIT_* is canonical; the pre-rebrand ADFORGE_* (and the
+// even older ADOS_*) names are still honoured as fallbacks so existing
+// launchers, .env.local files and shell profiles keep working.
+function envFirst(...names) {
+  for (const n of names) {
+    const v = process.env[n];
+    if (v !== undefined && v !== "") return v;
+  }
+  return undefined;
+}
+const PORT = Number(envFirst("OPENADKIT_SYNC_PORT", "ADFORGE_SYNC_PORT", "ADOS_SYNC_PORT") || 41574);
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 // Per-user data dir: snapshots + lock file live in the OS's user-level
 // config dir (%APPDATA%\OpenAdKit on Windows, ~/Library/Application Support
@@ -48,7 +73,8 @@ const PROJECT_ROOT = path.resolve(__dirname, "..");
 // folder into the new location so existing users don't lose state.
 function resolveUserDataDir() {
   // Allow override via env for testing / unusual setups.
-  if (process.env.ADFORGE_DATA_DIR) return process.env.ADFORGE_DATA_DIR;
+  const override = envFirst("OPENADKIT_DATA_DIR", "ADFORGE_DATA_DIR");
+  if (override) return override;
   const plat = process.platform;
   const home = os.homedir();
   if (plat === "win32") {
@@ -105,7 +131,9 @@ function migrateLegacyDataDirOnce() {
     console.warn(`[openadkit] data-dir migration failed (non-fatal): ${e?.message ?? e}`);
   }
 }
-migrateLegacyDataDirOnce();
+const IS_MAIN = require.main === module;
+// Requiring this file (tests) must not touch the user's data dir.
+if (IS_MAIN) migrateLegacyDataDirOnce();
 const LAUNCHER_HTML = path.join(PROJECT_ROOT, "public", "launcher.html");
 const ENV_LOCAL = path.join(PROJECT_ROOT, ".env.local");
 const MAX_BODY = 25 * 1024 * 1024;
@@ -146,8 +174,21 @@ function envPort(value, fallback) {
   return Number.isFinite(n) && n >= 1 && n <= 65535 ? n : fallback;
 }
 
+/**
+ * The web app's port. An explicit PORT in the environment wins — the
+ * launchers, installers and the Windows host all pass the port they chose —
+ * then .env.local (source installs), then the default. readEnvLocal() fills
+ * in a default PORT when the file is missing, so it must not come first or
+ * a packaged app's chosen port would be silently ignored.
+ */
+function configuredWebPort() {
+  return envPort(process.env.PORT, null) ?? envPort(readEnvLocal().PORT, 41573);
+}
+
 function readEnvLocal() {
-  if (!fs.existsSync(ENV_LOCAL)) return { PORT: "41573", ADFORGE_SYNC_PORT: String(PORT) };
+  if (!fs.existsSync(ENV_LOCAL)) {
+    return { PORT: "41573", OPENADKIT_SYNC_PORT: String(PORT), ADFORGE_SYNC_PORT: String(PORT) };
+  }
   const out = {};
   for (const line of fs.readFileSync(ENV_LOCAL, "utf8").split(/\r?\n/)) {
     const t = line.trim();
@@ -156,12 +197,18 @@ function readEnvLocal() {
     if (eq < 0) continue;
     out[t.slice(0, eq).trim()] = t.slice(eq + 1).trim();
   }
-  return { PORT: out.PORT || "41573", ADFORGE_SYNC_PORT: out.ADFORGE_SYNC_PORT || String(PORT) };
+  const sync = out.OPENADKIT_SYNC_PORT || out.ADFORGE_SYNC_PORT || String(PORT);
+  // Both names are returned (same value) so older launcher.html builds that
+  // read ADFORGE_SYNC_PORT keep working.
+  return { PORT: out.PORT || "41573", OPENADKIT_SYNC_PORT: sync, ADFORGE_SYNC_PORT: sync };
 }
 
 function writeEnvLocal(updates) {
   const current = readEnvLocal();
   const next = { ...current, ...updates };
+  const syncPort = updates.OPENADKIT_SYNC_PORT || updates.ADFORGE_SYNC_PORT || current.OPENADKIT_SYNC_PORT;
+  next.OPENADKIT_SYNC_PORT = syncPort;
+  next.ADFORGE_SYNC_PORT = syncPort;
   // Preserve every other key the user added (API keys, ADFORGE_NO_AUTOSTART,
   // feature flags, …) — only PORT / ADFORGE_SYNC_PORT are managed here. The old
   // implementation rewrote the whole file with just those two keys, silently
@@ -178,11 +225,13 @@ function writeEnvLocal(updates) {
     else lines.push(`${key}=${value}`);
   };
   setKey("PORT", next.PORT);
-  setKey("ADFORGE_SYNC_PORT", next.ADFORGE_SYNC_PORT);
+  setKey("OPENADKIT_SYNC_PORT", syncPort);
+  setKey("ADFORGE_SYNC_PORT", syncPort); // legacy name, kept for older scripts
   // Browser-visible mirror — Next only inlines NEXT_PUBLIC_* names, and the web
   // app needs the sidecar port to talk to us at all. Must stay in lockstep with
-  // ADFORGE_SYNC_PORT. See lib/sync-endpoint.ts.
-  setKey("NEXT_PUBLIC_ADFORGE_SYNC_PORT", next.ADFORGE_SYNC_PORT);
+  // the sync port. See lib/sync-endpoint.ts.
+  setKey("NEXT_PUBLIC_OPENADKIT_SYNC_PORT", syncPort);
+  setKey("NEXT_PUBLIC_ADFORGE_SYNC_PORT", syncPort);
   while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
   fs.writeFileSync(ENV_LOCAL, lines.join("\n") + "\n", "utf8");
   return next;
@@ -258,44 +307,188 @@ function setCors(req, res) {
 }
 
 // SSRF guard: refuse to fetch private / loopback / link-local addresses
-// either on the initial URL or on any redirect target. (Audit finding #13.)
+// either on the initial URL, on any redirect target, or on any address the
+// target resolves to. (Audit finding #13.)
+//
+// KEEP IN LOCKSTEP with isPrivateOrLoopbackHost() in lib/server/url-helpers.ts
+// (this file is CommonJS and can't import the TS one). Both are exercised
+// against the same table in lib/__tests__/sidecar.test.ts.
 function isPrivateOrLoopbackHost(hostname) {
   if (!hostname) return true;
-  // URL.hostname returns IPv6 literals wrapped in brackets ("[::1]") — strip
-  // them so the IPv6 checks below actually match (previously they never did,
-  // so every IPv6 loopback/link-local address bypassed the guard). (Audit.)
-  let h = String(hostname).toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
+  let h = String(hostname).toLowerCase();
+  // URL.hostname returns IPv6 literals WITH brackets ("[::1]").
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
   if (h === "localhost" || h === "ip6-localhost" || h === "ip6-loopback") return true;
-  // IPv4-mapped IPv6 (::ffff:127.0.0.1 or ::ffff:7f00:1) — unwrap to the
-  // embedded IPv4 and re-check so a mapped loopback/metadata address is caught.
-  const mapped = h.match(/^::ffff:(.+)$/i);
+  // IPv4-mapped IPv6 (::ffff:127.0.0.1 or hex-compressed ::ffff:7f00:1):
+  // unwrap the embedded IPv4 and validate it against the IPv4 rules below.
+  const mapped = h.match(/^::ffff:([0-9a-f:.]+)$/i);
   if (mapped) {
-    const inner = mapped[1];
-    if (inner.includes(".")) {
-      h = inner;
-    } else {
-      const parts = inner.split(":");
-      if (parts.length === 2) {
-        const hi = parseInt(parts[0], 16);
-        const lo = parseInt(parts[1], 16);
-        if (Number.isFinite(hi) && Number.isFinite(lo)) {
-          h = `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
-        }
-      }
-    }
+    const v4 = mappedIPv6ToIPv4(mapped[1]);
+    if (v4) h = v4;
   }
-  // IPv4 loopback / private RFC1918 / link-local
   if (/^127\./.test(h)) return true;
   if (/^10\./.test(h)) return true;
   if (/^192\.168\./.test(h)) return true;
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  // 169.254.0.0/16 — link-local, includes cloud metadata (169.254.169.254).
   if (/^169\.254\./.test(h)) return true;
   if (/^0\./.test(h)) return true;
-  // IPv6 loopback / link-local / unique-local
+  // 100.64.0.0/10 — carrier-grade NAT (RFC 6598; Tailscale, k8s CNIs, …).
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h)) return true;
+  // 192.0.0.0/24 (IETF protocol assignments), 198.18.0.0/15 (benchmarking).
+  if (/^192\.0\.0\./.test(h)) return true;
+  if (/^198\.1[89]\./.test(h)) return true;
+  // Multicast (224.0.0.0/4) and reserved/broadcast (240.0.0.0/4).
+  if (/^(22[4-9]|2[3-5]\d)\.\d/.test(h)) return true;
   if (h === "::1" || h === "::") return true;
+  // IPv6 link-local (fe80::/10) and unique-local (fc00::/7).
   if (/^fe[89ab][0-9a-f]:/i.test(h)) return true;
   if (/^f[cd][0-9a-f]{2}:/i.test(h)) return true;
+  // IPv6 multicast (ff00::/8).
+  if (/^ff[0-9a-f]{2}:/i.test(h)) return true;
   return false;
+}
+
+function mappedIPv6ToIPv4(embedded) {
+  if (embedded.includes(".")) return embedded;
+  const groups = embedded.split(":").filter((g) => g.length > 0);
+  if (groups.length === 0 || groups.length > 2) return null;
+  let value = 0;
+  for (const g of groups) {
+    if (!/^[0-9a-f]{1,4}$/i.test(g)) return null;
+    value = ((value << 16) | parseInt(g, 16)) >>> 0;
+  }
+  return [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff].join(".");
+}
+
+/**
+ * A `lookup` for http(s).request that only ever returns addresses we already
+ * validated. Without it the request does its own, second DNS lookup after the
+ * SSRF check — a 0-TTL hostile record can answer the check with a public IP
+ * and the connection with 127.0.0.1 / 169.254.169.254 (DNS rebinding TOCTOU).
+ * Mirrors pinnedLookup() in app/api/ingest/route.ts.
+ */
+function pinnedLookup(addresses) {
+  return (_hostname, options, callback) => {
+    const cb = typeof options === "function" ? options : callback;
+    const wantsAll = typeof options === "object" && options !== null && options.all;
+    const safe = addresses.filter((a) => !isPrivateOrLoopbackHost(a.address));
+    if (!safe.length) return cb(new Error("Private / loopback / link-local host blocked"));
+    if (wantsAll) return cb(null, safe);
+    return cb(null, safe[0].address, safe[0].family);
+  };
+}
+
+const INGEST_USER_AGENT =
+  "Mozilla/5.0 (compatible; OpenAdKit/1.0; +https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool)";
+
+function defaultResolve(hostname) {
+  return dns.promises.lookup(hostname, { all: true });
+}
+
+function defaultRequest(protocol, options, onResponse) {
+  const lib = protocol === "https:" ? require("https") : require("http");
+  return lib.request(options, onResponse);
+}
+
+/**
+ * Fetch a public http(s) URL server-side with SSRF protection.
+ *
+ * Every hop (initial URL + each redirect): scheme check, literal-host check,
+ * DNS resolution with every address checked, then the connection is made with
+ * the vetted addresses PINNED via `lookup` so no second resolution happens.
+ * Redirect bodies are drained (res.resume()) so sockets are released, and a
+ * chain longer than maxRedirects is an explicit error — never "return the
+ * 3xx body as page content".
+ *
+ * `deps.request(protocol, options, onResponse)` and `deps.resolve(hostname)`
+ * are injectable for tests.
+ */
+async function fetchRemote(targetUrl, deps = {}) {
+  const request = deps.request || defaultRequest;
+  const resolve = deps.resolve || defaultResolve;
+  const maxRedirects = deps.maxRedirects ?? 5;
+  const maxBytes = deps.maxBytes ?? 500_000;
+  const timeoutMs = deps.timeoutMs ?? 15_000;
+
+  let current = targetUrl;
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    let u;
+    try { u = new URL(current); } catch { throw new Error("Invalid redirect target"); }
+    if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("Non-http(s) URL blocked");
+    if (isPrivateOrLoopbackHost(u.hostname)) throw new Error("Private / loopback / link-local host blocked");
+
+    let addresses;
+    try { addresses = await resolve(u.hostname.replace(/^\[|\]$/g, "")); } catch { addresses = null; }
+    if (!addresses || !addresses.length) throw new Error("DNS resolution failed for target host");
+    if (addresses.some((a) => isPrivateOrLoopbackHost(a.address))) {
+      throw new Error("Target host resolves to a private / loopback address");
+    }
+
+    const res = await new Promise((resolveHop, rejectHop) => {
+      let settled = false;
+      const done = (fn, v) => { if (!settled) { settled = true; fn(v); } };
+      const req = request(
+        u.protocol,
+        {
+          protocol: u.protocol,
+          hostname: u.hostname.replace(/^\[|\]$/g, ""),
+          port: u.port || (u.protocol === "https:" ? 443 : 80),
+          path: `${u.pathname}${u.search}`,
+          method: "GET",
+          lookup: pinnedLookup(addresses),
+          // SNI/Host stay the original name even though we dial a pinned IP.
+          servername: u.protocol === "https:" ? u.hostname : undefined,
+          headers: {
+            Host: u.host,
+            "User-Agent": INGEST_USER_AGENT,
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+          },
+        },
+        (resp) => {
+          const status = resp.statusCode || 0;
+          if (status >= 300 && status < 400) {
+            // Drain + discard so the socket is released back / closed.
+            resp.resume();
+            return done(resolveHop, { status, location: resp.headers.location || null, body: "" });
+          }
+          if (status < 200 || status >= 400) {
+            resp.resume();
+            return done(rejectHop, new Error(`HTTP ${status} from target`));
+          }
+          let raw = "";
+          resp.setEncoding("utf8");
+          resp.on("data", (c) => {
+            if (settled) return;
+            raw += c;
+            if (raw.length > maxBytes) {
+              resp.destroy();
+              done(rejectHop, new Error(`Remote body exceeded ${maxBytes} bytes`));
+            }
+          });
+          resp.on("end", () => done(resolveHop, { status, location: null, body: raw }));
+          resp.on("error", (e) => done(rejectHop, e));
+        }
+      );
+      req.on("error", (e) => done(rejectHop, e));
+      if (typeof req.setTimeout === "function") {
+        req.setTimeout(timeoutMs, () => {
+          try { req.destroy(); } catch {}
+          done(rejectHop, new Error(`Timeout after ${Math.round(timeoutMs / 1000)}s`));
+        });
+      }
+      req.end();
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      if (!res.location) throw new Error(`Redirect ${res.status} without Location header`);
+      current = new URL(res.location, current).toString();
+      continue;
+    }
+    return res.body;
+  }
+  throw new Error(`Too many redirects (max ${maxRedirects})`);
 }
 
 function readBody(req) {
@@ -366,7 +559,9 @@ function resolveWebCommand(port) {
           args: [server],
           cwd: path.dirname(server),
           shell: false,
-          env: { NODE_ENV: "production", PORT: String(port), HOSTNAME: "127.0.0.1" },
+          // OPENADKIT_SYNC_PORT lets the web server tell the browser where this
+          // sidecar is (app/api/runtime), whatever port was baked in at build.
+          env: { NODE_ENV: "production", PORT: String(port), HOSTNAME: "127.0.0.1", OPENADKIT_SYNC_PORT: String(PORT) },
         };
       }
     }
@@ -377,7 +572,7 @@ function resolveWebCommand(port) {
     args: ["next", "dev", "-p", String(port)],
     cwd: PROJECT_ROOT,
     shell: isWin,
-    env: { PORT: String(port) },
+    env: { PORT: String(port), OPENADKIT_SYNC_PORT: String(PORT) },
   };
 }
 let webMode = "down";
@@ -387,8 +582,7 @@ function startWeb() {
   if (webChild) {
     return { ok: false, error: "already running" };
   }
-  const env = readEnvLocal();
-  webPort = Number(env.PORT) || 41573;
+  webPort = configuredWebPort();
   webStatus = "starting";
   webStartedAt = Date.now();
   webLastLog = "";
@@ -442,6 +636,100 @@ function startWeb() {
   return { ok: true, pid: child.pid, port: webPort, mode: run.mode };
 }
 
+// --- Linear-time HTML helpers ---------------------------------------------
+// Hand-copied CommonJS port of stripHtml / extractMetadata from
+// lib/server/url-helpers.ts — KEEP IN LOCKSTEP. Both use indexOf / literal
+// searches only, so cost is O(n) however malformed the body is. The previous
+// lazy `[\s\S]*?` / `[^>]*` regexes re-scanned to the end of the body from
+// every unclosed tag: 500 KB of "<script" pinned the sidecar's CPU for
+// minutes (DoS). Tested in lib/__tests__/sidecar.test.ts.
+const TAG_NAME_CHAR = /[a-z0-9-]/i;
+
+function indexOfCI(haystack, needle, from) {
+  const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"), "gi");
+  re.lastIndex = from;
+  const m = re.exec(haystack);
+  return m ? m.index : -1;
+}
+
+function removeBlocks(s, tag) {
+  const open = `<${tag}`;
+  const close = `</${tag}>`;
+  let out = "";
+  let i = 0;
+  while (i < s.length) {
+    const start = indexOfCI(s, open, i);
+    if (start < 0) break;
+    const after = s.charAt(start + open.length);
+    if (after && TAG_NAME_CHAR.test(after)) {
+      out += s.slice(i, start + 1);
+      i = start + 1;
+      continue;
+    }
+    const end = indexOfCI(s, close, start + open.length);
+    if (end < 0) break;
+    out += s.slice(i, start);
+    i = end + close.length;
+  }
+  return out + s.slice(i);
+}
+
+function replaceTags(s) {
+  let out = "";
+  let i = 0;
+  while (i < s.length) {
+    const lt = s.indexOf("<", i);
+    if (lt < 0) break;
+    const gt = s.indexOf(">", lt + 1);
+    if (gt < 0) break;
+    if (gt === lt + 1) {
+      out += s.slice(i, lt + 1);
+      i = lt + 1;
+      continue;
+    }
+    out += s.slice(i, lt) + " ";
+    i = gt + 1;
+  }
+  return out + s.slice(i);
+}
+
+function stripHtml(html) {
+  let s = removeBlocks(html, "script");
+  s = removeBlocks(s, "style");
+  s = removeBlocks(s, "noscript");
+  s = removeBlocks(s, "head");
+  return replaceTags(s)
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scanTags(html, visit) {
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) return;
+    if (html.charAt(lt + 1) === "<") { i = lt + 1; continue; }
+    const gt = html.indexOf(">", lt + 1);
+    if (gt < 0) return;
+    let n = lt + 1;
+    if (html.charAt(n) === "/") n++;
+    while (n < gt && TAG_NAME_CHAR.test(html.charAt(n))) n++;
+    const name = html.slice(lt + 1, n).toLowerCase();
+    if (visit({ name, raw: html.slice(lt, gt + 1), end: gt + 1 }) === true) return;
+    i = gt + 1;
+  }
+}
+
+const ATTR_RE = (name) => new RegExp(`(?:${name})\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i");
+const META_NAME_ATTR = ATTR_RE("name|property");
+const META_CONTENT_ATTR = ATTR_RE("content");
+
 /**
  * Pull structured metadata from a raw HTML body. Every modern site puts brand
  * signal in <head> (title, OG, JSON-LD) + footer anchors (social links). The
@@ -449,61 +737,15 @@ function startWeb() {
  * body prose. Returns { title, description, og, favicon, social_links, json_ld }.
  */
 function extractMetadata(html, baseUrl) {
-  const meta = {
-    title: "",
-    description: "",
-    og: {},
-    favicon: "",
-    social_links: {},
-    json_ld: [],
-  };
+  const meta = { title: "", description: "", og: {}, favicon: "", social_links: {}, json_ld: [] };
+  let faviconLocked = false;
+  let scriptCloseExhausted = false;
 
-  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-  if (titleMatch) meta.title = titleMatch[1].trim();
-
-  // meta name=/property= with content=, both attribute orders. Also handles
-  // unquoted attribute values that older WP/CMS templates sometimes emit.
-  // (Audit finding #59.)
-  const metaTagRe = /<meta\b[^>]*>/gi;
-  let m;
-  const ATTR_RE = (name) => new RegExp(`(?:${name})\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i");
-  while ((m = metaTagRe.exec(html)) !== null) {
-    const tag = m[0];
-    const nameMatch = tag.match(ATTR_RE("name|property"));
-    const contentMatch = tag.match(ATTR_RE("content"));
-    if (!nameMatch || !contentMatch) continue;
-    const key = (nameMatch[1] || nameMatch[2] || nameMatch[3] || "").toLowerCase();
-    const val = contentMatch[1] || contentMatch[2] || contentMatch[3] || "";
-    if (key === "description" && !meta.description) meta.description = val;
-    if (key.startsWith("og:")) meta.og[key.slice(3)] = val;
-    if (key === "twitter:title" && !meta.og.title) meta.og.title = val;
-    if (key === "twitter:description" && !meta.og.description) meta.og.description = val;
-    if (key === "twitter:image" && !meta.og.image) meta.og.image = val;
-  }
-
-  // favicon — prefer non-apple icon when multiple variants present
-  const linkRe = /<link\b[^>]*>/gi;
-  while ((m = linkRe.exec(html)) !== null) {
-    const tag = m[0];
-    const relMatch = tag.match(/rel\s*=\s*["']([^"']+)["']/i);
+  const onAnchor = (tag) => {
     const hrefMatch = tag.match(/href\s*=\s*["']([^"']+)["']/i);
-    if (!relMatch || !hrefMatch) continue;
-    if (/icon/i.test(relMatch[1])) {
-      try {
-        meta.favicon = new URL(hrefMatch[1], baseUrl).toString();
-        if (!/apple-touch/i.test(relMatch[1])) break;
-      } catch { /* skip */ }
-    }
-  }
-  if (!meta.favicon) {
-    try { meta.favicon = new URL("/favicon.ico", baseUrl).toString(); } catch {}
-  }
-
-  // Social media anchor hrefs — bucket by hostname
-  const anchorRe = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>/gi;
-  while ((m = anchorRe.exec(html)) !== null) {
+    if (!hrefMatch) return;
     let u;
-    try { u = new URL(m[1], baseUrl); } catch { continue; }
+    try { u = new URL(hrefMatch[1], baseUrl); } catch { return; }
     const host = u.hostname.replace(/^www\./i, "").toLowerCase();
     const url = u.toString();
     if (!meta.social_links.facebook && /(^|\.)facebook\.com$/.test(host) && !/\/sharer/i.test(u.pathname)) meta.social_links.facebook = url;
@@ -514,17 +756,45 @@ function extractMetadata(html, baseUrl) {
     if (!meta.social_links.tiktok && /(^|\.)tiktok\.com$/.test(host)) meta.social_links.tiktok = url;
     if (!meta.social_links.pinterest && /(^|\.)pinterest\.com$/.test(host)) meta.social_links.pinterest = url;
     if (!meta.social_links.threads && /(^|\.)threads\.net$/.test(host)) meta.social_links.threads = url;
-  }
+  };
 
-  // JSON-LD organization / business schema
-  const jsonLdRe = /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  while ((m = jsonLdRe.exec(html)) !== null) {
-    try {
-      const parsed = JSON.parse(m[1].trim());
-      meta.json_ld.push(parsed);
-    } catch { /* skip malformed JSON-LD */ }
-  }
+  scanTags(html, ({ name, raw, end }) => {
+    if (name === "title" && !meta.title) {
+      const lt = html.indexOf("<", end);
+      if (lt > end && html.slice(lt, lt + 8).toLowerCase() === "</title>") meta.title = html.slice(end, lt).trim();
+    } else if (name === "meta") {
+      const nameMatch = raw.match(META_NAME_ATTR);
+      const contentMatch = raw.match(META_CONTENT_ATTR);
+      if (!nameMatch || !contentMatch) return;
+      const key = (nameMatch[1] || nameMatch[2] || nameMatch[3] || "").toLowerCase();
+      const val = contentMatch[1] || contentMatch[2] || contentMatch[3] || "";
+      if (key === "description" && !meta.description) meta.description = val;
+      if (key.startsWith("og:")) meta.og[key.slice(3)] = val;
+      if (key === "twitter:title" && !meta.og.title) meta.og.title = val;
+      if (key === "twitter:description" && !meta.og.description) meta.og.description = val;
+      if (key === "twitter:image" && !meta.og.image) meta.og.image = val;
+    } else if (name === "link" && !faviconLocked) {
+      const relMatch = raw.match(/rel\s*=\s*["']([^"']+)["']/i);
+      const hrefMatch = raw.match(/href\s*=\s*["']([^"']+)["']/i);
+      if (!relMatch || !hrefMatch) return;
+      if (/icon/i.test(relMatch[1])) {
+        try {
+          meta.favicon = new URL(hrefMatch[1], baseUrl).toString();
+          if (!/apple-touch/i.test(relMatch[1])) faviconLocked = true;
+        } catch { /* skip */ }
+      }
+    } else if (name === "a") {
+      onAnchor(raw);
+    } else if (name === "script" && !scriptCloseExhausted && /type\s*=\s*["']application\/ld\+json["']/i.test(raw)) {
+      const close = indexOfCI(html, "</script>", end);
+      if (close < 0) { scriptCloseExhausted = true; return; }
+      try { meta.json_ld.push(JSON.parse(html.slice(end, close).trim())); } catch { /* skip malformed JSON-LD */ }
+    }
+  });
 
+  if (!meta.favicon) {
+    try { meta.favicon = new URL("/favicon.ico", baseUrl).toString(); } catch {}
+  }
   return meta;
 }
 
@@ -782,8 +1052,7 @@ function stopWeb() {
  *  file read, and only on requests that need an authorization decision. */
 function refreshPorts() {
   try {
-    const env = readEnvLocal();
-    webPort = envPort(env.PORT, webPort);
+    webPort = configuredWebPort();
   } catch {
     /* keep the last known value */
   }
@@ -966,61 +1235,10 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { ok: false, error: "Private / loopback / link-local hosts are not allowed." });
       }
       let body = "";
-      let redirects = 0;
-      // Cap remote body at 500 KB — extractMetadata + strip pipeline runs ~10x the raw size in memory.
-      // Old 1.5 MB silent-truncate wasted CPU and risked OOM on adversarial input. (Audit finding #36.)
-      const MAX_REMOTE_BYTES = 500_000;
-      const fetchOnce = (targetUrl) => new Promise((resolve, reject) => {
-        // Re-validate scheme + private-host on every hop. Redirect chains can otherwise
-        // point at 169.254.169.254 (AWS IMDS), intranet, etc.
-        let u;
-        try { u = new URL(targetUrl); } catch { return reject(new Error("Invalid redirect target")); }
-        if (u.protocol !== "http:" && u.protocol !== "https:") return reject(new Error("Non-http(s) redirect blocked"));
-        if (isPrivateOrLoopbackHost(u.hostname)) return reject(new Error("Redirect to private host blocked"));
-        // DNS-level SSRF guard: resolve the host and reject if ANY resolved
-        // address is private/loopback/link-local. Closes decimal/hex IP
-        // encodings and DNS-rebinding that the hostname-string check can't see.
-        return dns.lookup(u.hostname, { all: true }, (dnsErr, addresses) => {
-        if (dnsErr || !addresses || !addresses.length) return reject(new Error("DNS resolution failed for target host"));
-        if (addresses.some((a) => isPrivateOrLoopbackHost(a.address))) return reject(new Error("Target host resolves to a private / loopback address"));
-        const lib = u.protocol === "https:" ? require("https") : require("http");
-        const opts = {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; OpenAdKit/1.0; +https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool)",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-          },
-          timeout: 15000,
-        };
-        const r = lib.get(targetUrl, opts, (resp) => {
-          if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location && redirects < 5) {
-            redirects++;
-            const next = new URL(resp.headers.location, targetUrl).toString();
-            return resolve(fetchOnce(next));
-          }
-          if (resp.statusCode < 200 || resp.statusCode >= 400) {
-            return reject(new Error(`HTTP ${resp.statusCode} from target`));
-          }
-          let raw = "";
-          let tooLarge = false;
-          resp.setEncoding("utf8");
-          resp.on("data", (c) => {
-            if (tooLarge) return;
-            raw += c;
-            if (raw.length > MAX_REMOTE_BYTES) {
-              tooLarge = true;
-              resp.destroy();
-              reject(new Error(`Remote body exceeded ${MAX_REMOTE_BYTES} bytes`));
-            }
-          });
-          resp.on("end", () => { if (!tooLarge) resolve(raw); });
-        });
-        r.on("error", reject);
-        r.on("timeout", () => { r.destroy(); reject(new Error("Timeout after 15s")); });
-        });
-      });
       try {
-        body = await fetchOnce(target);
+        // Cap remote body at 500 KB — extractMetadata + strip pipeline runs a
+        // few x the raw size in memory. (Audit finding #36.)
+        body = await fetchRemote(target);
       } catch (e) {
         return json(res, 502, { ok: false, error: e?.message || "Fetch failed" });
       }
@@ -1031,21 +1249,8 @@ const server = http.createServer(async (req, res) => {
       // extraction. Stripping them away first was throwing out the best data.
       const metadata = extractMetadata(body, target);
 
-      // Now strip HTML to plain text for the body content.
-      const text = body
-        .replace(/<script[\s\S]*?<\/script>/gi, "")
-        .replace(/<style[\s\S]*?<\/style>/gi, "")
-        .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
-        .replace(/<head[\s\S]*?<\/head>/gi, "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\s+/g, " ")
-        .trim();
+      // Now strip HTML to plain text for the body content (linear-time).
+      const text = stripHtml(body);
       const MAX = 40000;
       const trimmed = text.length > MAX ? text.slice(0, MAX) : text;
       return json(res, 200, {
@@ -1106,16 +1311,17 @@ const server = http.createServer(async (req, res) => {
       // Validate as ports — refuse junk like "../../evil" or "99999" before writing .env.local. (Audit finding #16.)
       const current = readEnvLocal();
       const portIn = envPort(parsed.PORT, null);
-      const syncPortIn = envPort(parsed.ADFORGE_SYNC_PORT, null);
+      const rawSync = parsed.OPENADKIT_SYNC_PORT !== undefined ? parsed.OPENADKIT_SYNC_PORT : parsed.ADFORGE_SYNC_PORT;
+      const syncPortIn = envPort(rawSync, null);
       if (parsed.PORT !== undefined && portIn === null) {
         return json(res, 400, { ok: false, error: "PORT must be an integer 1-65535." });
       }
-      if (parsed.ADFORGE_SYNC_PORT !== undefined && syncPortIn === null) {
-        return json(res, 400, { ok: false, error: "ADFORGE_SYNC_PORT must be an integer 1-65535." });
+      if (rawSync !== undefined && syncPortIn === null) {
+        return json(res, 400, { ok: false, error: "OPENADKIT_SYNC_PORT must be an integer 1-65535." });
       }
       const next = writeEnvLocal({
         PORT: String(portIn ?? current.PORT),
-        ADFORGE_SYNC_PORT: String(syncPortIn ?? current.ADFORGE_SYNC_PORT),
+        OPENADKIT_SYNC_PORT: String(syncPortIn ?? current.OPENADKIT_SYNC_PORT),
       });
       return json(res, 200, { ok: true, env: next, restart_required: true });
     }
@@ -1146,7 +1352,7 @@ const server = http.createServer(async (req, res) => {
 
 // Pick up the configured web port at boot so /status is correct
 // before the user clicks Start.
-try { webPort = envPort(readEnvLocal().PORT, 41573); } catch {}
+try { webPort = configuredWebPort(); } catch {}
 
 // Single-instance lock. If another sidecar from THIS install is already
 // running (same PID still alive), exit early — the launcher script will
@@ -1181,7 +1387,6 @@ function acquireSingletonLock() {
     console.warn(`[openadkit] could not acquire singleton lock: ${e?.message ?? e}`);
   }
 }
-acquireSingletonLock();
 
 // Session token bumps every time the sidecar starts. The browser polls
 // /health (via /status), sees a new SESSION_TOKEN, and reloads itself.
@@ -1189,37 +1394,45 @@ acquireSingletonLock();
 // a fresh page in the already-open browser tab — no manual refresh needed.
 const SESSION_TOKEN = String(Date.now());
 
-// Surface EADDRINUSE clearly — resolve-ports.cjs has a TOCTOU window between
-// the port-free probe and listen(). If another process grabs the port in that
-// window, this is the only place the user gets a clear message. (Audit finding #42.)
-server.on("error", (err) => {
-  if (err && err.code === "EADDRINUSE") {
-    console.error(`[openadkit] FATAL: port ${PORT} is already in use.`);
-    console.error("[openadkit] Another OpenAdKit install or process bound it between the launcher's port-free check and this listen() call.");
-    console.error("[openadkit] Re-run OpenAdKit.bat / OpenAdKit.command — resolve-ports.cjs will pick a fresh free pair on the next try.");
-    process.exit(1);
-  }
-  console.error("[openadkit] server error:", err);
-  process.exit(1);
-});
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`[openadkit] launcher + sync listening on http://127.0.0.1:${PORT}`);
-  console.log(`[openadkit] open the launcher: http://127.0.0.1:${PORT}/`);
-  console.log(`[openadkit] snapshot file:     ${SNAPSHOT_PATH}`);
-  // Truly-one-click UX: spawn the Next dev server as soon as the sidecar is
-  // up so the user doesn't have to click "Start" in the launcher panel.
-  // The launcher's own buttons still work for stop / restart / clean rebuild,
-  // but the first paint after double-click is the app itself, not a control
-  // panel. Opt-out via ADFORGE_NO_AUTOSTART=1 for power users who want to
-  // edit code before the dev server boots.
-  if (process.env.ADFORGE_NO_AUTOSTART !== "1") {
-    console.log("[openadkit] auto-starting web app (set ADFORGE_NO_AUTOSTART=1 to disable)");
-    const res = startWeb();
-    if (!res.ok) {
-      console.warn(`[openadkit] auto-start failed (non-fatal): ${res.error}. Use the launcher to retry.`);
+// Only the real CLI entrypoint takes the lock, binds the port and installs
+// signal handlers. `require("./local-sync.cjs")` (unit tests) gets the pure
+// helpers below with zero side effects.
+if (IS_MAIN) {
+  acquireSingletonLock();
+  // Surface EADDRINUSE clearly — resolve-ports.cjs has a TOCTOU window between
+  // the port-free probe and listen(). If another process grabs the port in that
+  // window, this is the only place the user gets a clear message. (Audit finding #42.)
+  server.on("error", (err) => {
+    if (err && err.code === "EADDRINUSE") {
+      console.error(`[openadkit] FATAL: port ${PORT} is already in use.`);
+      console.error("[openadkit] Another OpenAdKit install or process bound it between the launcher's port-free check and this listen() call.");
+      console.error("[openadkit] Re-run OpenAdKit.bat / OpenAdKit.command — resolve-ports.cjs will pick a fresh free pair on the next try.");
+      process.exit(1);
     }
-  }
-});
+    console.error("[openadkit] server error:", err);
+    process.exit(1);
+  });
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log(`[openadkit] launcher + sync listening on http://127.0.0.1:${PORT}`);
+    console.log(`[openadkit] open the launcher: http://127.0.0.1:${PORT}/`);
+    console.log(`[openadkit] snapshot file:     ${SNAPSHOT_PATH}`);
+    // Truly-one-click UX: spawn the Next dev server as soon as the sidecar is
+    // up so the user doesn't have to click "Start" in the launcher panel.
+    // The launcher's own buttons still work for stop / restart / clean rebuild,
+    // but the first paint after double-click is the app itself, not a control
+    // panel. Opt-out via ADFORGE_NO_AUTOSTART=1 for power users who want to
+    // edit code before the dev server boots.
+    if (envFirst("OPENADKIT_NO_AUTOSTART", "ADFORGE_NO_AUTOSTART") !== "1") {
+      console.log("[openadkit] auto-starting web app (set OPENADKIT_NO_AUTOSTART=1 to disable)");
+      const res = startWeb();
+      if (!res.ok) {
+        console.warn(`[openadkit] auto-start failed (non-fatal): ${res.error}. Use the launcher to retry.`);
+      }
+    }
+  });
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
 
 /** Stop the web child, close the server and exit. Idempotent. */
 let shuttingDown = false;
@@ -1234,5 +1447,17 @@ function shutdown() {
     process.exit(0);
   });
 }
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+
+module.exports = {
+  envFirst,
+  isAllowedOrigin,
+  isAllowedHost,
+  isPrivateOrLoopbackHost,
+  pinnedLookup,
+  fetchRemote,
+  stripHtml,
+  extractMetadata,
+  resolveUserDataDir,
+  configuredWebPort,
+  PORT,
+};

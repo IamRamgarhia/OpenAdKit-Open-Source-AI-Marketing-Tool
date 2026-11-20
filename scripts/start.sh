@@ -1,74 +1,68 @@
 #!/usr/bin/env bash
-# OpenAdKit start — starts sidecar + web app, opens browser to the app
-# (NOT the control panel). The sidecar auto-spawns Next dev on boot, so
-# this script just waits for both to be reachable then opens one tab.
+# OpenAdKit start (macOS / Linux) — visible-log launcher.
+# Starts the sidecar (control panel + sync), which auto-starts the web app,
+# then opens the web app in your browser. Ctrl+C stops everything.
+#   bash scripts/start.sh
 
 set -e
-cd "$(dirname "$0")"
+# Always run from the repo root, wherever this script is invoked from.
+cd "$(dirname "$0")/.."
 
 if [ ! -d node_modules ]; then
-  echo "node_modules missing. Running install first..."
-  bash install.sh
+  echo "First run: installing dependencies..."
+  npm install --no-audit --no-fund
+fi
+if [ ! -f .next/standalone/server.js ]; then
+  echo "Building OpenAdKit (one time, about a minute)..."
+  npm run build
 fi
 
-mkdir -p data
-
-# Resolve ports — prefer values that were already picked by the launcher
-# (passed in env), fall back to .env.local, then to legacy defaults.
-SYNC_PORT="${ADFORGE_SYNC_PORT:-}"
+# Ports: launcher env → .env.local → resolver (asks the OS for free ports).
+read_env() {
+  if [ -f .env.local ]; then
+    grep -E "^$1=" .env.local | tail -1 | cut -d= -f2 | tr -d '[:space:]'
+  fi
+}
+SYNC_PORT="${OPENADKIT_SYNC_PORT:-${ADFORGE_SYNC_PORT:-}}"
 WEB_PORT="${PORT:-}"
-if [ -z "$SYNC_PORT" ] && [ -f .env.local ]; then
-  SP=$(grep -E '^ADFORGE_SYNC_PORT=' .env.local | head -1 | cut -d= -f2)
-  [ -n "$SP" ] && SYNC_PORT="$SP"
+[ -z "$SYNC_PORT" ] && SYNC_PORT="$(read_env OPENADKIT_SYNC_PORT)"
+[ -z "$SYNC_PORT" ] && SYNC_PORT="$(read_env ADFORGE_SYNC_PORT)"
+[ -z "$WEB_PORT" ] && WEB_PORT="$(read_env PORT)"
+if [ -z "$SYNC_PORT" ] || [ -z "$WEB_PORT" ]; then
+  node scripts/resolve-ports.cjs >/dev/null
+  SYNC_PORT="$(read_env OPENADKIT_SYNC_PORT)"
+  [ -z "$SYNC_PORT" ] && SYNC_PORT="$(read_env ADFORGE_SYNC_PORT)"
+  WEB_PORT="$(read_env PORT)"
 fi
-if [ -z "$WEB_PORT" ] && [ -f .env.local ]; then
-  WP=$(grep -E '^PORT=' .env.local | head -1 | cut -d= -f2)
-  [ -n "$WP" ] && WEB_PORT="$WP"
-fi
-SYNC_PORT="${SYNC_PORT:-41574}"
-WEB_PORT="${WEB_PORT:-41573}"
 
 echo
 echo "=================================================="
-echo " Starting OpenAdKit (first run takes 20-40s for Next compile)"
+echo " Starting OpenAdKit"
 echo "=================================================="
-echo
-echo "  Web app (your tools):  http://127.0.0.1:$WEB_PORT/"
-echo "  Control panel:         http://127.0.0.1:$SYNC_PORT/"
-echo
+echo "  Web app:        http://127.0.0.1:$WEB_PORT/"
+echo "  Control panel:  http://127.0.0.1:$SYNC_PORT/"
 echo "  Press Ctrl+C to shut down."
 echo
 
-# Cross-platform "open URL in default browser"
 open_url() {
-  local url="$1"
-  if   command -v open       >/dev/null 2>&1; then open "$url" &       # macOS
-  elif command -v xdg-open   >/dev/null 2>&1; then xdg-open "$url" &   # Linux
-  elif command -v wslview    >/dev/null 2>&1; then wslview "$url" &    # WSL
-  else echo "(open this URL manually: $url)"; fi
+  if [ "${OPENADKIT_NO_BROWSER:-}" = "1" ]; then echo "[openadkit] ready: $1"; return; fi
+  if   command -v open     >/dev/null 2>&1; then open "$1"            # macOS
+  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$1" >/dev/null 2>&1 &
+  elif command -v wslview  >/dev/null 2>&1; then wslview "$1"
+  else echo "(open this URL manually: $1)"; fi
 }
 
-# Background watcher: wait for the WEB app (not just the sidecar) to be
-# reachable, then open the browser to it directly. First-run Next dev
-# compile can take 30-40s; we wait up to 90s. If it doesn't come up in
-# that window, fall back to the control panel so the user can see logs.
+# Open the web app once it answers; fall back to the control panel.
 (
-  for i in $(seq 1 30); do
-    if curl -sf -o /dev/null --max-time 1 "http://127.0.0.1:$SYNC_PORT/health"; then break; fi
+  for _ in $(seq 1 120); do
+    if curl -sf -o /dev/null --max-time 1 "http://127.0.0.1:$WEB_PORT/"; then
+      open_url "http://127.0.0.1:$WEB_PORT/"; exit 0
+    fi
     sleep 0.5
   done
-  for i in $(seq 1 120); do
-    if curl -sf -o /dev/null --max-time 1 "http://127.0.0.1:$WEB_PORT/"; then
-      echo "[openadkit] web app ready at http://127.0.0.1:$WEB_PORT/"
-      open_url "http://127.0.0.1:$WEB_PORT/"
-      exit 0
-    fi
-    sleep 0.75
-  done
-  echo "[openadkit] web app didn't respond within 90s — opening control panel"
+  echo "[openadkit] web app didn't respond within 60s — opening the control panel"
   open_url "http://127.0.0.1:$SYNC_PORT/"
 ) &
 
-# Run the sidecar in the foreground (it serves the launcher + auto-spawns Next)
-trap 'echo; echo "Stopping OpenAdKit..."; exit 0' INT TERM
-ADFORGE_SYNC_PORT="$SYNC_PORT" PORT="$WEB_PORT" node scripts/local-sync.cjs
+# Sidecar in the foreground; it stops the web app on Ctrl+C / SIGTERM.
+OPENADKIT_SYNC_PORT="$SYNC_PORT" ADFORGE_SYNC_PORT="$SYNC_PORT" PORT="$WEB_PORT" exec node scripts/local-sync.cjs

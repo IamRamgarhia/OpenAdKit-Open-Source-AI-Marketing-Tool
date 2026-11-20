@@ -68,7 +68,7 @@ pain | outcome | social_proof | curiosity | comparison | urgency | identity | co
 STEP 2 — Generate 15 headlines with this exact mix (enforced):
 - 4 keyword-led (include "${input.keyword}" naturally — never stuff)
 - 4 benefit-led (an outcome the audience wants)
-- 3 social-proof / specificity-led (numbers, named, dated)
+- 3 social-proof / specificity-led — proof ONLY from the Brand Brain (VOC quotes, key benefits, differentiators). If none is given, use verifiable specifics instead (location, hours, process, guarantee). Never invent numbers, ratings or customer counts.
 - 3 CTA / offer-led
 - 1 brand / differentiator
 

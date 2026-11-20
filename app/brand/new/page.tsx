@@ -42,7 +42,6 @@ const GAP_FILL_FIELDS = [
 // (Audit finding #52.)
 function dlog(...args: unknown[]) {
   if (process.env.NODE_ENV !== "production") {
-    // eslint-disable-next-line no-console
     console.log(...args);
   }
 }
@@ -132,18 +131,14 @@ function Inner() {
   // and the URL/Paste/Google handlers pass .signal down to every llmCall + ingestUrl.
   const abortRef = useRef<AbortController | null>(null);
   const [lightMode, setLightMode] = useState(false);
-  const [resumeDraft, setResumeDraft] = useState<ReturnType<typeof loadDraft>>(null);
+  // Hydrate any staged draft (crash/refresh mid-extraction) on first render.
+  // Safe as a lazy initializer: this page renders under <ApiKeyGate>, which
+  // only mounts its children on the client.
+  const [resumeDraft, setResumeDraft] = useState<ReturnType<typeof loadDraft>>(() => loadDraft());
   const [visionFile, setVisionFile] = useState<File | null>(null);
   const [quickStatus, setQuickStatus] = useState<string | null>(null);
   const [showPaste, setShowPaste] = useState(false);
   const costPreview = estimateExtractionCostUsd(lightMode);
-
-  // Hydrate draft on mount — if the user crashed/refreshed mid-extraction, offer
-  // to resume from the staged result.
-  useEffect(() => {
-    const d = loadDraft();
-    if (d) setResumeDraft(d);
-  }, []);
 
   const [pasted, setPasted] = useState("");
   const [googleQuery, setGoogleQuery] = useState("");

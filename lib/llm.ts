@@ -42,35 +42,45 @@ interface RunOptions {
 
 function resolve(opts: RunOptions): { provider: Provider; apiKey: string; model: string } {
   const provider = opts.providerOverride ?? getActiveProvider();
-  if (!provider) throw new LLMError("No active provider configured. Pick one in /setup or /settings.", undefined, "ados");
+  if (!provider) throw new LLMError("No active provider configured. Pick one in /setup or /settings.", undefined, "openadkit");
   const apiKey = opts.apiKeyOverride ?? getProviderKey(provider.id);
   if (!apiKey) throw new LLMError(`No API key for ${provider.name}. Add one in /settings.`, undefined, provider.id);
   const model = opts.modelOverride ?? getActiveModelId(provider.id) ?? provider.default_model;
   return { provider, apiKey, model };
 }
 
-import { recordRequest } from "./quota-tracker";
+import { recordRequest, recordFailedAttempt } from "./quota-tracker";
+import { assertWithinBudget } from "./budget";
+
+/** Did this failure come back FROM the provider (so it consumed quota)? HTTP
+ *  errors (incl. 429) and truncated/refused completions did; network errors and
+ *  aborts never reached it. */
+function reachedProvider(err: unknown): boolean {
+  return err instanceof LLMError && (err.status !== undefined || err.code !== undefined);
+}
+
+/**
+ * Every LLM request in the app funnels through llmCall / llmStream, so the
+ * monthly-budget hard stop is enforced HERE rather than at each UI entry point
+ * (several callers never checked it). Throws BudgetExceededError — the type the
+ * UI already renders — only when the user enabled the hard stop.
+ */
+async function guard<T>(providerId: string, fn: () => Promise<T>): Promise<T> {
+  await assertWithinBudget();
+  try {
+    const res = await fn();
+    recordRequest(providerId);
+    return res;
+  } catch (err) {
+    if (reachedProvider(err)) recordFailedAttempt(providerId);
+    throw err;
+  }
+}
 
 export async function llmCall(opts: RunOptions): Promise<LLMResult & { providerId: string }> {
   const { provider, apiKey, model } = resolve(opts);
-  const res = await provider.call({
-    apiKey,
-    model,
-    system: opts.system,
-    messages: opts.messages,
-    maxTokens: opts.maxTokens,
-    temperature: opts.temperature,
-    signal: opts.signal,
-    cacheSystem: opts.cacheSystem ?? true,
-  });
-  recordRequest(provider.id);
-  return { ...res, providerId: provider.id };
-}
-
-export async function llmStream(opts: RunOptions, handlers: StreamHandlers): Promise<LLMResult & { providerId: string }> {
-  const { provider, apiKey, model } = resolve(opts);
-  const res = await provider.stream(
-    {
+  const res = await guard(provider.id, () =>
+    provider.call({
       apiKey,
       model,
       system: opts.system,
@@ -79,10 +89,28 @@ export async function llmStream(opts: RunOptions, handlers: StreamHandlers): Pro
       temperature: opts.temperature,
       signal: opts.signal,
       cacheSystem: opts.cacheSystem ?? true,
-    },
-    handlers
+    })
   );
-  recordRequest(provider.id);
+  return { ...res, providerId: provider.id };
+}
+
+export async function llmStream(opts: RunOptions, handlers: StreamHandlers): Promise<LLMResult & { providerId: string }> {
+  const { provider, apiKey, model } = resolve(opts);
+  const res = await guard(provider.id, () =>
+    provider.stream(
+      {
+        apiKey,
+        model,
+        system: opts.system,
+        messages: opts.messages,
+        maxTokens: opts.maxTokens,
+        temperature: opts.temperature,
+        signal: opts.signal,
+        cacheSystem: opts.cacheSystem ?? true,
+      },
+      handlers
+    )
+  );
   return { ...res, providerId: provider.id };
 }
 

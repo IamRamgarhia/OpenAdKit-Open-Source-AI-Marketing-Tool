@@ -2,14 +2,14 @@
   "name": "openadkit",
   "version": "1.1.0",
   "private": true,
-  "description": "OpenAdKit — open source AI marketing tool. Every ad platform, every AI provider (BYOK), runs in your browser, zero subscriptions. Built by Dicecodes.",
+  "description": "OpenAdKit — open source AI marketing tool. Every ad platform, every AI provider (BYOK), runs in your browser, zero subscriptions. Built by DiceCodes.",
   "license": "MIT",
   "homepage": "https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool",
   "repository": {
     "type": "git",
     "url": "https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool.git"
   },
-  "author": "Dicecodes <Contact@dicecodes.com>",
+  "author": "DiceCodes <contact@dicecodes.com>",
   "keywords": [
     "ai",
     "ads",
@@ -43,14 +43,19 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "playwright test tests/smoke.spec.ts --reporter=line",
-    "test:live": "playwright test tests/live.spec.ts --reporter=line"
+    "test:live": "playwright test tests/live.spec.ts --reporter=line",
+    "build:mcp": "node scripts/build-mcp.cjs",
+    "mcp": "node mcp/dist/openadkit-mcp.mjs",
+    "eval": "node scripts/eval.cjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "clsx": "2.1.1",
     "dexie": "4.4.7",
     "dexie-react-hooks": "4.4.0",
     "lucide-react": "1.77.0",
     "next": "16.4.6",
+    "qrcode": "1.5.4",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "tailwind-merge": "3.7.1",
@@ -61,10 +66,13 @@
     "@playwright/test": "1.65.1",
     "@tailwindcss/postcss": "4.3.5",
     "@types/node": "24.19.2",
+    "@types/qrcode": "1.5.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.6",
+    "fake-indexeddb": "6.2.5",
     "postcss": "8.5.33",
     "tailwindcss": "4.3.5",
     "typescript": "5.9.3",
@@ -73,5 +81,8 @@
   },
   "engines": {
     "node": ">=20.9"
+  },
+  "bin": {
+    "openadkit-mcp": "mcp/dist/openadkit-mcp.mjs"
   }
 }

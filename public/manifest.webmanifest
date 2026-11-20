@@ -5,19 +5,31 @@
   "display": "standalone",
   "background_color": "#08080a",
   "theme_color": "#08080a",
-  "description": "Open source AI marketing tool. Every ad platform, every AI provider (BYOK), browser-only. Built by Dicecodes.",
+  "description": "Open source AI marketing tool. Every ad platform, every AI provider (BYOK), browser-only. Built by DiceCodes.",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "maskable"
+      "purpose": "any"
     }
   ]
 }

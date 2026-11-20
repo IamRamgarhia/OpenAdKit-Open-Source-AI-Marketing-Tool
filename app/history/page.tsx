@@ -13,6 +13,14 @@ import { showUndoToast } from "@/components/UndoToast";
 import { SkeletonRow, LoadingAnnouncement } from "@/components/Skeleton";
 import { getActiveBrainId } from "@/lib/settings";
 import type { BrandBrain } from "@/lib/brand-brain";
+import { historyToCsv } from "@/lib/csv-export";
+import { CampaignPicker } from "@/components/CampaignPicker";
+
+/** Module-level loader so the timestamp + storage reads stay out of render. */
+async function loadHistory() {
+  const [ads, brains] = await Promise.all([listAds(), listBrains()]);
+  return { ads, brains, activeBrandId: getActiveBrainId(), loadedAt: Date.now() };
+}
 
 const STATUSES: GeneratedAd["status"][] = ["draft", "testing", "live", "paused", "winner", "loser"];
 
@@ -58,41 +66,62 @@ function HistoryInner() {
   const [perfDialogAd, setPerfDialogAd] = useState<GeneratedAd | null>(null);
   const [regenAd, setRegenAd] = useState<GeneratedAd | null>(null);
   const [loading, setLoading] = useState(true);
+  // Captured when data loads (not during render) so the 30-day rollup is pure.
+  const [loadedAt, setLoadedAt] = useState(0);
   const exportMenuRef = useRef<HTMLDetailsElement>(null);
   const closeExportMenu = () => exportMenuRef.current?.removeAttribute("open");
 
-  async function refresh() {
-    const [a, b] = await Promise.all([listAds(), listBrains()]);
-    setAds(a);
-    setBrains(b);
-    setActiveBrandId(getActiveBrainId());
+  function apply(d: Awaited<ReturnType<typeof loadHistory>>) {
+    setAds(d.ads);
+    setBrains(d.brains);
+    setActiveBrandId(d.activeBrandId);
+    setLoadedAt(d.loadedAt);
     setLoading(false);
   }
+  async function refresh() {
+    apply(await loadHistory());
+  }
   useEffect(() => {
-    refresh();
-    const h = () => refresh();
-    window.addEventListener("ados:brains-changed", h);
-    return () => window.removeEventListener("ados:brains-changed", h);
+    let cancelled = false;
+    const load = () =>
+      loadHistory().then((d) => {
+        if (!cancelled) apply(d);
+      });
+    load();
+    // Client switches change which rows "active brand" scope shows — this
+    // page used to ignore them until a manual reload.
+    window.addEventListener("ados:brains-changed", load);
+    window.addEventListener("ados:active-brain-changed", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ados:brains-changed", load);
+      window.removeEventListener("ados:active-brain-changed", load);
+    };
   }, []);
 
   // Deep-link support: /history?focus=<adId> expands the row and scrolls it
-  // into view. Wait until ads are loaded so the target element exists, then
-  // widen the scope to "all brands" if the focused ad isn't in the active one
-  // (otherwise the row may be filtered out).
-  useEffect(() => {
-    if (!focusId || ads.length === 0) return;
+  // into view. Once ads are loaded, widen the scope to "all brands" if the
+  // focused ad isn't in the active one (otherwise the row is filtered out).
+  // Adjusted during render (once per focus id) rather than in an effect.
+  const [focusHandled, setFocusHandled] = useState<string | null>(null);
+  if (focusId && ads.length > 0 && focusHandled !== focusId) {
+    setFocusHandled(focusId);
     const target = ads.find((a) => a.id === focusId);
-    if (!target) return;
-    if (activeBrandId && target.brand_id !== activeBrandId) setScope("all_brands");
-    setExpanded(focusId);
-    // Wait one frame so the row is rendered before scrolling.
+    if (target) {
+      if (activeBrandId && target.brand_id !== activeBrandId) setScope("all_brands");
+      setExpanded(focusId);
+    }
+  }
+  // DOM side effect only: scroll + flash the focused row once it's rendered.
+  useEffect(() => {
+    if (!focusId || focusHandled !== focusId || expanded !== focusId) return;
     requestAnimationFrame(() => {
       const el = document.getElementById(focusId);
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
       el?.classList.add("ring-2", "ring-live");
       setTimeout(() => el?.classList.remove("ring-2", "ring-live"), 2400);
     });
-  }, [focusId, ads, activeBrandId]);
+  }, [focusId, focusHandled, expanded]);
 
   const filtered = useMemo(() => {
     return ads.filter((a) => {
@@ -112,7 +141,7 @@ function HistoryInner() {
   // Agencies running N clients can see at a glance which client is consuming
   // the most token budget this month.
   const perBrandCost = useMemo(() => {
-    const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const monthAgo = loadedAt - 30 * 24 * 60 * 60 * 1000;
     const rows = new Map<string, { brain_id: string; name: string; total: number; last30: number; count: number; tokens: number }>();
     for (const a of ads) {
       const brain = brains.find((b) => b.id === a.brand_id);
@@ -125,7 +154,7 @@ function HistoryInner() {
       rows.set(a.brand_id, cur);
     }
     return Array.from(rows.values()).sort((a, b) => b.last30 - a.last30);
-  }, [ads, brains]);
+  }, [ads, brains, loadedAt]);
 
   function download(name: string, content: string, type: string) {
     const blob = new Blob([content], { type });
@@ -148,27 +177,19 @@ function HistoryInner() {
   }
 
   function exportJson() {
-    download(`ados-history-${Date.now()}.json`, JSON.stringify(filtered, null, 2), "application/json");
+    download(`openadkit-history-${Date.now()}.json`, JSON.stringify(filtered, null, 2), "application/json");
   }
 
   function exportCsv() {
-    const headers = ["id", "platform", "campaign_type", "status", "starred", "title", "model", "input_tokens", "output_tokens", "cost_usd", "created_at", "notes"];
-    const esc = (s: any) => `"${String(s ?? "").replace(/"/g, '""').replace(/\n/g, " ")}"`;
-    const rows = filtered.map((a) =>
-      [
-        a.id, a.platform, a.campaign_type, a.status, a.starred, a.title,
-        a.model_id, num(a.usage_input_tokens), num(a.usage_output_tokens), num(a.cost_usd).toFixed(6),
-        new Date(num(a.created_at)).toISOString(), a.notes,
-      ].map(esc).join(",")
-    );
-    download(`ados-history-${Date.now()}.csv`, [headers.join(","), ...rows].join("\n"), "text/csv");
+    // Includes output_text; every cell is formula-injection safe (lib/csv-export).
+    download(`openadkit-history-${Date.now()}.csv`, historyToCsv(filtered), "text/csv");
   }
 
   function exportMarkdown() {
     const md = filtered.map((a) =>
       `## ${a.title}\n\n- **Platform**: ${a.platform} · ${a.campaign_type}\n- **Status**: ${a.status}${a.starred ? " · ⭐" : ""}\n- **When**: ${new Date(num(a.created_at)).toLocaleString()}\n- **Model**: \`${a.model_id}\` · in ${num(a.usage_input_tokens)} · out ${num(a.usage_output_tokens)} · $${num(a.cost_usd).toFixed(4)}\n${a.notes ? `- **Notes**: ${a.notes}\n` : ""}\n\`\`\`\n${a.output_text}\n\`\`\`\n`
     ).join("\n---\n\n");
-    download(`ados-history-${Date.now()}.md`, `# OpenAdKit History Export\n\nGenerated ${new Date().toISOString()} · ${filtered.length} entries\n\n${md}`, "text/markdown");
+    download(`openadkit-history-${Date.now()}.md`, `# OpenAdKit History Export\n\nGenerated ${new Date().toISOString()} · ${filtered.length} entries\n\n${md}`, "text/markdown");
   }
 
   async function setStatusOn(id: string, s: GeneratedAd["status"]) {
@@ -435,6 +456,14 @@ function HistoryInner() {
                       </button>
                     ))}
                   </div>
+                  <CampaignPicker
+                    adId={a.id}
+                    brandId={a.brand_id}
+                    value={a.campaign_id}
+                    onChange={(campaign_id) =>
+                      setAds((cur) => cur.map((x) => (x.id === a.id ? { ...x, campaign_id } : x)))
+                    }
+                  />
                   <div>
                     <label className="label">notes</label>
                     <textarea

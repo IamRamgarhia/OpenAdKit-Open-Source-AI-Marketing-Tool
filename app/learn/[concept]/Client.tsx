@@ -3,22 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, Sparkles, ArrowLeft } from "lucide-react";
-import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
 import { Markdown } from "@/components/Markdown";
 import { CopyButton } from "@/components/CopyButton";
 import { useThrottledStream } from "@/lib/stream-hook";
-import { getApiKey, getModel, addUsage } from "@/lib/settings";
+import { getApiKey, getModel, addUsage, getLanguage, getToneOverride, getActiveBrainId } from "@/lib/settings";
 import { streamClaude, estimateCostUsd } from "@/lib/claude";
+import { buildBrandSystemPrompt } from "@/lib/brand-brain";
+import { getBrain } from "@/lib/storage";
+import { RequireKeyAction } from "@/components/RequireKeyAction";
 import { buildConceptPrompt } from "@/lib/prompts/concept-explainer";
 import { CONCEPTS, CATEGORY_LABEL } from "@/lib/learn-content";
 
 export default function ConceptClient({ concept }: { concept: string }) {
-  return (
-    <ApiKeyGate>
-      <Inner concept={concept} />
-    </ApiKeyGate>
-  );
+  return <Inner concept={concept} />;
 }
 
 function Inner({ concept }: { concept: string }) {
@@ -49,10 +47,21 @@ function Inner({ concept }: { concept: string }) {
         return;
       }
       const prompt = buildConceptPrompt({ concept: def.name, context_industry: industry, context_platform: platform });
+      // Same system prompt as every other tool so the user's output language
+      // and tone override apply here too (this call used to send none).
+      const brainId = getActiveBrainId();
+      const brain = brainId ? (await getBrain(brainId)) ?? null : null;
+      const system = buildBrandSystemPrompt(brain, {
+        language: getLanguage(),
+        tone_override: getToneOverride(),
+        skip_framework_stack: true,
+      });
       const res = await streamClaude(
         {
           apiKey,
-          model: getModel(),
+          // "" would beat the provider default and 404 — let resolve() pick.
+          model: getModel() || undefined,
+          system,
           messages: [{ role: "user", content: prompt }],
           maxTokens: 1500,
           temperature: 0.5,
@@ -122,10 +131,12 @@ function Inner({ concept }: { concept: string }) {
               {error}
             </div>
           ) : null}
-          <button onClick={explain} disabled={running} className="btn-primary w-full">
-            {running ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-            {running ? "explaining" : "explain it"}
-          </button>
+          <RequireKeyAction what="the AI explainer">
+            <button onClick={explain} disabled={running} className="btn-primary w-full">
+              {running ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {running ? "explaining" : "explain it"}
+            </button>
+          </RequireKeyAction>
         </div>
 
         <div className="lg:col-span-2 border border-base-600 bg-base-900/40 p-5 min-h-[300px]">

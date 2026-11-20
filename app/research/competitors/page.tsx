@@ -8,11 +8,46 @@ import { Section, Pill } from "@/components/OutputBlocks";
 import { CopyButton } from "@/components/CopyButton";
 import { ProviderSwitcher } from "@/components/ProviderSwitcher";
 import { useThrottledStream } from "@/lib/stream-hook";
-import { getApiKey, getActiveBrainId, addUsage } from "@/lib/settings";
+import { getApiKey, getActiveBrainId, addUsage, getLanguage, getToneOverride } from "@/lib/settings";
 import { llmStream, estimateCostUsd, tryParseJson } from "@/lib/llm";
 import { validateOrRetry, StructuredLlmError } from "@/lib/llm-structured";
 import { CompetitorStealSchema } from "@/lib/schemas/generators";
 import { getBrain, saveAd, type GeneratedAd } from "@/lib/storage";
+import { withGenMeta } from "@/lib/ad-meta";
+import { storagePlatformForLabel } from "@/lib/next-steps";
+
+const MAX_TOKENS = 4000;
+
+function buildStealAd(
+  brain: BrandBrain | null,
+  input: CompetitorStealInput,
+  r: { json: unknown; text: string; modelId: string; providerId?: string; inTok: number; outTok: number; cost: number; prompt: string }
+): GeneratedAd {
+  return withGenMeta(
+    {
+      id: crypto.randomUUID(),
+      brand_id: brain?.id ?? "",
+      // Was hard-coded "meta" whatever platform the teardown targeted.
+      platform: storagePlatformForLabel(input.platform),
+      campaign_type: "Competitor Steal",
+      title: `Steal · ${input.competitor_name || "competitor"} · ${input.our_product}`,
+      input: input as unknown as Record<string, unknown>,
+      output_json: r.json,
+      output_text: r.text,
+      model_id: r.modelId,
+      provider_id: r.providerId,
+      usage_input_tokens: r.inTok,
+      usage_output_tokens: r.outTok,
+      cost_usd: r.cost,
+      starred: false,
+      status: "draft",
+      notes: "",
+      created_at: Date.now(),
+      prompt: r.prompt,
+    },
+    { max_tokens: MAX_TOKENS }
+  );
+}
 import { buildBrandSystemPrompt, type BrandBrain } from "@/lib/brand-brain";
 import { buildCompetitorStealPrompt, type CompetitorStealInput } from "@/lib/prompts/competitor-steal";
 
@@ -72,19 +107,32 @@ function Inner() {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const load = async () => {
+    let cancelled = false;
+    // `switched`: the active client changed, so the previous client's product
+    // and USP must be replaced, not kept as "already filled".
+    const load = (switched = false) => {
       const id = getActiveBrainId();
-      const b = id ? (await getBrain(id)) ?? null : null;
-      setBrain(b);
-      if (b) {
+      (id ? getBrain(id) : Promise.resolve(undefined)).then((found) => {
+        if (cancelled) return;
+        const b = found ?? null;
+        setBrain(b);
         setInput((cur) => ({
           ...cur,
-          our_product: cur.our_product || b.business_name,
-          our_usp: cur.our_usp || b.usp || "",
+          our_product: switched ? b?.business_name ?? "" : cur.our_product || b?.business_name || "",
+          our_usp: switched ? b?.usp ?? "" : cur.our_usp || b?.usp || "",
         }));
-      }
+      });
     };
     load();
+    const onEdit = () => load(false);
+    const onSwitch = () => load(true);
+    window.addEventListener("ados:brains-changed", onEdit);
+    window.addEventListener("ados:active-brain-changed", onSwitch);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ados:brains-changed", onEdit);
+      window.removeEventListener("ados:active-brain-changed", onSwitch);
+    };
   }, []);
 
   function openLibrary(s: SourceLink) {
@@ -136,22 +184,25 @@ function Inner() {
       // through the active provider, but the explicit dependency makes future
       // provider-aware features (vision fallback, model override) trivial.
       // (Audit finding #26.)
-      const system = buildBrandSystemPrompt(brain);
+      const system = buildBrandSystemPrompt(brain, { language: getLanguage(), tone_override: getToneOverride() });
       const prompt = buildCompetitorStealPrompt(input);
       const res = await llmStream(
         {
           system,
           messages: [{ role: "user", content: prompt }],
-          maxTokens: 4000,
+          maxTokens: MAX_TOKENS,
           temperature: 0.7,
           signal: controller.signal,
         },
         { onDelta: stream.append }
       );
       let cost = estimateCostUsd(res.providerId, res.modelId, res.usage);
-      addUsage(cost, res.usage?.input_tokens ?? 0, res.usage?.output_tokens ?? 0);
+      let inTok = res.usage?.input_tokens ?? 0;
+      let outTok = res.usage?.output_tokens ?? 0;
+      addUsage(cost, inTok, outTok);
       window.dispatchEvent(new Event("ados:usage"));
-      let finalText = res.text || stream.text;
+      // getText(): the closure's stream.text is the stale pre-run "".
+      let finalText = res.text || stream.getText();
       // Schema validate + retry on shape failure. Accepts both the normal
       // teardown shape and the honesty-path error shape (where the model
       // refused to invent ads because no real ad copy was pasted).
@@ -163,12 +214,15 @@ function Inner() {
           system,
           originalPrompt: prompt,
           signal: controller.signal,
-          maxTokens: 4000,
+          maxTokens: MAX_TOKENS,
         });
         json = v.data;
         if (v.recovered) {
           setSchemaRecovered(true);
           cost += v.costUsd;
+          // Saved usage includes the correction pass, like cost already did.
+          inTok += v.usage?.input_tokens ?? 0;
+          outTok += v.usage?.output_tokens ?? 0;
           addUsage(v.costUsd, v.usage?.input_tokens ?? 0, v.usage?.output_tokens ?? 0);
           window.dispatchEvent(new Event("ados:usage"));
           finalText = v.raw;
@@ -183,24 +237,16 @@ function Inner() {
         throw vErr;
       }
       setParsed(json);
-      const ad: GeneratedAd = {
-        id: crypto.randomUUID(),
-        brand_id: brain?.id ?? "",
-        platform: "meta",
-        campaign_type: "Competitor Steal",
-        title: `Steal · ${input.competitor_name || "competitor"} · ${input.our_product}`,
-        input: input as unknown as Record<string, unknown>,
-        output_json: json,
-        output_text: finalText,
-        model_id: res.modelId,
-        usage_input_tokens: res.usage?.input_tokens ?? 0,
-        usage_output_tokens: res.usage?.output_tokens ?? 0,
-        cost_usd: cost,
-        starred: false,
-        status: "draft",
-        notes: "",
-        created_at: Date.now(),
-      };
+      const ad = buildStealAd(brain, input, {
+        json,
+        text: finalText,
+        modelId: res.modelId,
+        providerId: res.providerId,
+        inTok,
+        outTok,
+        cost,
+        prompt,
+      });
       await saveAd(ad);
       setSavedId(ad.id);
     } catch (e: any) {

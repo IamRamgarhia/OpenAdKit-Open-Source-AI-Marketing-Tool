@@ -28,6 +28,7 @@ import {
   isVaultSupported, isVaultEnabled, isVaultUnlocked, enableVault, disableVault,
   lockVault, primePlaintextCache, clearPlaintextCache,
 } from "@/lib/key-vault";
+import { useIsClient } from "@/lib/hooks/use-is-client";
 
 /**
  * NOT wrapped in <ApiKeyGate>. Settings is where you ADD a key — gating it on
@@ -36,14 +37,35 @@ import {
  * key also locked you out of the page you'd use to add another.
  */
 export default function SettingsPage() {
+  // Everything below reads localStorage in lazy useState initializers, so it
+  // mounts only on the client (server + hydration render the placeholder).
+  const isClient = useIsClient();
+  if (!isClient) {
+    return (
+      <div className="min-h-[40vh] grid place-items-center text-sm text-ink-muted" role="status">
+        Loading settings…
+      </div>
+    );
+  }
   return <SettingsInner />;
 }
 
+function initialKeys(): Record<string, string> {
+  const ks: Record<string, string> = {};
+  for (const p of PROVIDERS) ks[p.id] = getProviderKey(p.id);
+  return ks;
+}
+function initialModels(): Record<string, string> {
+  const ms: Record<string, string> = {};
+  for (const p of PROVIDERS) ms[p.id] = getActiveModelId(p.id) ?? p.default_model;
+  return ms;
+}
+
 function SettingsInner() {
-  const [activeId, setActiveId] = useState<string>("");
-  const [keys, setKeys] = useState<Record<string, string>>({});
+  const [activeId, setActiveId] = useState<string>(() => getActiveProviderId() ?? "");
+  const [keys, setKeys] = useState<Record<string, string>>(initialKeys);
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
-  const [modelsByProvider, setModelsByProvider] = useState<Record<string, string>>({});
+  const [modelsByProvider, setModelsByProvider] = useState<Record<string, string>>(initialModels);
   const [testing, setTesting] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   // Per-provider verification result, shown inline on that provider's card and
@@ -52,61 +74,46 @@ function SettingsInner() {
   // entirely, and ambiguous about which card it referred to.
   const [verify, setVerify] = useState<Record<string, KeyCheckResult | null>>({});
   /** Provider ids with a key actually persisted (survives a locked vault). */
-  const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [savedIds, setSavedIds] = useState<string[]>(() => PROVIDERS.filter((p) => hasProviderKey(p.id)).map((p) => p.id));
   const refreshSavedIds = () => setSavedIds(PROVIDERS.filter((p) => hasProviderKey(p.id)).map((p) => p.id));
   const [error, setError] = useState<string | null>(null);
-  const [usage, setUsage] = useState({ cost: 0, input: 0, output: 0 });
-  const [lang, setLang] = useState("English");
-  const [tone, setTone] = useState("");
-  const [charWarn, setCharWarnState] = useState(true);
-  const [autoSave, setAutoSaveState] = useState(true);
-  const [jina, setJinaState] = useState("");
-  const [syncKeys, setSyncKeysState] = useState(false);
-  const [currency, setCurrencyState] = useState("USD");
-  const [budget, setBudget] = useState("");
-  const [hardStop, setHardStop] = useState(false);
+  const [usage, setUsage] = useState(getUsage);
+  const [lang, setLang] = useState(getLanguage);
+  const [tone, setTone] = useState(getToneOverride);
+  const [charWarn, setCharWarnState] = useState(getCharWarn);
+  const [autoSave, setAutoSaveState] = useState(getAutoSave);
+  const [jina, setJinaState] = useState(getJinaKey);
+  const [currency, setCurrencyState] = useState(getCurrencyCode);
+  const [budget, setBudget] = useState(() => {
+    const limit = getMonthlyBudgetUsd();
+    return limit ? String(limit) : "";
+  });
+  const [hardStop, setHardStop] = useState(isHardStopEnabled);
   const [budgetStatus, setBudgetStatus] = useState<BudgetStatus | null>(null);
-  const [vaultSupported, setVaultSupported] = useState(true);
-  const [vaultEnabled, setVaultEnabled] = useState(false);
-  const [vaultUnlocked, setVaultUnlocked] = useState(false);
+  const [vaultSupported] = useState(isVaultSupported);
+  const [vaultEnabled, setVaultEnabled] = useState(isVaultEnabled);
+  const [vaultUnlocked, setVaultUnlocked] = useState(isVaultUnlocked);
   const [vaultPass, setVaultPass] = useState("");
   const [vaultError, setVaultError] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setActiveId(getActiveProviderId() ?? "");
-    const ks: Record<string, string> = {};
-    const ms: Record<string, string> = {};
-    for (const p of PROVIDERS) {
-      ks[p.id] = getProviderKey(p.id);
-      ms[p.id] = getActiveModelId(p.id) ?? p.default_model;
-    }
-    setKeys(ks);
-    setModelsByProvider(ms);
-    setSavedIds(PROVIDERS.filter((p) => hasProviderKey(p.id)).map((p) => p.id));
-    setUsage(getUsage());
-    setLang(getLanguage());
-    setTone(getToneOverride());
-    setCharWarnState(getCharWarn());
-    setAutoSaveState(getAutoSave());
-    setJinaState(getJinaKey());
-    setCurrencyState(getCurrencyCode());
-    const limit = getMonthlyBudgetUsd();
-    setBudget(limit ? String(limit) : "");
-    setHardStop(isHardStopEnabled());
-    getBudgetStatus().then(setBudgetStatus).catch(() => {});
-    setVaultSupported(isVaultSupported());
-    setVaultEnabled(isVaultEnabled());
-    setVaultUnlocked(isVaultUnlocked());
-    if (typeof window !== "undefined") {
-      setSyncKeysState(window.localStorage.getItem("ados.sync_include_keys") === "1");
-    }
+    // Async status + live vault changes (external system → state in callbacks).
+    let cancelled = false;
+    getBudgetStatus()
+      .then((st) => {
+        if (!cancelled) setBudgetStatus(st);
+      })
+      .catch(() => {});
     const onVault = () => {
       setVaultEnabled(isVaultEnabled());
       setVaultUnlocked(isVaultUnlocked());
     };
     window.addEventListener("ados:vault-changed", onVault);
-    return () => window.removeEventListener("ados:vault-changed", onVault);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ados:vault-changed", onVault);
+    };
   }, []);
 
   function persistBudget(v: string) {
@@ -150,13 +157,6 @@ function SettingsInner() {
   }
 
   function persistJina(v: string) { setJinaState(v.trim()); setJinaKey(v.trim()); }
-  function persistSyncKeys(v: boolean) {
-    setSyncKeysState(v);
-    if (typeof window !== "undefined") {
-      if (v) window.localStorage.setItem("ados.sync_include_keys", "1");
-      else window.localStorage.removeItem("ados.sync_include_keys");
-    }
-  }
 
   async function saveProvider(p: Provider) {
     setError(null);
@@ -243,7 +243,7 @@ function SettingsInner() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ados-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `openadkit-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
@@ -268,7 +268,7 @@ function SettingsInner() {
     if (!confirm("This will erase ALL local data: keys, brains, history, settings. Continue?")) return;
     await wipeAll();
     localStorage.clear();
-    location.href = "/setup";
+    window.location.assign(new URL("/setup", window.location.origin).toString());
   }
 
   function persistLang(v: string) { setLang(v); setLanguage(v); }
@@ -508,12 +508,10 @@ function SettingsInner() {
             {/* Folder-sync only exists when the local sidecar is running.
                 In hosted mode this toggle has nothing to act on. */}
             {!isHostedMode() ? (
-              <ToggleRow
-                label="include API keys in folder sync"
-                desc="off by default · turn ON to make the data/ folder fully portable across machines (security tradeoff)"
-                v={syncKeys}
-                on={persistSyncKeys}
-              />
+              <p className="text-[11px] text-ink-muted">
+                Folder sync saves clients, history and settings. API keys are never written to the sync file —
+                re-enter them on a new machine (or use an encrypted backup).
+              </p>
             ) : null}
             <div className="pt-3 border-t border-base-700">
               <label className="label">jina reader api key (optional)</label>

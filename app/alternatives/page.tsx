@@ -342,7 +342,7 @@ export default function AlternativesPage() {
               What's the catch? How do you make money?
             </h3>
             <p className="text-sm text-ink-muted leading-relaxed">
-              There's no business model. OpenAdKit is open-source under MIT, built by Dicecodes
+              There's no business model. OpenAdKit is open-source under MIT, built by DiceCodes
               as a free tool for the marketing community. No upsells, no premium tier, no paid
               add-ons. The code is on GitHub — you can audit, fork, modify, self-host.
             </p>
@@ -383,7 +383,7 @@ export default function AlternativesPage() {
         <p className="text-[11px] font-mono uppercase tracking-ui-wide text-ink-faint">
           Last updated: May 2026 · Built by{" "}
           <a href="https://dicecodes.com" target="_blank" rel="noreferrer" className="hover:text-live">
-            Dicecodes
+            DiceCodes
           </a>
         </p>
       </footer>

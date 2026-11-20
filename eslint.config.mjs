@@ -20,12 +20,13 @@ const config = [
       "react/no-unescaped-entities": "off",
       // App Router uses <a> for cross-app and external links by design.
       "@next/next/no-html-link-for-pages": "off",
-      // React Compiler advisory rules introduced with eslint-config-next 16.
-      // Existing violations are tracked as warnings and cleaned up in the
-      // v2 bug-fix pass; new code should not add more.
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/purity": "warn",
-      "react-hooks/immutability": "warn",
+      // React Compiler rules introduced with eslint-config-next 16. All
+      // existing violations were fixed in the v2 bug-fix pass (lazy
+      // initializers, useSyncExternalStore for storage/event values, impure
+      // calls moved out of render), so they are enforced again.
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/purity": "error",
+      "react-hooks/immutability": "error",
     },
   },
 ];

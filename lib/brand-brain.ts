@@ -107,6 +107,10 @@ export function emptyBrandBrain(): BrandBrain {
  */
 export function normalizeBrandBrain(b: any): BrandBrain {
   const merged = { ...emptyBrandBrain(), ...(b ?? {}) };
+  // emptyBrandBrain() mints a random UUID; for a stored brain that lacks an id
+  // that meant a NEW id on every read, so sync saw a different brain each time
+  // and duplicated it. Derive a stable id from the brain's own identity.
+  if (!b?.id) merged.id = stableBrainId(b);
   // Shallow-merge lets an explicit `null` array field survive the `[]` default,
   // which then crashes any `.length`/`.map` downstream. Coerce every array-typed
   // field back to `[]` when it isn't an array.
@@ -125,6 +129,24 @@ export function normalizeBrandBrain(b: any): BrandBrain {
     if (!Array.isArray((merged as any)[f])) (merged as any)[f] = [];
   }
   return merged;
+}
+
+/** Deterministic UUID-shaped id from name + created_at (+ business name / URL
+ *  as tie-breakers). Same input → same id, across reads and devices. */
+function stableBrainId(b: any): string {
+  const seed = [b?.name ?? "", b?.business_name ?? "", b?.created_at ?? "", b?.website_url ?? ""].join("\u0001");
+  // Four independent 32-bit FNV-1a passes → 128 bits.
+  const hex = [0x811c9dc5, 0x01000193, 0x9e3779b9, 0x85ebca6b]
+    .map((basis, i) => {
+      let h = (basis ^ (i * 0x27d4eb2d)) >>> 0;
+      for (let j = 0; j < seed.length; j++) {
+        h ^= seed.charCodeAt(j);
+        h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      return h.toString(16).padStart(8, "0");
+    })
+    .join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 const list = (arr: string[] | null | undefined) => (arr && arr.length ? arr.join(" | ") : "(none specified)");

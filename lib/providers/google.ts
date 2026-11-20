@@ -1,8 +1,28 @@
-import { LLMError, SSE_EVENT_DELIMITER, classifyKeyCheckError, type KeyCheckResult, type LLMCallOptions, type LLMResult, type LLMUsage, type Provider, type StreamHandlers } from "./types";
+import { LLMError, classifyKeyCheckError, readSseJson, refusedError, truncatedError, type KeyCheckResult, type LLMCallOptions, type LLMResult, type LLMUsage, type Provider, type StreamHandlers } from "./types";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-function toGeminiBody(opts: LLMCallOptions) {
+/** Extra maxOutputTokens for models whose thinking can't be switched off, so
+ *  thinking tokens don't eat the JSON answer. */
+const THINKING_HEADROOM = 4096;
+
+/**
+ * Gemini thinking models spend `maxOutputTokens` on thinking FIRST, so a
+ * 3k-token budget on a short structured-copy request could come back empty or
+ * cut off mid-JSON. Keep thinking minimal and leave room where it can't be off.
+ *  - 2.5 Flash / Flash-Lite: thinkingBudget 0 disables thinking.
+ *  - 2.5 Pro: cannot disable; 128 is the minimum budget.
+ *  - Gemini 3.x: thinkingLevel replaces budgets; "low" is the cheapest level
+ *    every 3.x model accepts.
+ */
+function thinkingFor(model: string): { config?: Record<string, unknown>; headroom: number } {
+  if (/^gemini-2\.5-flash/.test(model)) return { config: { thinkingBudget: 0 }, headroom: 0 };
+  if (/^gemini-2\.5-pro/.test(model)) return { config: { thinkingBudget: 128 }, headroom: THINKING_HEADROOM };
+  if (/^gemini-3/.test(model)) return { config: { thinkingLevel: "low" }, headroom: THINKING_HEADROOM };
+  return { headroom: 0 };
+}
+
+export function buildGeminiBody(opts: LLMCallOptions) {
   const contents = opts.messages.map((m) => {
     const role = m.role === "assistant" ? "model" : "user";
     if (typeof m.content === "string") return { role, parts: [{ text: m.content }] };
@@ -15,17 +35,30 @@ function toGeminiBody(opts: LLMCallOptions) {
       ),
     };
   });
-  const body: any = {
-    contents,
-    generationConfig: {
-      maxOutputTokens: opts.maxTokens ?? 2048,
-      temperature: opts.temperature ?? 0.7,
-    },
+  const thinking = thinkingFor(opts.model);
+  const generationConfig: Record<string, unknown> = {
+    maxOutputTokens: (opts.maxTokens ?? 2048) + thinking.headroom,
+    temperature: opts.temperature ?? 0.7,
   };
+  if (thinking.config) generationConfig.thinkingConfig = thinking.config;
+  const body: any = { contents, generationConfig };
   if (opts.system) {
     body.systemInstruction = { parts: [{ text: opts.system }] };
   }
   return body;
+}
+
+const REFUSAL_FINISH = new Set(["SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY"]);
+
+/** Throw when a candidate's finishReason means the text is incomplete/blocked. */
+function checkFinish(evt: any): void {
+  const blockReason = evt?.promptFeedback?.blockReason;
+  if (blockReason) throw refusedError("google", `Gemini safety filter: ${blockReason}`);
+  const finishReason = evt?.candidates?.[0]?.finishReason;
+  if (finishReason === "MAX_TOKENS") throw truncatedError("google");
+  if (typeof finishReason === "string" && REFUSAL_FINISH.has(finishReason)) {
+    throw refusedError("google", `Gemini stopped: ${finishReason}`);
+  }
 }
 
 async function readError(res: Response): Promise<LLMError> {
@@ -75,12 +108,14 @@ async function call(opts: LLMCallOptions): Promise<LLMResult> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": opts.apiKey },
-    body: JSON.stringify(toGeminiBody(opts)),
+    body: JSON.stringify(buildGeminiBody(opts)),
     signal: opts.signal,
   });
   if (!res.ok) throw await readError(res);
   const body = await res.json();
+  checkFinish(body);
   const text = (body?.candidates?.[0]?.content?.parts ?? [])
+    .filter((p: any) => !p?.thought)
     .map((p: any) => p?.text ?? "")
     .join("");
   return { text, usage: usageFrom(body), modelId: opts.model };
@@ -91,73 +126,38 @@ async function stream(opts: LLMCallOptions, handlers: StreamHandlers): Promise<L
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": opts.apiKey },
-    body: JSON.stringify(toGeminiBody(opts)),
+    body: JSON.stringify(buildGeminiBody(opts)),
     signal: opts.signal,
   });
   if (!res.ok) throw await readError(res);
   if (!res.body) throw new LLMError("Streaming response missing body", undefined, "google");
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let full = "";
   let usage: LLMUsage | null = null;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      // Gemini terminates SSE events with CRLF CRLF, not LF LF. Splitting on
-      // "\n\n" therefore NEVER matched: every chunk stayed in the buffer, no
-      // event was ever parsed, and the stream produced zero deltas — so every
-      // Gemini generation came back empty and then failed schema validation.
-      // (The old "Gemini occasionally returns empty text" comment elsewhere in
-      // the codebase was this bug, misdiagnosed as intermittent.)
-      const events = buffer.split(SSE_EVENT_DELIMITER);
-      buffer = events.pop() ?? "";
-      for (const ev of events) {
-        const dataLines = ev.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).replace(/^ /, ""));
-        for (const raw of dataLines) {
-          const line = raw.trim();
-          if (!line || line === "[DONE]") continue;
-          try {
-            const evt = JSON.parse(line);
-            // Surface mid-stream failures instead of returning a truncated result.
-            if (evt?.error) {
-              throw new LLMError(evt.error?.message ?? "stream error", undefined, "google");
-            }
-            const blockReason = evt?.promptFeedback?.blockReason;
-            if (blockReason) {
-              throw new LLMError(`Blocked by Gemini safety filter: ${blockReason}`, undefined, "google");
-            }
-            const finishReason = evt?.candidates?.[0]?.finishReason;
-            if (finishReason === "SAFETY" || finishReason === "RECITATION") {
-              throw new LLMError(`Generation stopped: ${finishReason}`, undefined, "google");
-            }
-            const parts = evt?.candidates?.[0]?.content?.parts;
-            if (parts) {
-              for (const p of parts) {
-                if (typeof p?.text === "string" && p.text) {
-                  full += p.text;
-                  handlers.onDelta?.(p.text);
-                }
-              }
-            }
-            const u = usageFrom(evt);
-            if (u) {
-              usage = u;
-              handlers.onUsage?.(u);
-            }
-          } catch (err) {
-            if (err instanceof LLMError) throw err;
-          }
+  // Gemini terminates SSE events with CRLF CRLF; readSseJson handles both
+  // delimiters and the final un-terminated event.
+  await readSseJson(res.body, (evt) => {
+    // Surface mid-stream failures instead of returning a truncated result.
+    if (evt?.error) {
+      throw new LLMError(evt.error?.message ?? "stream error", undefined, "google");
+    }
+    const parts = evt?.candidates?.[0]?.content?.parts;
+    if (parts) {
+      for (const p of parts) {
+        // Skip thought summaries if a model ever returns them.
+        if (typeof p?.text === "string" && p.text && !p.thought) {
+          full += p.text;
+          handlers.onDelta?.(p.text);
         }
       }
     }
-  } finally {
-    try { await reader.cancel(); } catch {}
-  }
+    const u = usageFrom(evt);
+    if (u) {
+      usage = u;
+      handlers.onUsage?.(u);
+    }
+    checkFinish(evt);
+  });
   handlers.onDone?.(full);
   return { text: full, usage, modelId: opts.model };
 }

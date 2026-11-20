@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Save, Loader2, Globe, RefreshCw } from "lucide-react";
 import { emptyBrandBrain, type BrandBrain } from "@/lib/brand-brain";
@@ -693,10 +693,12 @@ function Field({
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
+  const id = useId();
   return (
     <div>
-      <label className="label">{label}</label>
+      <label className="label" htmlFor={id}>{label}</label>
       <input
+        id={id}
         className="input-base"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -715,10 +717,12 @@ function ListInput({
   value: string[];
   onChange: (v: string) => void;
 }) {
+  const id = useId();
   return (
     <div>
-      <label className="label">{label} <span className="text-zinc-600 normal-case">· one per line</span></label>
+      <label className="label" htmlFor={id}>{label} <span className="text-zinc-600 normal-case">· one per line</span></label>
       <textarea
+        id={id}
         rows={3}
         className="input-base font-mono text-xs"
         value={joinList(value)}

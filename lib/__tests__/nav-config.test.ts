@@ -19,6 +19,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { NAV_GROUPS } from "../../components/nav-config";
+import { suggestNextSteps, NON_FIELD_CARRY_KEYS } from "../next-steps";
 
 const APP_DIR = path.resolve(__dirname, "..", "..", "app");
 
@@ -103,4 +104,42 @@ describe("nav-config: hygiene", () => {
   it("has no empty groups", () => {
     for (const g of NAV_GROUPS) expect(g.items.length, `"${g.title}" is empty`).toBeGreaterThan(0);
   });
+});
+
+describe("next-steps: every carried query pre-selects a value the target actually offers", () => {
+  // Same class of bug as the sidebar: lib/next-steps.ts used to send Google
+  // RSA users to Bid Strategy with platform=Google (not an option there).
+  const toolRoutes = ["generate", "optimize"].flatMap((top) =>
+    fs
+      .readdirSync(path.join(APP_DIR, top), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && fs.existsSync(path.join(APP_DIR, top, d.name, "page.tsx")))
+      .map((d) => `/${top}/${d.name}`)
+  );
+
+  it("found the tool routes", () => {
+    expect(toolRoutes.length).toBeGreaterThan(20);
+  });
+
+  for (const route of toolRoutes) {
+    it(`${route} → next steps`, () => {
+      const own = fs.readFileSync(pageFileFor(route)!, "utf8");
+      // Exercise each platform the source tool itself offers, plus "none".
+      const samples: (string | undefined)[] = [undefined, ...(optionValuesFor(own, "platform") ?? [])];
+      for (const platform of samples) {
+        const steps = suggestNextSteps({ route, ad_id: "ad-1", input: platform ? { platform } : {} });
+        for (const s of steps) {
+          const target = pageFileFor(s.href);
+          expect(target, `${route} → ${s.href} has no page`).not.toBeNull();
+          if (!s.carry) continue;
+          const source = fs.readFileSync(target!, "utf8");
+          for (const [field, value] of Object.entries(s.carry)) {
+            if (NON_FIELD_CARRY_KEYS.has(field)) continue;
+            const options = optionValuesFor(source, field);
+            expect(options, `${route} → ${s.href}?${field}= : target has no "${field}" field`).not.toBeNull();
+            expect(options, `${route} → ${s.href}?${field}=${value} not in: ${options?.join(" | ")}`).toContain(value);
+          }
+        }
+      }
+    });
+  }
 });

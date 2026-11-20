@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { PLATFORM_HUBS } from "@/lib/platform-hubs";
 import PlatformClient from "./Client";
 
@@ -9,6 +10,20 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
-export default function Page({ params }: { params: { platform: string } }) {
-  return <PlatformClient platform={params.platform} />;
+type Params = Promise<{ platform: string }>;
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { platform } = await params;
+  const hub = PLATFORM_HUBS[platform];
+  if (!hub) return {};
+  return {
+    title: `${hub.name} Ads — Formats, Specs & Best Practices`,
+    description: `${hub.tagline} ${hub.intro}`.slice(0, 300),
+    alternates: { canonical: `/platforms/${hub.slug}` },
+  };
+}
+
+export default async function Page({ params }: { params: Params }) {
+  const { platform } = await params;
+  return <PlatformClient platform={platform} />;
 }

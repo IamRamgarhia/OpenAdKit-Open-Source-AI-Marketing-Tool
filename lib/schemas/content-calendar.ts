@@ -15,26 +15,27 @@
  * else is optional because the renderer null-checks it.
  */
 import { z } from "zod";
+import { tolerant, ModelNumber } from "./tolerant";
 
 const Post = z
   .object({
-    day: z.union([z.number(), z.string()]),
+    day: z.union([ModelNumber, z.string()]),
     platform: z.string(),
     format: z.string().optional(),
     pillar: z.string().optional(),
     hook: z.string().optional(),
     caption: z.string().optional(),
-    caption_chars: z.number().optional(),
+    caption_chars: ModelNumber.optional(),
     hashtags: z.array(z.string()).optional(),
     best_post_time_local: z.string().optional(),
     engagement_hook: z.string().optional(),
     visual_brief: z.string().optional(),
-    video_overlay_text: z.string().optional(),
+    video_overlay_text: z.string().nullish(),
     recommended_ai_tool: z
       .object({
         name: z.string().optional(),
         tier: z.string().optional(),
-        url: z.string().optional(),
+        url: z.string().nullish(),
         why_this_tool: z.string().optional(),
       })
       .partial()
@@ -42,14 +43,14 @@ const Post = z
   })
   .passthrough();
 
-export const ContentCalendarSchema = z
+export const ContentCalendarSchema = tolerant(z
   .object({
     calendar: z.array(Post).min(1),
     weekly_summary: z
       .object({
-        total_posts: z.number().optional(),
-        by_platform: z.array(z.object({ platform: z.string(), count: z.number() })).optional(),
-        by_format: z.array(z.object({ format: z.string(), count: z.number() })).optional(),
+        total_posts: ModelNumber.optional(),
+        by_platform: z.array(z.object({ platform: z.string(), count: ModelNumber })).optional(),
+        by_format: z.array(z.object({ format: z.string(), count: ModelNumber })).optional(),
       })
       .partial()
       .optional(),
@@ -57,7 +58,7 @@ export const ContentCalendarSchema = z
       .array(
         z.object({
           pillar: z.string(),
-          days: z.array(z.union([z.number(), z.string()])).optional(),
+          days: z.array(z.union([ModelNumber, z.string()])).optional(),
         })
       )
       .optional(),
@@ -71,4 +72,4 @@ export const ContentCalendarSchema = z
       .optional(),
     spare_hooks_for_underperformers: z.array(z.string()).optional(),
   })
-  .passthrough();
+  .passthrough());

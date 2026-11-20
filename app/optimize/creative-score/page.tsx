@@ -70,7 +70,9 @@ function ScoreOutput({ json }: { json: any }) {
           <div>
             <Pill text={json?.tier ?? "—"} tone={tierTone[tier] ?? "default"} />
             {json?.predicted_ctr_band ? (
-              <div className="text-[11px] text-ink-muted mt-2 font-mono">predicted CTR: {json.predicted_ctr_band}</div>
+              <div className="text-[11px] text-ink-muted mt-2 font-mono" title="Model judgement, not a forecast — anchor to your own account data.">
+                CTR band · AI estimate (directional): {String(json.predicted_ctr_band)}
+              </div>
             ) : null}
           </div>
           <div className="flex-1 min-w-[200px]">
