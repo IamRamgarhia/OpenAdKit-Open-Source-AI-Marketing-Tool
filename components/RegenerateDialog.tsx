@@ -263,7 +263,7 @@ function Pane({ label, sub, text, highlight }: { label: string; sub: string; tex
 function Shell({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 bg-base-950/80 backdrop-blur-sm grid place-items-center p-4"
+      className="fixed inset-0 z-50 bg-base-950/80 backdrop-blur-xs grid place-items-center p-4"
       role="dialog"
       aria-modal="true"
       aria-label={title}

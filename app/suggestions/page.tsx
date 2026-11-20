@@ -205,7 +205,7 @@ function Inner() {
       {schemaRecovered && parsed ? (
         <div
           role="status"
-          className="text-[11px] font-mono uppercase tracking-ui-mega text-live border border-live/30 bg-live/[0.04] px-2 py-1 inline-block mb-3"
+          className="text-[11px] font-mono uppercase tracking-ui-mega text-live border border-live/30 bg-live/4 px-2 py-1 inline-block mb-3"
           title="The model's first reply didn't match the expected structure, so we automatically re-asked it to correct the JSON. Content below was returned by the second attempt."
         >
           ↻ ai output auto-corrected (schema retry)

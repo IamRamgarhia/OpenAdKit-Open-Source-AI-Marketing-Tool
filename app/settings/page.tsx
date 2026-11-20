@@ -435,9 +435,9 @@ function SettingsInner() {
                       aria-live="polite"
                       className={`mt-3 flex items-start gap-2 border px-3 py-2 text-[12px] leading-relaxed ${
                         verify[p.id]!.ok
-                          ? "border-pos/40 bg-pos/[0.06] text-pos"
+                          ? "border-pos/40 bg-pos/6 text-pos"
                           : verify[p.id]!.authenticated
-                            ? "border-live/40 bg-live/[0.06] text-live"
+                            ? "border-live/40 bg-live/6 text-live"
                             : "border-neg/40 bg-neg/5 text-neg"
                       }`}
                     >
@@ -598,7 +598,7 @@ function SettingsInner() {
           <section className="border border-base-600 bg-base-900/40 p-5 space-y-3">
             <h2 className="text-[10px] font-mono uppercase tracking-ui-mega text-ink-muted">data</h2>
             {isHostedMode() ? (
-              <div className="border border-info/40 bg-info/[0.06] px-3 py-2 text-[11px] text-info leading-relaxed">
+              <div className="border border-info/40 bg-info/6 px-3 py-2 text-[11px] text-info leading-relaxed">
                 <strong>Hosted mode:</strong> brand brains + history live only in this browser's
                 IndexedDB. Clearing site data wipes everything. Export below and re-import on
                 a new browser / device to move your work. Want auto-backup to disk?{" "}

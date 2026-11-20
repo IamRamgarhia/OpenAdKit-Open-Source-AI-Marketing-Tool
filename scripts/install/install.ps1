@@ -87,12 +87,20 @@ Write-OK "Source ready at $Target"
 
 # --- Step 4: npm install ---
 Write-Step "Installing dependencies (first run can take a few minutes)"
-& npm install --no-audit --no-fund
+& npm.cmd install --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) {
     Write-Err "npm install failed. Read the error above and try again."
     exit 1
 }
 Write-OK "Dependencies installed"
+
+Write-Step "Building the production app (about a minute)"
+& npm.cmd run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Err "Build failed. Read the error above and try again."
+    exit 1
+}
+Write-OK "Build complete"
 
 # --- Step 5: Pick a port ---
 Write-Step "Choose a port for the web app"

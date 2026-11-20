@@ -95,6 +95,10 @@ step "Installing dependencies (first run can take a few minutes)"
 npm install --no-audit --no-fund
 ok "Dependencies installed"
 
+step "Building the production app (about a minute)"
+npm run build
+ok "Build complete"
+
 # --- Step 5: Pick a port ---
 step "Choose a port for the web app"
 echo "Common ports: 3000, 3005, 4000, 8080. Press Enter for 3005."

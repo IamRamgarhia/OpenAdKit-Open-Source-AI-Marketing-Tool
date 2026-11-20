@@ -12,8 +12,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.1.0-ffb020.svg)](CHANGELOG.md)
-[![Node 18.17+](https://img.shields.io/badge/node-%E2%89%A518.17-brightgreen.svg)](https://nodejs.org)
-[![Next.js 14](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org)
+[![Node 20.9+](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg)](https://nodejs.org)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 [![Built by Dicecodes](https://img.shields.io/badge/built%20by-Dicecodes-ffb020.svg)](https://dicecodes.com)
 [![Browser-only](https://img.shields.io/badge/browser--only-yes-blue.svg)](#privacy--security)
 [![BYOK](https://img.shields.io/badge/BYOK-9%20providers-purple.svg)](#9-ai-providers-supported)
@@ -561,7 +561,7 @@ openadkit/
 
 ## Tech stack
 
-- **Next.js 14** (App Router, fully static-prerendered)
+- **Next.js 16** (App Router, Turbopack, standalone production server) · **React 19** · **Tailwind CSS 4**
 - **TypeScript** strict
 - **Tailwind CSS** + hand-rolled "Trading-Terminal × Editorial" design system
 - **Dexie** for IndexedDB · **localStorage** for settings
@@ -599,7 +599,7 @@ Most problems come down to one of four things: a port already in use, Node missi
 
 **Symptom:** Double-clicking `OpenAdKit` does nothing, or the cmd window flashes and disappears.
 
-1. Open a terminal in the install folder and run `node --version`. If it reports anything below **v20.0.0** or "command not found," install Node 20+ from <https://nodejs.org/en/download>.
+1. Open a terminal in the install folder and run `node --version`. If it reports anything below **v20.0.0** or "command not found," install Node 22 LTS or newer from <https://nodejs.org/en/download>.
 2. Run `scripts\start.bat` (Windows) or `bash scripts/start.sh` (Mac/Linux) directly — the window stays open and prints the real error.
 3. If you see `Input Error: There is no script engine for file extension ".vbs"`, your Windows Script Host is disabled. The current `OpenAdKit.bat` uses PowerShell instead — make sure you have the latest version from this repo.
 
@@ -729,7 +729,7 @@ The Service Worker caches the app shell + all 56 routes, so the UI loads offline
 ChatGPT/Claude are general models — they'll write ad copy if you prompt them, but you do all the framework selection, character-limit validation, platform-specific rules, and JSON structuring yourself. OpenAdKit wraps the model with **30+ task-specific prompts** that bake in Schwartz's awareness ladder, Google RSA character limits, Meta primary-text rules, TikTok hook formulas, 4 U's headline scoring, and 20 years of direct-response copywriting patterns. You paste a URL + a goal; OpenAdKit writes you a launch-ready campaign.
 
 ### Is the code production-quality?
-Production build is **56 static routes · 87 KB shared JS · 130-160 KB first-load JS per route**. Strict TypeScript across the entire codebase. Vitest unit tests for the highest-risk pure functions (smart-fill, brand-brain normalization, framework stack, next-steps routing, LLM helpers — 43 tests total). CI runs typecheck + tests + production build + lint on Node 18 / 20 / 22 for every PR.
+Production build is **56 static routes · 87 KB shared JS · 130-160 KB first-load JS per route**. Strict TypeScript across the entire codebase. Vitest unit tests for the highest-risk pure functions (smart-fill, brand-brain normalization, framework stack, next-steps routing, LLM helpers — 43 tests total). CI runs typecheck + tests + production build + lint on Node 22 / 24 / 26 for every PR, plus a real-browser smoke suite against the production server.
 
 ### How do I contribute?
 See [CONTRIBUTING.md](CONTRIBUTING.md). Most generators are a single prompt file + a single page that imports `GeneratorShell`. A typical new-generator PR is 30-60 lines of code and 30-60 minutes of work.

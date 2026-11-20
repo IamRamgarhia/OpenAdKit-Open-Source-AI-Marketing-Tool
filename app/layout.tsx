@@ -12,18 +12,18 @@ import { VaultGate } from "@/components/VaultGate";
 
 const sans = Manrope({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-manrope",
   display: "swap",
 });
 const mono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-jetbrains",
   display: "swap",
 });
 const display = Instrument_Serif({
   subsets: ["latin"],
   weight: "400",
-  variable: "--font-display",
+  variable: "--font-instrument",
   display: "swap",
 });
 
@@ -284,7 +284,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             hidden until focused, then jumps past the sidebar / mobile nav. */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-base-900 focus:text-ink focus:px-3 focus:py-2 focus:border focus:border-live"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-100 focus:bg-base-900 focus:text-ink focus:px-3 focus:py-2 focus:border focus:border-live"
         >
           Skip to main content
         </a>

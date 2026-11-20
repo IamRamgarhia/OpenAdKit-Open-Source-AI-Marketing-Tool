@@ -4,6 +4,35 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 
 ## [Unreleased]
 
+### Changed — platform upgrade (v2 phase 1)
+- **Next.js 14.2.5 → 16.4.6** (Turbopack). Closes a critical Next.js advisory
+  and the high-severity zod / postcss / nanoid / source-map-js advisories:
+  `npm audit` now reports 0 vulnerabilities. Production build time 44s → ~23s.
+- **React 19, Tailwind CSS 4, Zod 4, Dexie 4.4, Zustand 5, lucide-react 1,
+  ESLint 9 (flat config), Vitest 5, TypeScript 5.9.** Node 20.9+ required;
+  `.nvmrc`, Docker and CI move to Node 24 LTS (CI matrix 22 / 24 / 26).
+- **The local app now runs the production server, not `next dev`.**
+  `output: "standalone"` + `scripts/prepare-standalone.cjs`; the launcher
+  sidecar starts `.next/standalone/server.js` (≈1s to ready) and only falls
+  back to dev mode when no build exists or `OPENADKIT_WEB_MODE=dev` is set.
+  Launchers and one-line installers run `npm run build` once. `npm start`
+  serves the standalone build.
+- Docker image is built from the standalone output (no dev dependencies,
+  correct file ownership for the non-root user).
+
+### Fixed
+- **Launcher "Restart" killed the new web server on macOS/Linux.** A delayed
+  SIGKILL aimed at the old process hit the replacement, and the old process's
+  exit handler marked the new one as down. Stop/restart now track the exact
+  child and wait for its real exit.
+- **SIGINT/SIGTERM left the web server running** (the lock handler exited
+  before cleanup ran). One shutdown path now stops the web child first.
+- **Every build dirtied the git tree** (`public/sw.js` stamped in place, OG
+  image re-rendered), which made the launcher's auto-update refuse to run.
+  The service worker is now versioned through its registration URL, and the
+  OG render is a manual `npm run og:render` step.
+- Brand logo icons removed from lucide 1.x replaced with neutral icons.
+
 ## [1.1.0] — 2026-08-01
 
 ### Fixed — critical

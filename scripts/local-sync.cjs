@@ -342,8 +342,49 @@ function tryProbeWeb(port, cb) {
   req.end();
 }
 
+/**
+ * Decide how to run the web app. Production (`node server.js` from the
+ * standalone bundle) is the default: it starts in ~1s and uses a fraction of
+ * the memory of `next dev`. Dev mode is only used when no build exists or when
+ * OPENADKIT_WEB_MODE=dev is set (contributors).
+ *   - Packaged installs: PROJECT_ROOT is the standalone payload → ./server.js
+ *   - Git checkouts after `npm run build`: ./.next/standalone/server.js
+ */
+function resolveWebCommand(port) {
+  const isWin = process.platform === "win32";
+  const wantDev = String(process.env.OPENADKIT_WEB_MODE || "").toLowerCase() === "dev";
+  if (!wantDev) {
+    const candidates = [
+      path.join(PROJECT_ROOT, "server.js"),
+      path.join(PROJECT_ROOT, ".next", "standalone", "server.js"),
+    ];
+    for (const server of candidates) {
+      if (fs.existsSync(server)) {
+        return {
+          mode: "production",
+          cmd: process.execPath,
+          args: [server],
+          cwd: path.dirname(server),
+          shell: false,
+          env: { NODE_ENV: "production", PORT: String(port), HOSTNAME: "127.0.0.1" },
+        };
+      }
+    }
+  }
+  return {
+    mode: "dev",
+    cmd: isWin ? "npx.cmd" : "npx",
+    args: ["next", "dev", "-p", String(port)],
+    cwd: PROJECT_ROOT,
+    shell: isWin,
+    env: { PORT: String(port) },
+  };
+}
+let webMode = "down";
+const lastLines = (s) => s.trim().split(/\r?\n/).slice(-3).join("\n");
+
 function startWeb() {
-  if (webChild && !webChild.killed) {
+  if (webChild) {
     return { ok: false, error: "already running" };
   }
   const env = readEnvLocal();
@@ -352,43 +393,53 @@ function startWeb() {
   webStartedAt = Date.now();
   webLastLog = "";
 
-  const isWin = process.platform === "win32";
-  const npx = isWin ? "npx.cmd" : "npx";
-  webChild = spawn(npx, ["next", "dev", "-p", String(webPort)], {
-    cwd: PROJECT_ROOT,
-    env: { ...process.env, PORT: String(webPort) },
-    shell: isWin,
+  const run = resolveWebCommand(webPort);
+  webMode = run.mode;
+  const child = spawn(run.cmd, run.args, {
+    cwd: run.cwd,
+    env: { ...process.env, ...run.env },
+    shell: run.shell,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  webChild = child;
+
+  child.stdout.on("data", (b) => {
+    const s = b.toString();
+    process.stdout.write(`[web] ${s}`);
+    webLastLog = lastLines(s);
+  });
+  child.stderr.on("data", (b) => {
+    const s = b.toString();
+    process.stderr.write(`[web-err] ${s}`);
+    webLastLog = lastLines(s);
+  });
+  child.on("exit", (code) => {
+    console.log(`[openadkit] web (${run.mode}) exited with code ${code}`);
+    // Only clear state if this is still the tracked child. A restart may have
+    // already spawned a replacement; the old child's exit must not mark the
+    // new one as down.
+    if (webChild === child) {
+      webChild = null;
+      webStatus = "down";
+    }
   });
 
-  webChild.stdout.on("data", (b) => {
-    const s = b.toString();
-    process.stdout.write(`[next] ${s}`);
-    webLastLog = s.trim().split("\n").slice(-3).join("\n");
-  });
-  webChild.stderr.on("data", (b) => {
-    const s = b.toString();
-    process.stderr.write(`[next-err] ${s}`);
-    webLastLog = s.trim().split("\n").slice(-3).join("\n");
-  });
-  webChild.on("exit", (code) => {
-    console.log(`[openadkit] next dev exited with code ${code}`);
-    webChild = null;
-    webStatus = "down";
-  });
-
-  // Poll for "up"
+  // Poll for "up". Production boots in about a second; dev can take a while
+  // on first compile.
+  const deadlineMs = run.mode === "production" ? 30_000 : 90_000;
   const tick = () => {
-    if (!webChild || webChild.killed) return;
+    if (webChild !== child) return;
     tryProbeWeb(webPort, (alive) => {
+      if (webChild !== child) return;
       if (alive) { webStatus = "up"; return; }
-      if (Date.now() - webStartedAt < 60_000) setTimeout(tick, 800);
+      if (Date.now() - webStartedAt < deadlineMs) setTimeout(tick, 500);
       else webStatus = "down";
     });
   };
-  setTimeout(tick, 1500);
+  setTimeout(tick, run.mode === "production" ? 400 : 1500);
 
-  return { ok: true, pid: webChild.pid, port: webPort };
+  return { ok: true, pid: child.pid, port: webPort, mode: run.mode };
 }
 
 /**
@@ -483,30 +534,21 @@ function extractMetadata(html, baseUrl) {
  * stale (which happens if `next build` ever runs over a `next dev` working
  * directory). User-triggered from the launcher control panel.
  */
-function cleanRebuild() {
-  // Stop the running web first.
-  if (webChild && !webChild.killed) {
-    try {
-      if (process.platform === "win32") {
-        spawn("taskkill", ["/pid", String(webChild.pid), "/F", "/T"]);
-      } else {
-        webChild.kill("SIGTERM");
-      }
-    } catch { /* ignore */ }
-    webChild = null;
-  }
-  webStatus = "down";
-
-  // Recursively delete .next/. Use fs.rm with force+recursive (Node 14+).
+async function cleanRebuild() {
+  await stopWeb();
   const nextDir = path.join(PROJECT_ROOT, ".next");
   try {
-    if (fs.existsSync(nextDir)) {
-      fs.rmSync(nextDir, { recursive: true, force: true });
-    }
-    return { ok: true, deleted: true };
+    if (fs.existsSync(nextDir)) fs.rmSync(nextDir, { recursive: true, force: true });
   } catch (e) {
     return { ok: false, error: String(e?.message ?? e) };
   }
+  // Git checkouts rebuild the production bundle; packaged installs have no
+  // .next to rebuild (the payload is prebuilt) and just restart.
+  if (fs.existsSync(path.join(PROJECT_ROOT, "node_modules", "next"))) {
+    const r = await runCommand("npm", ["run", "build"], "npm run build");
+    if (!r.ok) return { ok: false, error: "npm run build failed — see /update/status log" };
+  }
+  return { ok: true, deleted: true };
 }
 
 // --- Update helpers (auto-update from GitHub) ---
@@ -662,10 +704,9 @@ async function applyUpdate() {
   appendUpdateLog(`Starting update on branch "main" from sha ${local.sha.slice(0, 7)}`);
 
   // R7 step 1: stop web
-  if (webChild && !webChild.killed) {
+  if (webChild) {
     appendUpdateLog("Stopping web app…");
-    stopWeb();
-    await new Promise((r) => setTimeout(r, 600));
+    await stopWeb();
   }
 
   // R7 step 2: fetch
@@ -680,14 +721,9 @@ async function applyUpdate() {
   r = await runCommand("npm", ["install", "--no-audit", "--no-fund"], "npm install");
   if (!r.ok) return finishUpdate(false, "npm install failed");
 
-  // R7 step 5: wipe .next/
-  try {
-    const nextDir = path.join(PROJECT_ROOT, ".next");
-    if (fs.existsSync(nextDir)) fs.rmSync(nextDir, { recursive: true, force: true });
-    appendUpdateLog("✓ wiped .next/ build cache");
-  } catch (e) {
-    return finishUpdate(false, `Failed to wipe .next: ${e?.message ?? e}`);
-  }
+  // R7 step 5: production build (the web app runs from .next/standalone)
+  r = await runCommand("npm", ["run", "build"], "npm run build");
+  if (!r.ok) return finishUpdate(false, "npm run build failed");
 
   // R7 step 6: restart web
   appendUpdateLog("Starting web app on fresh build…");
@@ -706,21 +742,38 @@ function finishUpdate(ok, errMsg) {
   return { ok, error: errMsg };
 }
 
+/**
+ * Stop the tracked web child. Returns a promise that resolves once THAT child
+ * has exited (or after a timeout). The child is captured locally so a delayed
+ * SIGKILL can never hit a replacement spawned by a restart.
+ */
 function stopWeb() {
-  if (!webChild || webChild.killed) {
+  const child = webChild;
+  if (!child) {
     webStatus = "down";
-    return { ok: true, was_running: false };
+    return Promise.resolve({ ok: true, was_running: false });
   }
   webStatus = "stopping";
-  try {
-    if (process.platform === "win32") {
-      spawn("taskkill", ["/pid", String(webChild.pid), "/F", "/T"]);
-    } else {
-      webChild.kill("SIGTERM");
-      setTimeout(() => { try { webChild?.kill("SIGKILL"); } catch {} }, 2000);
-    }
-  } catch (e) { /* ignore */ }
-  return { ok: true, was_running: true };
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (webChild === child) { webChild = null; webStatus = "down"; }
+      resolve({ ok: true, was_running: true });
+    };
+    if (child.exitCode !== null || child.signalCode !== null) return finish();
+    child.once("exit", finish);
+    try {
+      if (process.platform === "win32") {
+        spawn("taskkill", ["/pid", String(child.pid), "/F", "/T"], { windowsHide: true });
+      } else {
+        child.kill("SIGTERM");
+        setTimeout(() => { if (!done) { try { child.kill("SIGKILL"); } catch {} } }, 3000);
+      }
+    } catch { /* ignore */ }
+    setTimeout(finish, 8000);
+  });
 }
 
 // --- HTTP server ---
@@ -809,6 +862,7 @@ const server = http.createServer(async (req, res) => {
           sync_port: PORT,
           web_uptime_ms: webStartedAt ? Date.now() - webStartedAt : 0,
           web_last_log: webLastLog,
+          web_mode: webMode,
         });
       });
       return;
@@ -818,21 +872,11 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, startWeb());
     }
     if (req.method === "POST" && url === "/web/stop") {
-      return json(res, 200, stopWeb());
+      return stopWeb().then((r) => json(res, 200, r));
     }
     if (req.method === "POST" && url === "/web/restart") {
-      stopWeb();
-      // Windows taskkill is fire-and-forget — the child only nulls out on its
-      // own `exit` event. Poll until that fires (up to 8s) before restarting,
-      // otherwise the new startWeb() sees the old child still alive and bails
-      // with "already running". (Audit finding #35.)
-      (async () => {
-        const deadline = Date.now() + 8000;
-        while (webChild && !webChild.killed && Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, 100));
-        }
-        startWeb();
-      })();
+      // Wait for the old child's real exit before spawning the replacement.
+      stopWeb().then(() => startWeb());
       return json(res, 200, { ok: true });
     }
     // --- Update endpoints (auto-update from GitHub main) ---
@@ -1017,17 +1061,18 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url === "/web/rebuild") {
       // Clean rebuild: stop web → wipe .next → start fresh. Fixes
       // "CSS not loading / page renders unstyled" caused by stale chunk refs.
-      const result = cleanRebuild();
-      if (!result.ok) return json(res, 500, result);
-      // Wait a beat for the FS to settle then restart.
-      setTimeout(() => startWeb(), 800);
+      // Runs in the background (a production build takes ~30s); progress is
+      // visible in /update/status's log.
+      cleanRebuild().then((r) => {
+        if (r.ok) startWeb();
+        else webLastLog = r.error;
+      });
       return json(res, 200, { ok: true, deleted_next_cache: true, restart_initiated: true });
     }
     if (req.method === "POST" && url === "/quit") {
       // Stop the web child, ack to the caller, then exit the sidecar.
-      stopWeb();
       json(res, 200, { ok: true, bye: true });
-      setTimeout(() => { try { server.close(); } catch {} process.exit(0); }, 250);
+      shutdown();
       return;
     }
 
@@ -1127,9 +1172,9 @@ function acquireSingletonLock() {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(LOCK_FILE, String(process.pid), "utf8");
     const cleanup = () => { try { fs.unlinkSync(LOCK_FILE); } catch {} };
+    // Signal handling lives in shutdown() below so the web child is always
+    // stopped first; the exit hook removes the lock on every exit path.
     process.on("exit", cleanup);
-    process.on("SIGINT", () => { cleanup(); process.exit(0); });
-    process.on("SIGTERM", () => { cleanup(); process.exit(0); });
   } catch (e) {
     // Non-fatal — if the lockfile can't be created, fall through and let
     // listen() fail with EADDRINUSE if there really is a duplicate.
@@ -1168,7 +1213,7 @@ server.listen(PORT, "127.0.0.1", () => {
   // panel. Opt-out via ADFORGE_NO_AUTOSTART=1 for power users who want to
   // edit code before the dev server boots.
   if (process.env.ADFORGE_NO_AUTOSTART !== "1") {
-    console.log("[openadkit] auto-starting Next dev server (set ADFORGE_NO_AUTOSTART=1 to disable)");
+    console.log("[openadkit] auto-starting web app (set ADFORGE_NO_AUTOSTART=1 to disable)");
     const res = startWeb();
     if (!res.ok) {
       console.warn(`[openadkit] auto-start failed (non-fatal): ${res.error}. Use the launcher to retry.`);
@@ -1176,5 +1221,18 @@ server.listen(PORT, "127.0.0.1", () => {
   }
 });
 
-process.on("SIGINT", () => { stopWeb(); console.log("[openadkit] shutting down"); server.close(() => process.exit(0)); });
-process.on("SIGTERM", () => { stopWeb(); server.close(() => process.exit(0)); });
+/** Stop the web child, close the server and exit. Idempotent. */
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log("[openadkit] shutting down");
+  // Hard deadline so a stuck child can never keep the sidecar alive.
+  setTimeout(() => process.exit(0), 10_000).unref();
+  stopWeb().finally(() => {
+    try { server.close(); } catch {}
+    process.exit(0);
+  });
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

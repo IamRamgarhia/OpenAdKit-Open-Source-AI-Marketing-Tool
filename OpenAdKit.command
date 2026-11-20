@@ -28,6 +28,16 @@ if [ ! -d node_modules ]; then
   npm install --no-audit --no-fund
 fi
 
+# 3. Production build (once, and again after updates). The web app runs from
+# .next/standalone: starts in about a second, far lighter than `next dev`.
+if [ ! -f .next/standalone/server.js ]; then
+  echo
+  echo "=================================================="
+  echo " Building OpenAdKit (one time, about a minute)"
+  echo "=================================================="
+  npm run build
+fi
+
 # .env.local is NOT seeded here — the port resolver below detects first-run
 # (no .env.local) and asks the OS for ports the kernel just confirmed are
 # free. That skips the contested 3000-range entirely so we never collide

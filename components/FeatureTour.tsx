@@ -84,8 +84,8 @@ export function FeatureTour() {
   const Icon = slide.icon;
 
   return (
-    <div className="fixed inset-0 z-50 bg-base-950/80 backdrop-blur grid place-items-center p-4">
-      <div ref={dialogRef} tabIndex={-1} className="border border-live/40 bg-base-900 w-full max-w-lg animate-fade-up outline-none">
+    <div className="fixed inset-0 z-50 bg-base-950/80 backdrop-blur-sm grid place-items-center p-4">
+      <div ref={dialogRef} tabIndex={-1} className="border border-live/40 bg-base-900 w-full max-w-lg animate-fade-up outline-hidden">
         <div className="flex items-center justify-between border-b border-base-600 px-5 py-3">
           <span className="text-[10px] font-mono uppercase tracking-ui-mega text-live">{slide.label}</span>
           <button onClick={dismiss} className="text-ink-subtle hover:text-ink" aria-label="Close tour">

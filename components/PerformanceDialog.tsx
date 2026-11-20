@@ -56,7 +56,7 @@ export function PerformanceDialog({ ad, onClose }: { ad: GeneratedAd; onClose: (
   const roas = sp > 0 ? rv / sp : 0;
 
   return (
-    <div className="fixed inset-0 z-[55] bg-base-950/80 backdrop-blur grid place-items-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-55 bg-base-950/80 backdrop-blur-sm grid place-items-center p-4" onClick={onClose}>
       <div className="w-full max-w-lg bg-base-900 border border-base-600" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-base-600">
           <div className="flex items-center gap-2 text-ink">

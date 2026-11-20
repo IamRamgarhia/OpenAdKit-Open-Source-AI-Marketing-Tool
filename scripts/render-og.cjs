@@ -6,7 +6,8 @@
  * LinkedIn accept SVG, but for max compatibility we ship both — SVG for
  * crisp resolution-independent rendering, PNG for OG consumers that need
  * raster. Run via `node scripts/render-og.cjs` whenever og-image.svg
- * changes. Wired into `npm run build` via the `prebuild` hook in package.json.
+ * changes (`npm run og:render`). Not part of `npm run build`: it needs a
+ * headless browser, which end-user installs and Docker images do not have.
  *
  * Uses Playwright (already a dev-dep for smoke tests) so no extra dependency.
  */

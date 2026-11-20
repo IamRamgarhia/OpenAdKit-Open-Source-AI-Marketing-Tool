@@ -771,7 +771,7 @@ function PhaseCard({ phase, onRetry }: { phase: Phase; onRetry?: () => void }) {
             <div className="flex justify-end">
               <CopyButton text={phase.text} />
             </div>
-            <pre className="text-[11px] whitespace-pre-wrap font-mono leading-relaxed text-ink max-h-[280px] overflow-auto border border-base-700 bg-base-900/50 p-3 rounded-sm">
+            <pre className="text-[11px] whitespace-pre-wrap font-mono leading-relaxed text-ink max-h-[280px] overflow-auto border border-base-700 bg-base-900/50 p-3 rounded-xs">
               {phase.text}
               {phase.status === "running" ? <span className="text-live">▌</span> : null}
             </pre>

@@ -143,7 +143,7 @@ function BrandInner() {
         </div>
       ) : brains.length === 0 ? (
         // First-touch empty state — clear single path forward.
-        <div className="border border-live/40 bg-live/[0.04] p-8 text-center">
+        <div className="border border-live/40 bg-live/4 p-8 text-center">
           <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-2">no clients yet</div>
           <h2 className="font-display italic text-3xl text-ink leading-tight mb-2">Add your first client to unlock every tool.</h2>
           <p className="text-sm text-ink-muted max-w-xl mx-auto leading-relaxed mb-5">
@@ -173,7 +173,7 @@ function BrandInner() {
                   key={b.id}
                   className={`group border bg-base-900/40 p-4 flex items-start justify-between gap-4 transition-all cursor-pointer ${
                     isActive
-                      ? "border-live shadow-[0_0_0_1px_rgba(255,176,32,0.4)_inset] bg-live/[0.03]"
+                      ? "border-live shadow-[0_0_0_1px_rgba(255,176,32,0.4)_inset] bg-live/3"
                       : "border-base-600 hover:border-base-500 hover:bg-base-800/40"
                   }`}
                   onClick={() => activateBrand(b.id)}
@@ -188,7 +188,7 @@ function BrandInner() {
                       src={b.favicon_url}
                       alt=""
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                      className="h-9 w-9 rounded-sm border border-base-700 bg-base-900 object-contain shrink-0"
+                      className="h-9 w-9 rounded-xs border border-base-700 bg-base-900 object-contain shrink-0"
                     />
                   ) : null}
                   <div className="min-w-0 flex-1">

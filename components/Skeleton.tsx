@@ -23,7 +23,7 @@ export function SkeletonBox({ className }: { className?: string }) {
 export function SkeletonText({ width = "70%" }: { width?: string }) {
   return (
     <div
-      className="h-3 bg-base-800/60 animate-pulse-soft rounded-sm"
+      className="h-3 bg-base-800/60 animate-pulse-soft rounded-xs"
       style={{ width }}
       aria-hidden="true"
     />

@@ -1,157 +1,267 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  color-scheme: dark;
-  --grid-line: rgba(255, 255, 255, 0.025);
-}
+@custom-variant dark (&:is(.dark *));
 
-html,
-body {
-  height: 100%;
-  background-color: #08080a;
-  color: #e7e7ea;
-}
+@theme {
+  --color-base-500: #2a2a32;
+  --color-base-600: #222229;
+  --color-base-700: #1c1c22;
+  --color-base-800: #16161b;
+  --color-base-900: #101013;
+  --color-base-950: #0a0a0d;
+  --color-base: #08080a;
 
-/* Bumped base size: every rem-based Tailwind utility (text-xs / text-sm /
-   text-base) scales up ~10% from the default 16px, restoring readability
-   without breaking the dense-information design language. */
-html {
-  font-size: 17.5px;
-}
+  --color-ink: #e7e7ea;
+  --color-ink-muted: #9a9aa3;
+  --color-ink-subtle: #6b6b74;
+  --color-ink-faint: #3f3f47;
 
-/* Lock down the very smallest absolute pixel sizes — text-[10px] is below the
-   accessibility floor on most displays. Anywhere the design uses those,
-   override to 11-12px which still reads as "mono uppercase label" but is
-   actually legible. Tailwind generates these as utility selectors. */
-[class*="text-[10px]"] {
-  font-size: 11px !important;
-  line-height: 1.3 !important;
-}
-[class*="text-[9px]"] {
-  font-size: 11px !important;
-  line-height: 1.3 !important;
-}
-[class*="text-[11px]"] {
-  font-size: 12px !important;
-}
+  --color-live: #ffb020;
+  --color-live-dim: #a87016;
 
-body {
-  font-feature-settings: "cv11", "ss01", "ss03";
-  background-image:
-    radial-gradient(circle at 0% 0%, rgba(255, 176, 32, 0.025), transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(122, 162, 255, 0.018), transparent 40%);
-  background-attachment: fixed;
-}
+  --color-pos: #5fdb9b;
 
-* {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  --color-neg: #ff5470;
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #1c1c22;
-  border-radius: 0;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #2a2a32;
-}
+  --color-info: #7aa2ff;
 
-/* Sidebar gets a thinner, more subtle scrollbar — only visible on hover. */
-.sidebar-nav::-webkit-scrollbar {
-  width: 4px;
-}
-.sidebar-nav::-webkit-scrollbar-thumb {
-  background: transparent;
-  transition: background 0.2s;
-}
-.sidebar-nav:hover::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.06);
-}
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-instrument), Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 
-::selection {
-  background: rgba(255, 176, 32, 0.25);
-  color: #fff;
-}
+  --tracking-ui-tight: -0.005em;
+  --tracking-ui-wide: 0.02em;
+  --tracking-ui-mega: 0.08em;
 
-@layer components {
-  .input-base {
-    @apply w-full bg-base-900 border border-base-600 text-ink rounded-none px-3 py-2 text-sm placeholder-ink-subtle focus:outline-none focus:ring-1 focus:ring-live/50 focus:border-live/60 transition font-sans;
+  --animate-fade-up: fade-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-caret-blink: caret-blink 1s steps(1) infinite;
+  --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+
+  @keyframes fade-up {
+    0% {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
-
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-none bg-live text-base-950 text-[13px] font-semibold uppercase tracking-wide px-4 py-2 hover:bg-live/90 transition disabled:opacity-50 disabled:cursor-not-allowed;
+  @keyframes caret-blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    50.01%,
+    100% {
+      opacity: 0;
+    }
   }
-
-  .btn-ghost {
-    @apply inline-flex items-center gap-2 rounded-none border border-base-600 bg-base-900/60 hover:bg-base-800 text-ink text-[13px] uppercase tracking-wide px-3 py-1.5 transition;
-  }
-
-  .card {
-    @apply rounded-none border border-base-600 bg-base-900/40 p-5 backdrop-blur-sm;
-  }
-
-  .panel {
-    @apply rounded-none border border-base-600 bg-base-900/60 p-4;
-  }
-
-  .label {
-    @apply block text-[12px] font-medium uppercase tracking-wider text-ink-muted mb-1.5;
-  }
-
-  .hairline {
-    @apply border-b border-base-600;
-  }
-
-  .vrule {
-    @apply border-l border-base-600;
-  }
-
-  .tabular {
-    font-variant-numeric: tabular-nums;
-  }
-
-  .kbd {
-    @apply font-mono text-[10px] px-1.5 py-0.5 rounded border border-base-600 bg-base-900 text-ink-muted;
-  }
-
-  .scope-prefix {
-    @apply font-mono text-[12px] text-ink-muted tracking-tight;
+  @keyframes pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
   }
 }
 
-@layer utilities {
-  .stagger > * {
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility input-base {
+  @apply w-full bg-base-900 border border-base-600 text-ink rounded-none px-3 py-2 text-sm placeholder-ink-subtle focus:outline-hidden focus:ring-1 focus:ring-live/50 focus:border-live/60 transition font-sans;
+}
+
+@utility btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-none bg-live text-base-950 text-[13px] font-semibold uppercase tracking-wide px-4 py-2 hover:bg-live/90 transition disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+@utility btn-ghost {
+  @apply inline-flex items-center gap-2 rounded-none border border-base-600 bg-base-900/60 hover:bg-base-800 text-ink text-[13px] uppercase tracking-wide px-3 py-1.5 transition;
+}
+
+@utility card {
+  @apply rounded-none border border-base-600 bg-base-900/40 p-5 backdrop-blur-xs;
+}
+
+@utility panel {
+  @apply rounded-none border border-base-600 bg-base-900/60 p-4;
+}
+
+@utility label {
+  @apply block text-[12px] font-medium uppercase tracking-wider text-ink-muted mb-1.5;
+}
+
+@utility hairline {
+  @apply border-b border-base-600;
+}
+
+@utility vrule {
+  @apply border-l border-base-600;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility kbd {
+  @apply font-mono text-[10px] px-1.5 py-0.5 rounded-sm border border-base-600 bg-base-900 text-ink-muted;
+}
+
+@utility scope-prefix {
+  @apply font-mono text-[12px] text-ink-muted tracking-tight;
+}
+
+@utility stagger {
+  & > * {
     animation: fade-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  .stagger > *:nth-child(1) { animation-delay: 0ms; }
-  .stagger > *:nth-child(2) { animation-delay: 60ms; }
-  .stagger > *:nth-child(3) { animation-delay: 120ms; }
-  .stagger > *:nth-child(4) { animation-delay: 180ms; }
-  .stagger > *:nth-child(5) { animation-delay: 240ms; }
-  .stagger > *:nth-child(6) { animation-delay: 300ms; }
-  .stagger > *:nth-child(7) { animation-delay: 360ms; }
-  .stagger > *:nth-child(8) { animation-delay: 420ms; }
+  & > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  & > *:nth-child(2) {
+    animation-delay: 60ms;
+  }
+  & > *:nth-child(3) {
+    animation-delay: 120ms;
+  }
+  & > *:nth-child(4) {
+    animation-delay: 180ms;
+  }
+  & > *:nth-child(5) {
+    animation-delay: 240ms;
+  }
+  & > *:nth-child(6) {
+    animation-delay: 300ms;
+  }
+  & > *:nth-child(7) {
+    animation-delay: 360ms;
+  }
+  & > *:nth-child(8) {
+    animation-delay: 420ms;
+  }
+}
 
-  .caret::after {
-    content: "▍";
+@utility caret {
+  &::after {
+    content: '▍';
     color: #ffb020;
     margin-left: 1px;
     animation: caret-blink 1s steps(1) infinite;
   }
+}
 
-  .grid-bg {
+@utility grid-bg {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@layer utilities {
+  :root {
+    color-scheme: dark;
+    --grid-line: rgba(255, 255, 255, 0.025);
+  }
+
+  html,
+  body {
+    height: 100%;
+    background-color: #08080a;
+    color: #e7e7ea;
+  }
+
+  /* Bumped base size: every rem-based Tailwind utility (text-xs / text-sm /
+   text-base) scales up ~10% from the default 16px, restoring readability
+   without breaking the dense-information design language. */
+  html {
+    font-size: 17.5px;
+  }
+
+  /* Lock down the very smallest absolute pixel sizes — text-[10px] is below the
+   accessibility floor on most displays. Anywhere the design uses those,
+   override to 11-12px which still reads as "mono uppercase label" but is
+   actually legible. Tailwind generates these as utility selectors. */
+  [class*='text-[10px]'] {
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+  [class*='text-[9px]'] {
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+  [class*='text-[11px]'] {
+    font-size: 12px !important;
+  }
+
+  body {
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
     background-image:
-      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-    background-size: 24px 24px;
+      radial-gradient(
+        circle at 0% 0%,
+        rgba(255, 176, 32, 0.025),
+        transparent 40%
+      ),
+      radial-gradient(
+        circle at 100% 100%,
+        rgba(122, 162, 255, 0.018),
+        transparent 40%
+      );
+    background-attachment: fixed;
+  }
+
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1c1c22;
+    border-radius: 0;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2a2a32;
+  }
+
+  /* Sidebar gets a thinner, more subtle scrollbar — only visible on hover. */
+  .sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+  }
+  .sidebar-nav::-webkit-scrollbar-thumb {
+    background: transparent;
+    transition: background 0.2s;
+  }
+  .sidebar-nav:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  ::selection {
+    background: rgba(255, 176, 32, 0.25);
+    color: #fff;
   }
 }

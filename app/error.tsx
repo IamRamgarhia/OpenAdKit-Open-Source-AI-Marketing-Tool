@@ -44,7 +44,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
 
   return (
     <div className="min-h-[60vh] grid place-items-center px-4 animate-fade-up">
-      <div className="max-w-xl w-full border border-neg/30 bg-neg/[0.03] p-6">
+      <div className="max-w-xl w-full border border-neg/30 bg-neg/3 p-6">
         <div className="flex items-start gap-3 mb-3">
           <AlertTriangle size={22} className="text-neg shrink-0 mt-0.5" />
           <div>
@@ -77,13 +77,13 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           </summary>
           <div className="mt-3 space-y-2">
             <div className="text-[11px] font-mono text-ink-faint">Message</div>
-            <pre className="text-[11px] text-neg font-mono whitespace-pre-wrap break-words border border-base-700 bg-base-900/40 p-2 rounded-sm">
+            <pre className="text-[11px] text-neg font-mono whitespace-pre-wrap wrap-break-word border border-base-700 bg-base-900/40 p-2 rounded-xs">
               {error?.message ?? "(no message)"}
             </pre>
             {error?.digest ? (
               <>
                 <div className="text-[11px] font-mono text-ink-faint">Digest</div>
-                <pre className="text-[11px] text-ink font-mono border border-base-700 bg-base-900/40 p-2 rounded-sm">
+                <pre className="text-[11px] text-ink font-mono border border-base-700 bg-base-900/40 p-2 rounded-xs">
                   {error.digest}
                 </pre>
               </>
@@ -91,7 +91,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             {error?.stack ? (
               <>
                 <div className="text-[11px] font-mono text-ink-faint">Stack (truncated)</div>
-                <pre className="text-[10px] text-ink-muted font-mono whitespace-pre-wrap break-words border border-base-700 bg-base-900/40 p-2 rounded-sm max-h-40 overflow-auto">
+                <pre className="text-[10px] text-ink-muted font-mono whitespace-pre-wrap wrap-break-word border border-base-700 bg-base-900/40 p-2 rounded-xs max-h-40 overflow-auto">
                   {error.stack.split("\n").slice(0, 12).join("\n")}
                 </pre>
               </>

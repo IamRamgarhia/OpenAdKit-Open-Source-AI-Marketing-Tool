@@ -680,7 +680,7 @@ function Inner() {
       {/* Draft-resume banner — shown when the user crashed/refreshed mid-extraction.
           Lets them recover the staged result without paying for another AI run. */}
       {resumeDraft && !pendingExtraction ? (
-        <div className="border-2 border-info bg-info/[0.06] p-4 mb-4 flex items-start gap-3">
+        <div className="border-2 border-info bg-info/6 p-4 mb-4 flex items-start gap-3">
           <RefreshCw size={14} className="text-info shrink-0 mt-0.5" />
           <div className="flex-1">
             <div className="text-[12px] font-semibold uppercase tracking-wider text-info mb-1">Unfinished extraction</div>
@@ -750,7 +750,7 @@ function Inner() {
               ) : null}
             </div>
             {quickStatus ? (
-              <div className={`mt-2 border px-3 py-2 ${quickBusy ? "border-info/40 bg-info/[0.06]" : "border-neg/40 bg-neg/[0.05]"}`}>
+              <div className={`mt-2 border px-3 py-2 ${quickBusy ? "border-info/40 bg-info/6" : "border-neg/40 bg-neg/5"}`}>
                 <div className="flex items-start gap-2">
                   {quickBusy ? <Loader2 size={11} className="animate-spin text-info shrink-0 mt-0.5" /> : <AlertTriangle size={11} className="text-neg shrink-0 mt-0.5" />}
                   <pre className={`text-[11px] font-mono uppercase tracking-ui-wide whitespace-pre-wrap leading-relaxed ${quickBusy ? "text-info" : "text-neg"}`}>{quickStatus}</pre>
@@ -805,7 +805,7 @@ function Inner() {
           </div>
 
           {/* Method 2: Google search */}
-          <div className="border border-info/30 bg-info/[0.04] p-4 mb-4">
+          <div className="border border-info/30 bg-info/4 p-4 mb-4">
             <div className="flex items-center gap-2 mb-2">
               <Search size={14} className="text-info" />
               <span className="text-[12px] font-semibold uppercase tracking-wider text-info">Method 2 · search Google by business name</span>
@@ -835,7 +835,7 @@ function Inner() {
           </div>
 
           {/* Method 2.5 — vision: drop a homepage screenshot */}
-          <div className="border border-info/20 bg-info/[0.03] p-4 mb-4">
+          <div className="border border-info/20 bg-info/3 p-4 mb-4">
             <div className="flex items-center gap-2 mb-2">
               <ImageIcon size={14} className="text-info" />
               <span className="text-[12px] font-semibold uppercase tracking-wider text-info">Method 2.5 · drop a homepage screenshot</span>
@@ -958,9 +958,9 @@ function ExtractionReview({
   const totalCount = fields.length;
 
   return (
-    <div className="border-2 border-live bg-live/[0.04] p-5 mb-6 animate-fade-up">
+    <div className="border-2 border-live bg-live/4 p-5 mb-6 animate-fade-up">
       <div className="flex items-start gap-3 mb-4">
-        <div className="shrink-0 h-8 w-8 grid place-items-center bg-live text-base-950 font-bold rounded-sm">2</div>
+        <div className="shrink-0 h-8 w-8 grid place-items-center bg-live text-base-950 font-bold rounded-xs">2</div>
         <div className="flex-1">
           <h2 className="font-display italic text-2xl text-ink leading-tight">Cross-check the AI extraction</h2>
           <p className="text-sm text-ink-muted mt-1 leading-relaxed">
@@ -974,7 +974,7 @@ function ExtractionReview({
       </div>
 
       {!coreFilled ? (
-        <div className="flex items-start gap-2 border border-neg/40 bg-neg/[0.05] px-3 py-2 mb-3">
+        <div className="flex items-start gap-2 border border-neg/40 bg-neg/5 px-3 py-2 mb-3">
           <AlertTriangle size={12} className="text-neg shrink-0 mt-0.5" />
           <span className="text-[11px] text-ink">
             Some <strong className="text-neg">core fields are empty</strong>. The AI didn't find them — click <em>Edit before saving</em> to fill them by hand, or save now and edit later.

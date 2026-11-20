@@ -71,7 +71,7 @@ function HashtagOutput({ json }: { json: any }) {
       {recommended?.length ? (
         <Section title="Recommended set" actions={<CopyButton text={recommended.join(" ")} label="copy all" />}>
           <p className="text-[11px] font-mono uppercase tracking-ui-wide text-ink-subtle mb-2">paste this directly into your caption</p>
-          <p className="text-sm text-live font-mono leading-relaxed break-words">{recommended.join(" ")}</p>
+          <p className="text-sm text-live font-mono leading-relaxed wrap-break-word">{recommended.join(" ")}</p>
         </Section>
       ) : null}
 
@@ -146,7 +146,7 @@ function HashtagOutput({ json }: { json: any }) {
       ) : null}
 
       <Section title="All tags · master copy" actions={<CopyButton text={allTags.join(" ")} label="copy everything" />}>
-        <p className="text-xs text-ink-muted font-mono break-words leading-relaxed">{allTags.join(" ")}</p>
+        <p className="text-xs text-ink-muted font-mono wrap-break-word leading-relaxed">{allTags.join(" ")}</p>
       </Section>
     </div>
   );

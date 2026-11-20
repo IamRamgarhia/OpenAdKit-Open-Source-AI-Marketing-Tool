@@ -527,7 +527,7 @@ function Inner() {
                 </ul>
               </Section>
               {doneCount > 0 && !running ? (
-                <div className="border border-live/30 bg-live/[0.03] p-3 text-[12px] text-ink-muted">
+                <div className="border border-live/30 bg-live/3 p-3 text-[12px] text-ink-muted">
                   All saved to /history under each client's brand. Open one to edit or rerun individually.
                 </div>
               ) : null}
@@ -589,7 +589,7 @@ function BatchRow({ r }: { r: RunResult }) {
           <div className="flex justify-end">
             <CopyButton text={r.text} />
           </div>
-          <pre className="text-[11px] whitespace-pre-wrap font-mono leading-relaxed text-ink max-h-[300px] overflow-auto border border-base-700 bg-base-900/50 p-3 rounded-sm">
+          <pre className="text-[11px] whitespace-pre-wrap font-mono leading-relaxed text-ink max-h-[300px] overflow-auto border border-base-700 bg-base-900/50 p-3 rounded-xs">
             {r.text}
             {r.status === "running" ? <span className="text-live">▌</span> : null}
           </pre>

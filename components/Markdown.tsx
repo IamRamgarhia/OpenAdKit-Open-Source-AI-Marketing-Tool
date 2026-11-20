@@ -21,7 +21,7 @@ function escape(s: string): string {
 
 function renderInline(s: string): string {
   return s
-    .replace(/`([^`]+)`/g, (_, c) => `<code class="px-1 py-0.5 rounded bg-zinc-800 text-[11px]">${c}</code>`)
+    .replace(/`([^`]+)`/g, (_, c) => `<code class="px-1 py-0.5 rounded-sm bg-zinc-800 text-[11px]">${c}</code>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>");
 }
@@ -45,7 +45,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
     if (line.trim().startsWith("```")) {
       if (inCode) {
         out.push(
-          `<pre class="rounded bg-zinc-950 border border-zinc-800 p-3 my-2 text-[11px] overflow-x-auto"><code>${escape(
+          `<pre class="rounded-sm bg-zinc-950 border border-zinc-800 p-3 my-2 text-[11px] overflow-x-auto"><code>${escape(
             codeBuf.join("\n")
           )}</code></pre>`
         );
