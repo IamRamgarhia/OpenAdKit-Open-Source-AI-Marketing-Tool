@@ -45,7 +45,8 @@
     "test:smoke": "playwright test tests/smoke.spec.ts --reporter=line",
     "test:live": "playwright test tests/live.spec.ts --reporter=line",
     "build:mcp": "node scripts/build-mcp.cjs",
-    "mcp": "node mcp/dist/openadkit-mcp.mjs"
+    "mcp": "node mcp/dist/openadkit-mcp.mjs",
+    "eval": "node scripts/eval.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

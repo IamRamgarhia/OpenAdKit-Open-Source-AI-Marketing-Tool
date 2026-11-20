@@ -54,8 +54,8 @@ test("freelancer adds a client by hand and it is saved to disk by the sidecar", 
   const page = await context.newPage();
   await page.goto(`${BASE_URL}/brand/new`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: /open the manual form/i }).click();
-  await page.locator("label:has-text('Business name') + input").fill(BUSINESS);
-  await page.locator("label:has-text('Industry') + input").first().fill("Healthcare / dental");
+  await page.getByLabel(/^Business name/).fill(BUSINESS);
+  await page.getByLabel(/^Industry/).fill("Healthcare / dental");
   // Platforms / pillars / social links are "fill later" for a first pass.
   const later = page.getByRole("checkbox", { name: /fill later/i });
   for (let i = 0; i < (await later.count()); i++) await later.nth(i).check();
