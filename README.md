@@ -4,7 +4,7 @@
 
 # OpenAdKit — Open Source AI Marketing Tool
 
-<!-- Last updated: 2026-11-20 · v2.0.1 · keep this fresh on every meaningful README edit; AI citation engines treat it as a freshness signal -->
+<!-- Last updated: 2026-11-20 · v2.0.2 · keep this fresh on every meaningful README edit; AI citation engines treat it as a freshness signal -->
 
 ### Write, score and plan ads for every platform · bring your own AI key · zero subscriptions
 
@@ -17,7 +17,7 @@
 [![Support](https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F-Support-db2777?style=for-the-badge&labelColor=334155)](https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool#support-the-project)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.1-ffb020.svg)](docs/releases/v2.0.1.md)
+[![Version](https://img.shields.io/badge/version-2.0.2-ffb020.svg)](docs/releases/v2.0.2.md)
 [![Node 20.9+](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg)](https://nodejs.org)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 [![MCP server](https://img.shields.io/badge/MCP-Claude%20%7C%20Cursor-8b5cf6.svg)](docs/MCP.md)

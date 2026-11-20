@@ -57,6 +57,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: payload
+          # The built app lives in dist/payload/.next — a dot-folder, which
+          # upload-artifact silently drops unless told otherwise. Without this
+          # the Windows installer shipped with no app build at all.
+          include-hidden-files: true
           path: |
             dist/payload
             dist/OpenAdKit-app.tar.gz
@@ -90,6 +94,22 @@ jobs:
           $t = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
           if ($t.ExitCode -notin 0,3) { throw "self-test exit $($t.ExitCode)" }
           Write-Host "self-test exit $($t.ExitCode) (0 = ok, 3 = no WebView2 runtime on this runner)"
+          # Start the INSTALLED app's server exactly as the desktop window does and
+          # require a real page: a self-test that only checks files exist let a
+          # build without .next ship once.
+          $root = Join-Path (Join-Path $env:LOCALAPPDATA "Programs") "OpenAdKit"
+          $nodeExe = Join-Path (Join-Path $root "node") "node.exe"
+          $appDir = Join-Path $root "app"
+          $env:PORT = "47123"; $env:HOSTNAME = "127.0.0.1"; $env:NODE_ENV = "production"
+          $srv = Start-Process -FilePath $nodeExe -ArgumentList "server.js" -WorkingDirectory $appDir -PassThru -NoNewWindow
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "http://127.0.0.1:47123/"; if ($r.StatusCode -eq 200) { $ok = $true; break } } catch { Start-Sleep -Milliseconds 500 }
+          }
+          $rt = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "http://127.0.0.1:47123/api/runtime"
+          Stop-Process -Id $srv.Id -Force
+          if (-not $ok) { throw "installed app did not serve / (missing build?)" }
+          Write-Host "installed app served / (200) and /api/runtime: $($rt.Content)"
       - uses: actions/upload-artifact@v4
         with:
           name: windows
