@@ -4,6 +4,8 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-11-20
+
 ### Changed
 - **Prompts no longer state unsourced numbers as fact.** Removed or relabelled
   figures like "keyword in headline = +12-18% CTR", "85% watch muted", Spark
