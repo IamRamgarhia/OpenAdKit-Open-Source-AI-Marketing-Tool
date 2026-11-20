@@ -1,32 +1,73 @@
-import { LLMError, SSE_EVENT_DELIMITER, classifyKeyCheckError, type KeyCheckResult, type LLMCallOptions, type LLMMessage, type LLMResult, type LLMUsage, type Provider, type StreamHandlers } from "./types";
+import { LLMError, classifyKeyCheckError, readSseJson, refusedError, truncatedError, type KeyCheckResult, type LLMCallOptions, type LLMMessage, type LLMResult, type LLMUsage, type Provider, type StreamHandlers } from "./types";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const API_VERSION = "2023-06-01";
 
-function headers(apiKey: string): HeadersInit {
-  return {
+function headers(apiKey: string, body?: Record<string, unknown>): Record<string, string> {
+  const h: Record<string, string> = {
     "Content-Type": "application/json",
     "x-api-key": apiKey,
     "anthropic-version": API_VERSION,
     "anthropic-dangerous-direct-browser-access": "true",
   };
+  if (body && "fallbacks" in body) h["anthropic-beta"] = FALLBACK_BETA;
+  return h;
 }
 
-/** Models that removed `temperature` / `top_p` / `top_k` from the request
- *  surface — sending any of them returns HTTP 400. Covers the Claude 5 family
- *  and Opus 4.7+. Steer these with prompting instead. */
-function rejectsSamplingParams(model: string): boolean {
-  return /^claude-(opus-5|sonnet-5|fable-5|mythos-5|opus-4-(7|8))/.test(model);
+/**
+ * Per-model request-surface rules. Explicit rows instead of regexes: a prefix
+ * pattern like `^claude-opus-5` also matched `claude-opus-5-5`, which then got
+ * `thinking: {type: "disabled"}` — a 400 on Opus 5.5. Source: the Claude API
+ * reference (thinking & sampling table), reviewed 2026-11.
+ *
+ *  - sampling: "allowed" → send `temperature`; "omit" → the model rejects
+ *    `temperature`/`top_p`/`top_k` (or any non-default value) with a 400.
+ *  - thinking: how to keep thinking from eating `max_tokens` (OpenAdKit asks
+ *    for short structured copy; max_tokens caps thinking + text together):
+ *      "omit"          → off by default on this model; send nothing.
+ *      "disabled"      → on by default; `{type:"disabled"}` is accepted.
+ *      "between_tools" → `disabled` is a 400; `between_tools` turns it off.
+ *      "always_on"     → cannot be turned off (disabled + budget_tokens 400);
+ *                        lower `effort` and leave headroom in max_tokens.
+ *  - fallbacks: model runs refusal classifiers; opt into server-side fallback
+ *    so a false-positive decline is re-run on a fallback model in-call.
+ */
+export interface ClaudeModelCaps {
+  sampling: "allowed" | "omit";
+  thinking: "omit" | "disabled" | "between_tools" | "always_on";
+  fallbacks?: boolean;
 }
 
-/** Models where thinking is adaptive-by-default (Claude Opus 5) or opt-in.
- *  OpenAdKit generates short structured copy with `max_tokens` in the 2.5k–6k
- *  range, and `max_tokens` caps thinking + response text *together* — leaving
- *  adaptive thinking on would truncate the actual output mid-JSON. We disable
- *  it explicitly, which Opus 5 accepts at the default `high` effort. */
-function supportsThinkingToggle(model: string): boolean {
-  return /^claude-(opus-5|sonnet-5|opus-4-(7|8))/.test(model);
+export const CLAUDE_MODEL_CAPS: Record<string, ClaudeModelCaps> = {
+  "claude-fable-5-2": { sampling: "omit", thinking: "always_on", fallbacks: true },
+  "claude-fable-5-1": { sampling: "omit", thinking: "always_on", fallbacks: true },
+  "claude-fable-5": { sampling: "omit", thinking: "always_on" },
+  "claude-opus-5-5": { sampling: "omit", thinking: "always_on", fallbacks: true },
+  "claude-opus-5": { sampling: "omit", thinking: "disabled", fallbacks: true },
+  "claude-opus-4-8": { sampling: "omit", thinking: "omit" },
+  "claude-opus-4-7": { sampling: "omit", thinking: "omit" },
+  "claude-opus-4-6": { sampling: "allowed", thinking: "omit" },
+  "claude-sonnet-5-5": { sampling: "omit", thinking: "between_tools", fallbacks: true },
+  "claude-sonnet-5": { sampling: "omit", thinking: "disabled" },
+  "claude-sonnet-4-6": { sampling: "allowed", thinking: "omit" },
+  "claude-haiku-5-5": { sampling: "omit", thinking: "disabled" },
+  "claude-haiku-4-5": { sampling: "allowed", thinking: "omit" },
+};
+
+/** Unknown (newer) models: every Claude release since Opus 4.7 rejects sampling
+ *  params, and omitting `thinking` is accepted everywhere — the safe default. */
+const UNKNOWN_MODEL_CAPS: ClaudeModelCaps = { sampling: "omit", thinking: "omit" };
+
+export function claudeCaps(model: string): ClaudeModelCaps {
+  return CLAUDE_MODEL_CAPS[model] ?? UNKNOWN_MODEL_CAPS;
 }
+
+/** Extra max_tokens for models whose thinking can't be turned off, so the
+ *  reasoning doesn't truncate the JSON answer. Capped to stay well inside the
+ *  non-streaming request limits. */
+const ALWAYS_ON_THINKING_HEADROOM = 6000;
+const MAX_TOKENS_CEILING = 16000;
+const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
 /** Build the `system` field. When caching is requested and the prompt is long
  *  enough to actually cache (the API silently no-ops below ~512-1024 tokens),
@@ -41,21 +82,47 @@ function buildSystem(opts: LLMCallOptions) {
   return [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }];
 }
 
-function buildBody(opts: LLMCallOptions, stream: boolean) {
+export function buildAnthropicBody(opts: LLMCallOptions, stream: boolean): Record<string, unknown> {
+  const caps = claudeCaps(opts.model);
+  const requested = opts.maxTokens ?? 2048;
   const body: Record<string, unknown> = {
     model: opts.model,
-    max_tokens: opts.maxTokens ?? 2048,
+    max_tokens: requested,
     system: buildSystem(opts),
     messages: toAnthropicMessages(opts.messages),
   };
   if (stream) body.stream = true;
-  if (!rejectsSamplingParams(opts.model)) {
+  if (caps.sampling === "allowed") {
     body.temperature = opts.temperature ?? 0.7;
   }
-  if (supportsThinkingToggle(opts.model)) {
-    body.thinking = { type: "disabled" };
+  switch (caps.thinking) {
+    case "disabled":
+      body.thinking = { type: "disabled" };
+      break;
+    case "between_tools":
+      body.thinking = { type: "between_tools" };
+      break;
+    case "always_on":
+      // Thinking can't be disabled: keep it shallow and give it room so the
+      // answer itself isn't cut off.
+      body.output_config = { effort: "low" };
+      body.max_tokens = Math.max(requested, Math.min(MAX_TOKENS_CEILING, requested + ALWAYS_ON_THINKING_HEADROOM));
+      break;
+    case "omit":
+      break;
   }
+  if (caps.fallbacks) body.fallbacks = "default";
   return body;
+}
+
+/** Throw on a stop reason that means the text is not a complete answer. */
+function checkStopReason(stopReason: unknown, stopDetails: any): void {
+  if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
+    throw truncatedError("anthropic");
+  }
+  if (stopReason === "refusal") {
+    throw refusedError("anthropic", typeof stopDetails?.category === "string" ? `category: ${stopDetails.category}` : null);
+  }
 }
 
 /** Translate OpenAdKit's neutral LLMMessage[] into Anthropic's wire format,
@@ -99,14 +166,16 @@ async function readError(res: Response): Promise<LLMError> {
 }
 
 async function call(opts: LLMCallOptions): Promise<LLMResult> {
+  const reqBody = buildAnthropicBody(opts, false);
   const res = await fetch(API_URL, {
     method: "POST",
-    headers: headers(opts.apiKey),
-    body: JSON.stringify(buildBody(opts, false)),
+    headers: headers(opts.apiKey, reqBody),
+    body: JSON.stringify(reqBody),
     signal: opts.signal,
   });
   if (!res.ok) throw await readError(res);
   const body = await res.json();
+  checkStopReason(body?.stop_reason, body?.stop_details);
   const text = (body?.content ?? [])
     .filter((b: any) => b?.type === "text")
     .map((b: any) => b.text)
@@ -115,61 +184,45 @@ async function call(opts: LLMCallOptions): Promise<LLMResult> {
 }
 
 async function stream(opts: LLMCallOptions, handlers: StreamHandlers): Promise<LLMResult> {
+  const reqBody = buildAnthropicBody(opts, true);
   const res = await fetch(API_URL, {
     method: "POST",
-    headers: headers(opts.apiKey),
-    body: JSON.stringify(buildBody(opts, true)),
+    headers: headers(opts.apiKey, reqBody),
+    body: JSON.stringify(reqBody),
     signal: opts.signal,
   });
   if (!res.ok) throw await readError(res);
   if (!res.body) throw new LLMError("Streaming response missing body", undefined, "anthropic");
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let full = "";
   let usage: LLMUsage | null = null;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      // Tolerate CRLF as well as LF — see SSE_EVENT_DELIMITER. Anthropic sends
-      // LF today, but hardcoding that is what silently broke Gemini streaming.
-      const events = buffer.split(SSE_EVENT_DELIMITER);
-      buffer = events.pop() ?? "";
-      for (const ev of events) {
-        const dataLines = ev.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).replace(/^ /, ""));
-        for (const raw of dataLines) {
-          const line = raw.trim();
-          if (!line || line === "[DONE]") continue;
-          try {
-            const evt = JSON.parse(line);
-            if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
-              full += evt.delta.text;
-              handlers.onDelta?.(evt.delta.text);
-            } else if (evt.type === "message_delta" && evt.usage) {
-              const merged: LLMUsage = { ...(usage ?? { input_tokens: 0, output_tokens: 0 }), ...evt.usage };
-              usage = merged;
-              handlers.onUsage?.(merged);
-            } else if (evt.type === "message_start" && evt.message?.usage) {
-              usage = evt.message.usage;
-            } else if (evt.type === "error") {
-              throw new LLMError(evt.error?.message ?? "stream error", undefined, "anthropic");
-            }
-          } catch (err) {
-            if (err instanceof LLMError) throw err;
-          }
-        }
+  let stopReason: unknown = null;
+  let stopDetails: any = null;
+  await readSseJson(res.body, (evt) => {
+    if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+      full += evt.delta.text;
+      handlers.onDelta?.(evt.delta.text);
+    } else if (evt.type === "message_delta") {
+      if (evt.delta?.stop_reason) {
+        stopReason = evt.delta.stop_reason;
+        stopDetails = evt.delta.stop_details ?? evt.stop_details ?? null;
       }
+      if (evt.usage) {
+        const merged: LLMUsage = { ...(usage ?? { input_tokens: 0, output_tokens: 0 }), ...evt.usage };
+        usage = merged;
+        handlers.onUsage?.(merged);
+      }
+    } else if (evt.type === "message_start" && evt.message?.usage) {
+      usage = evt.message.usage;
+    } else if (evt.type === "error") {
+      throw new LLMError(evt.error?.message ?? "stream error", undefined, "anthropic");
     }
-  } finally {
-    try { await reader.cancel(); } catch {}
-  }
+  });
+  checkStopReason(stopReason, stopDetails);
   handlers.onDone?.(full);
   return { text: full, usage, modelId: opts.model };
 }
 
-const TEST_MODEL = "claude-haiku-4-5"; // un-suffixed alias; cheapest model
+const TEST_MODEL = "claude-haiku-5-5"; // cheapest current model
 async function testKey(apiKey: string): Promise<KeyCheckResult> {
   try {
     await call({
@@ -185,25 +238,32 @@ async function testKey(apiKey: string): Promise<KeyCheckResult> {
 }
 
 // Pricing is USD per million tokens, from platform.claude.com/docs/en/pricing.
-// Reviewed 2026-08-01. lib/__tests__/providers-catalog.test.ts asserts the
-// catalog stays internally consistent; re-check the published prices whenever
-// a model is added (Opus 4.7 shipped listed at 15/75 here for months when the
-// real rate was 5/25 — a 3x over-report on every cost estimate).
+// Reviewed 2026-11-20 (Claude API model table). lib/__tests__/providers-catalog.test.ts
+// asserts the catalog stays internally consistent and providers-wire.test.ts
+// pins the current rates; re-check the published prices whenever a model is
+// added (Opus 4.7 shipped listed at 15/75 here for months when the real rate
+// was 5/25, and Sonnet 5 sat at 3/15 when it is 2/10).
+// Every id here needs a row in CLAUDE_MODEL_CAPS.
 export const anthropic: Provider = {
   id: "anthropic",
   name: "Anthropic Claude",
   category: "paid",
   description: "The model OpenAdKit was originally built for. Strongest at long-context reasoning + safety. No free tier; pay-per-use.",
   get_key_url: "https://console.anthropic.com/settings/keys",
-  default_model: "claude-sonnet-5",
+  default_model: "claude-sonnet-5-5",
   supports_vision: true,
   supports_prompt_caching: true,
   models: [
-    { id: "claude-opus-5", label: "Opus 5 — deepest reasoning", pricing: { input_per_million_usd: 5, output_per_million_usd: 25 }, context_k: 1000, best_for: "Complex audits, multi-step reasoning, long teardowns", supports_vision: true },
-    { id: "claude-sonnet-5", label: "Sonnet 5 — balanced (recommended)", pricing: { input_per_million_usd: 3, output_per_million_usd: 15 }, context_k: 1000, best_for: "Default for ad copy + optimization", supports_vision: true },
-    { id: "claude-opus-4-7", label: "Opus 4.7 — previous flagship", pricing: { input_per_million_usd: 5, output_per_million_usd: 25 }, context_k: 1000, best_for: "Long-horizon agentic work", supports_vision: true },
-    { id: "claude-sonnet-4-6", label: "Sonnet 4.6 — previous balanced", pricing: { input_per_million_usd: 3, output_per_million_usd: 15 }, context_k: 1000, supports_vision: true },
-    { id: "claude-haiku-4-5", label: "Haiku 4.5 — fastest & cheapest", pricing: { input_per_million_usd: 1, output_per_million_usd: 5 }, context_k: 200, best_for: "High-volume hashtag/subject generation", supports_vision: true },
+    { id: "claude-sonnet-5-5", label: "Sonnet 5.5 — balanced (recommended)", pricing: { input_per_million_usd: 2, output_per_million_usd: 10 }, context_k: 1000, best_for: "Default for ad copy + optimization", supports_vision: true },
+    { id: "claude-opus-5-5", label: "Opus 5.5 — deepest reasoning", pricing: { input_per_million_usd: 4, output_per_million_usd: 20 }, context_k: 1000, best_for: "Complex audits, multi-step reasoning, long teardowns", supports_vision: true },
+    { id: "claude-haiku-5-5", label: "Haiku 5.5 — fastest & cheapest", pricing: { input_per_million_usd: 0.1, output_per_million_usd: 0.5 }, context_k: 1000, best_for: "High-volume hashtag/subject generation", supports_vision: true },
+    { id: "claude-fable-5-2", label: "Fable 5.2 — most capable (premium)", pricing: { input_per_million_usd: 8, output_per_million_usd: 40 }, context_k: 1000, best_for: "Hardest strategy work where cost matters less", supports_vision: true },
+    { id: "claude-opus-5", label: "Opus 5 — previous flagship", pricing: { input_per_million_usd: 5, output_per_million_usd: 25 }, context_k: 1000, supports_vision: true },
+    { id: "claude-sonnet-5", label: "Sonnet 5 — previous balanced", pricing: { input_per_million_usd: 2, output_per_million_usd: 10 }, context_k: 1000, supports_vision: true },
+    { id: "claude-opus-4-7", label: "Opus 4.7", pricing: { input_per_million_usd: 5, output_per_million_usd: 25 }, context_k: 1000, supports_vision: true },
+    { id: "claude-opus-4-6", label: "Opus 4.6", pricing: { input_per_million_usd: 5, output_per_million_usd: 25 }, context_k: 1000, supports_vision: true },
+    { id: "claude-sonnet-4-6", label: "Sonnet 4.6", pricing: { input_per_million_usd: 3, output_per_million_usd: 15 }, context_k: 1000, supports_vision: true },
+    { id: "claude-haiku-4-5", label: "Haiku 4.5 — legacy cheap", pricing: { input_per_million_usd: 1, output_per_million_usd: 5 }, context_k: 200, supports_vision: true },
   ],
   testKey,
   call,
