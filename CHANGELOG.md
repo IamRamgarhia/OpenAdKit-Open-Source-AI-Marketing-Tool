@@ -4,6 +4,9 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 
 ## [Unreleased]
 
+### Fixed
+- Windows uninstall now also removes the Next.js runtime cache (`app.nextserveroute-cache`), so the program folder is fully removed. User data was never stored there.
+
 ## [2.0.2] — 2026-11-20
 
 ### Fixed
@@ -64,7 +67,7 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
   generate retries, eval): per-size display copy and CTA, responsive display
   assets, X posts / card headline, TikTok captions, Shopping title and
   highlights, campaign-kit copy, Quality Score headlines, YouTube headlines.
-- winget manifests for `DiceCodes.OpenAdKit` 2.0.1 (`packaging/winget/`,
+- winget manifests for `DiceCodes.OpenAdKit` (now 2.0.2) (`packaging/winget/`,
   validated with `winget validate`); submit after the release is published.
 
 ### Fixed
