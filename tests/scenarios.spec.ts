@@ -56,9 +56,7 @@ test("freelancer adds a client by hand and it is saved to disk by the sidecar", 
   await page.getByRole("button", { name: /open the manual form/i }).click();
   await page.getByLabel(/^Business name/).fill(BUSINESS);
   await page.getByLabel(/^Industry/).fill("Healthcare / dental");
-  // Platforms / pillars / social links are "fill later" for a first pass.
-  const later = page.getByRole("checkbox", { name: /fill later/i });
-  for (let i = 0; i < (await later.count()); i++) await later.nth(i).check();
+  // Only the business name is required; the rest can be filled later.
   await page.getByRole("button", { name: /save brand brain/i }).click();
   await page.waitForURL(/\/brand$/);
   await expect(page.getByText(BUSINESS).first()).toBeVisible();

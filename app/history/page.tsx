@@ -300,6 +300,7 @@ function HistoryInner() {
           <option value="linkedin">linkedin</option>
           <option value="twitter">twitter/x</option>
           <option value="display">display</option>
+          <option value="email">email</option>
         </select>
         <button
           onClick={() => setStarredOnly((s) => !s)}

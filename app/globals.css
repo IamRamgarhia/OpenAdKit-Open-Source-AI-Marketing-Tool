@@ -265,3 +265,9 @@
     color: #fff;
   }
 }
+
+/* Returning users with a key: hide the server-rendered landing page until the
+   client knows to show the dashboard (see the pre-paint script in layout). */
+html[data-has-key]:not([data-home-ready]) .oak-landing {
+  visibility: hidden;
+}

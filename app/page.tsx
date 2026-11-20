@@ -47,6 +47,11 @@ const tiles: { href: string; label: string; sub: string; icon: any; accent?: boo
  */
 export default function Home() {
   const status = useHasAnyKeyStatus();
+  // Once the real key status is known, let CSS show the landing page again
+  // (the pre-paint script may have hidden it for a key that turns out invalid).
+  useEffect(() => {
+    if (status !== "unknown") document.documentElement.setAttribute("data-home-ready", "1");
+  }, [status]);
   if (status === "yes") return <Dashboard />;
   return <Landing />;
 }
@@ -67,7 +72,7 @@ const LANDING_LINKS: { href: string; label: string; sub: string; icon: any }[] =
 
 function Landing() {
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-5xl oak-landing">
       <section className="py-6 md:py-10 animate-fade-up">
         <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-3">free · open source · MIT</div>
         <h1 className="font-display italic text-4xl md:text-5xl text-ink leading-tight">

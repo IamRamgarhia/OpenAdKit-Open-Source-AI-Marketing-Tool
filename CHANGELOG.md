@@ -4,6 +4,20 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 
 ## [Unreleased]
 
+### Changed
+- **Adding a client by hand needs only the business name.** Platforms,
+  content pillars and social links no longer block saving; they're recorded
+  as "fill later" automatically.
+- **Email is its own platform** for saved email-subject runs (was filed as
+  "display"); History can filter by it.
+- **robots.txt is generated** (`app/robots.ts`) so its Sitemap line points at
+  the deployment's own origin, like the sitemap; `/support` is crawlable.
+
+### Fixed
+- Returning users with a key no longer see the landing page flash before the
+  dashboard on `/` (a pre-paint marker hides it; crawlers still get the
+  server-rendered landing page).
+
 ## [2.0.0] — 2026-11-20
 
 ### Added

@@ -32,7 +32,7 @@ export function finiteNum(v: unknown, fallback = 0): number {
 }
 
 const AD_STATUSES: GeneratedAd["status"][] = ["draft", "testing", "live", "paused", "winner", "loser"];
-const PLATFORMS: Platform[] = ["google", "meta", "tiktok", "youtube", "linkedin", "twitter", "display"];
+const PLATFORMS: Platform[] = ["google", "meta", "tiktok", "youtube", "linkedin", "twitter", "display", "email"];
 const CAMPAIGN_STATUSES: Campaign["status"][] = ["planning", "live", "paused", "done"];
 const SCOPES: ChecklistState["scope"][] = ["daily", "weekly", "monthly"];
 

@@ -15,7 +15,8 @@ export type Platform =
   | "youtube"
   | "linkedin"
   | "twitter"
-  | "display";
+  | "display"
+  | "email";
 
 export interface GeneratedAd {
   id: string;
