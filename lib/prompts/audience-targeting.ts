@@ -16,9 +16,19 @@ export interface AudienceTargetingInput {
   audience_screenshot?: unknown;
 }
 
-import { RETARGETING_MATRIX, MANDATORY_EXCLUSIONS } from "./common-rules";
+import { RETARGETING_MATRIX, MANDATORY_EXCLUSIONS, RECENT_CONVERTER_WINDOW } from "./common-rules";
+
+/** The platform's own name for a customer-list audience. */
+const CUSTOMER_LIST: Record<string, string> = {
+  meta: "Custom Audience from a customer list",
+  google: "Customer Match",
+  linkedin: "Matched Audiences (contact list)",
+  tiktok: "Customer File audience",
+};
 
 export function buildAudienceTargetingPrompt(input: AudienceTargetingInput): string {
+  const customerList = CUSTOMER_LIST[input.platform] ?? "customer-list upload";
+  const shot = Boolean(input.audience_screenshot);
   return `Design a layered audience targeting plan for ${input.platform}, anchored to the real performance data the user provided.
 
 ${RETARGETING_MATRIX}
@@ -62,9 +72,9 @@ For each audience already running:
 If nothing is currently running, mark audience_diagnosis = "(fresh launch — no existing data)".
 
 PHASE 2 — REBALANCE AGAINST GOAL CPA:
-If user provided current_cpa AND current_aov_or_ltv, target CPA ≤ 30% of AOV (or ≤ 15% of LTV).
+If user provided current_cpa AND current_aov_or_ltv, use a starting CPA ceiling of 30% of AOV (or 15% of LTV) — a rule of thumb; say so, and note the user's real margin should replace it.
 Pick budget splits that move CURRENT CPA toward that target, not generic "60/30/10" defaults.
-Note the math: "AOV $120 → CPA target ≤ $36 · current CPA $42 → over by 17% → cut Tier 1 share from
+Show the math in the input's currency: "AOV 120 → CPA ceiling ≤ 36 · current CPA 42 → over by 17% → cut Tier 1 share from
 60% to 45% and reallocate to Tier 2 retargeting (cheaper CPA at this stage)."
 
 PHASE 3 — DESIGN THE THREE TIERS (cold / warm / hot):
@@ -83,7 +93,7 @@ TIER 2: WARM RETARGETING (medium reach, medium-high intent)
 - Website visitors (rules: time on site, pages visited, days back)
 - Video viewers (% completion threshold)
 - Engagers (likes, comments, shares)
-- Email list (Customer Match / LinkedIn / Meta CRM upload)
+- Email / CRM list (${customerList})
 - Budget % allocation
 
 TIER 3: HOT REMARKETING (small reach, highest intent)
@@ -98,16 +108,16 @@ For each tier add:
 - Creative format that converts best at this stage
 
 EXCLUSIONS (apply across all tiers):
-- Current customers (unless tier 3)
-- Recent converters (last 30 days for sales, last 7 for trial signups)
+- Current customers via ${customerList} (unless tier 3)
+- Recent converters (${RECENT_CONVERTER_WINDOW})
 - Competitor employees (LinkedIn specifically)
 - Anyone already in your CRM as not-a-fit
 
 Return ONLY valid JSON:
 {
-  "audience_diagnosis": "string — what's working / what to pause / what to replace, anchored to provided CPA + CVR. Cite (from screenshot) where relevant. (fresh launch — no existing data) if no audiences were provided.",
+  "audience_diagnosis": "string — what's working / what to pause / what to replace, anchored to provided CPA + CVR.${shot ? " Cite (from screenshot) where relevant." : ""} (fresh launch — no existing data) if no audiences were provided.",
   "computed_targets": {
-    "cpa_target_ceiling": "string — the math (e.g. 'AOV $120 → CPA ≤ $36') · 'could not be computed' if AOV/LTV missing",
+    "cpa_target_ceiling": "string — the math in the input's currency (e.g. 'AOV 899 → CPA ≤ 270') · 'could not be computed' if AOV/LTV missing",
     "ltv_to_cpa_health": "healthy | tight | broken | unknown",
     "scale_or_squeeze": "scale | hold | squeeze | rebuild — what the existing setup should do next"
   },
@@ -144,7 +154,8 @@ Return ONLY valid JSON:
     { "name": "string", "rule": "string", "applies_to_tiers": ["cold", "warm", "hot"] }
   ],
   "platform_specific_features_to_enable": [
-    { "feature": "string e.g. 'Meta Advantage+ Audience'", "use": true, "rationale": "string" }
+    { "feature": "string — a feature that exists on ${input.platform}", "use": true, "rationale": "string" }
+
   ]
 }`;
 }

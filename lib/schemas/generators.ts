@@ -515,7 +515,10 @@ export const BudgetPlannerSchema = tolerant(z
     funnel_split_overall: z.array(z.any()).optional(),
     campaign_breakout: z.array(z.any()).optional(),
     volume_projection: z.record(z.string(), z.any()).optional(),
+    saturation_flags: z.array(z.any()).optional(),
+    // Legacy: older history rows nested saturation_flags under break_even.
     break_even: z.record(z.string(), z.any()).optional(),
+
     reserve: z.record(z.string(), z.any()).optional(),
     no_go_list: Strings.optional(),
   })

@@ -30,8 +30,12 @@ export interface VolumeEstimate {
   cpa: number | null;
   revenue: number | null;
   roas: number | null;
-  /** CPA at which revenue = spend (gross, before margin): equals AOV. */
-  breakEvenCpa: number | null;
+  /** CPA at which revenue = ad spend, i.e. break-even at 100% margin: equals AOV. */
+  revenueBreakEvenCpa: number | null;
+  /** Gross margin % the user gave (null when not given). */
+  grossMarginPct: number | null;
+  /** CPA at which gross profit = ad spend: AOV × margin. Null without a margin. */
+  profitBreakEvenCpa: number | null;
 }
 
 export function parseNumber(v: unknown): number | null {
@@ -82,6 +86,8 @@ export function estimateVolume(args: {
   cpc?: unknown;
   cvrPct?: unknown;
   aov?: unknown;
+  /** Gross margin in % (e.g. 40). Optional; enables the profit break-even CPA. */
+  grossMarginPct?: unknown;
   /** Benchmarks are USD; only fall back to a benchmark CPC when budgeting in USD. */
   currencyCode: string;
 }): VolumeEstimate | null {
@@ -100,6 +106,8 @@ export function estimateVolume(args: {
   const cpa = conversions ? budget / conversions : null;
   const revenue = conversions !== null && aov.value ? conversions * aov.value : null;
   const roas = revenue !== null ? revenue / budget : null;
+  const m = parseNumber(args.grossMarginPct);
+  const margin = m !== null && m > 0 && m <= 100 ? m : null;
   return {
     budget,
     cpc,
@@ -112,7 +120,10 @@ export function estimateVolume(args: {
     cpa,
     revenue,
     roas,
-    breakEvenCpa: aov.value,
+    revenueBreakEvenCpa: aov.value,
+    grossMarginPct: margin,
+    profitBreakEvenCpa: aov.value !== null && margin !== null ? aov.value * (margin / 100) : null,
+
   };
 }
 

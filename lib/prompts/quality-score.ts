@@ -15,7 +15,14 @@ export interface QualityScoreInput {
   top_search_terms?: string;
 }
 
+import { performanceMetrics, performanceLines, computedBlock } from "../ad-metrics";
+
+export function qualityScoreMetrics(input: Pick<QualityScoreInput, "impressions" | "clicks" | "conversions" | "avg_cpc">) {
+  return performanceMetrics({ impressions: input.impressions, clicks: input.clicks, conversions: input.conversions, avgCpc: input.avg_cpc });
+}
+
 export function buildQualityScorePrompt(input: QualityScoreInput): string {
+  const computed = computedBlock(performanceLines(qualityScoreMetrics(input)));
   return `You are diagnosing Google Ads Quality Score using real factor ratings + performance data, then prescribing the exact changes that will move each factor.
 
 INPUT — keyword:
@@ -53,15 +60,11 @@ CONTEXT (Google's actual rules — cite these in reasoning):
   1. Expected CTR (below_average / average / above_average)
   2. Ad relevance (below_average / average / above_average)
   3. Landing page experience (below_average / average / above_average)
-- Moving QS 5 → 7 typically reduces CPC 16-28% AND raises ad rank.
+- A higher Quality Score generally lowers CPC and raises ad rank for the same bid (Google's auction documentation). How much varies by account — do not quote a percentage.
 - QS is NOT affected by bid, budget, device, or time of day.
 
-PHASE 1 — COMPUTE THE NUMBERS:
-- CTR = clicks / impressions × 100 (2dp)
-- Conversion rate = conversions / clicks × 100 (2dp)
-- CPA = (avg_cpc × clicks) / conversions if all present
-- CPC = avg_cpc as given (verify reasonableness)
-- If a metric can't be computed, mark "could not be computed" — never invent.
+PHASE 1 — THE NUMBERS (already computed — read them, do not redo the math):
+${computed}
 
 PHASE 2 — RECONCILE COMPUTED METRICS WITH GOOGLE'S FACTOR RATINGS:
 If user provided factor ratings AND we computed CTR, sanity-check:
@@ -80,8 +83,8 @@ Flag queries that should be NEGATIVE keywords.
 PHASE 5 — RANKED FIXES:
 Produce 5-8 fixes ordered by expected QS impact. Each fix:
 - Names the factor it targets
-- Is concrete and copy-paste actionable ("Add headline 'Project Management for Teams of 10-50' (28 chars, exact-match keyword)") — never generic ("improve headline").
-- Includes expected impact directionally ("Likely +0.5–1.0 QS · -8-15% CPC").
+- Is concrete and copy-paste actionable ("Add headline 'Teeth Whitening in Pune' (23 chars, exact keyword)") — never generic ("improve headline").
+- Rates expected impact as high / medium / low and names the factor it moves. Do not quote CPC or QS percentages — you cannot know them.
 
 PHASE 6 — RSA-READY HEADLINES:
 Generate 5 improved headlines ≤ 30 chars that:
@@ -94,8 +97,9 @@ PHASE 7 — NEGATIVES + LANDING PAGE CHECKLIST:
 
 PHASE 8 — PROJECTION:
 Given the fixes above, project:
-- Current QS → After fixes QS (cap at 10).
-- CPC savings estimate as a directional range ("8-22% lower CPC").
+- current: the QS from the input (0 if not provided).
+- after_fixes: a directional range, labelled as an estimate (e.g. "estimate: 6-7"), capped at 10.
+- cpc_savings_estimate: qualitative only (e.g. "lower CPC likely as expected CTR and landing page improve") — no percentages.
 - One-sentence reasoning anchored to the factor changes.
 
 Return ONLY valid JSON:
@@ -120,7 +124,7 @@ Return ONLY valid JSON:
     {
       "factor": "expected_ctr | ad_relevance | landing_page_experience",
       "fix": "string — specific, copy-paste actionable",
-      "expected_impact": "string — directional, e.g. '+0.5-1.0 QS · -10-18% CPC'"
+      "expected_impact": "high | medium | low — and the factor it moves"
     }
   ],
   "improved_headlines": [
@@ -132,8 +136,9 @@ Return ONLY valid JSON:
   ],
   "projected_qs": {
     "current": 0,
-    "after_fixes": 0,
-    "cpc_savings_estimate": "string (directional)",
+    "after_fixes": "string — directional range labelled 'estimate'",
+    "cpc_savings_estimate": "string (qualitative, no percentages)",
+
     "reasoning": "string — anchored to which factors moved"
   }
 }`;

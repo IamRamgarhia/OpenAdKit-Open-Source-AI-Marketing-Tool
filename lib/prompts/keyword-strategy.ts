@@ -12,6 +12,8 @@ export interface KeywordInput {
   search_terms_screenshot?: unknown;
 }
 
+import { BID_STRATEGY_RULES } from "./common-rules";
+
 export function buildKeywordPrompt(input: KeywordInput): string {
   return `Build a Google Ads keyword strategy for ${input.product}, anchored to the user's actual Search Terms data.
 
@@ -46,7 +48,7 @@ EXACTLY as if it were pasted text. When typed text and image conflict, trust the
 Cite "(from screenshot)" in search_terms_analysis when image data drove a recommendation.
 
 ` : ""}PHASE 1 — ANALYZE THE SEARCH TERMS REPORT (the highest-leverage step):
-If search_terms_report is provided (or visible in screenshot), compute:
+If search_terms_report is provided${input.search_terms_screenshot ? " (or visible in the screenshot)" : ""}, compute:
   - WASTE: total spend on queries with 0 conversions for ≥ X clicks (X depends on CPA target — 2× target CPA worth of clicks with zero conversions = clear waste).
   - HIGH-INTENT QUERIES: those that converted at or below target CPA. These deserve their own exact-match keyword + tighter ad group.
   - ZERO-CLICK QUERIES: high impressions but 0-1 clicks → ad copy/relevance issue OR a negative-keyword candidate.
@@ -78,17 +80,13 @@ PHASE 5 — LONG-TAIL + COMPETITOR GAPS:
 - 5-8 long-tail (4+ word, clear intent, lower CPC) — prefer ones that surfaced as good performers in Search Terms.
 - 3-5 competitor keyword gaps — what competitors are likely bidding on that the user isn't (informed by competitor list + market).
 
-PHASE 6 — BIDDING STRATEGY based on conversion volume:
-- < 15 conv/month: Manual CPC + bid adjustments. Smart Bidding will misfire on thin data.
-- 15-49 conv/month: ECPC (Enhanced CPC) — soft Smart Bidding.
-- 50+ conv/month + target CPA defined: Target CPA.
-- 50+ conv/month + revenue tracking: Target ROAS.
-- New campaign with 0 conversion history: Maximize Clicks for 7 days, then switch.
+PHASE 6 — BIDDING STRATEGY based on conversion volume (apply these rules; if conversions / month is not provided, treat it as a new campaign and say so):
+${BID_STRATEGY_RULES}
 
 Return ONLY valid JSON:
 {
   "search_terms_analysis": {
-    "estimated_waste": "string — dollar/% figure when computable, 'not enough data' otherwise",
+    "estimated_waste": "string — amount (in the report's currency) or % when computable from the Search Terms data, 'not enough data' otherwise",
     "high_intent_queries_count": 0,
     "zero_conversion_queries_count": 0,
     "match_type_gaps": "string — short count + example (e.g. '4 broad → phrase')",
@@ -117,7 +115,8 @@ Return ONLY valid JSON:
     "strategy": "string",
     "reason": "string — anchored to conversion volume",
     "learning_phase_days": 0,
-    "switch_to_smart_when": "string (e.g. '50+ conversions/30 days')"
+    "switch_to_smart_when": "string (e.g. '30+ conversions / 30 days → Target CPA')"
+
   }
 }`;
 }

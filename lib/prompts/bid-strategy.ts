@@ -16,19 +16,52 @@ export interface BidStrategyInput {
   bid_screenshot?: unknown;
 }
 
+import { BID_STRATEGY_RULES, BID_THRESHOLDS } from "./common-rules";
+import { bidFeasibility, computedBlock, factLine, fmtAmount } from "../ad-metrics";
+
+export function bidStrategyFeasibility(input: Partial<BidStrategyInput>) {
+  return bidFeasibility({
+    monthlyBudget: input.monthly_budget,
+    targetCpa: input.target_cpa,
+    currentCpa: input.current_cpa,
+    conversionsPerMonth: input.conversions_per_month,
+    conversionsLast7d: input.conversions_last_7d,
+  });
+}
+
 export function buildBidStrategyPrompt(input: BidStrategyInput): string {
+  const f = bidStrategyFeasibility(input);
+  const one = (n: number) => n.toFixed(1);
+  const computed = computedBlock([
+    factLine(
+      "Campaign conversions per 30 days",
+      f.monthlyConversions === null ? null : one(f.monthlyConversions),
+      f.monthlyConversionsSource === "last_7d" ? "last 7 days × 30 ÷ 7" : "the monthly figure you gave",
+      "conversions per month or in the last 7 days"
+    ),
+    factLine(
+      "Budget ÷ target CPA",
+      f.maxConversionsAtTargetCpa === null ? null : `${one(f.maxConversionsAtTargetCpa)} conversions / month at most`,
+      `${fmtAmount(f.monthlyBudget ?? 0)} ÷ ${fmtAmount(f.targetCpa ?? 0)}`,
+      "a monthly budget and a target CPA"
+    ),
+    factLine(
+      "Budget ÷ current CPA",
+      f.conversionsAtCurrentCpa === null ? null : `${one(f.conversionsAtCurrentCpa)} conversions / month at today's CPA`,
+      "monthly budget ÷ current CPA",
+      "a monthly budget and the current CPA"
+    ),
+    f.targetCpaReachable === "no"
+      ? `- FEASIBILITY: at the target CPA this budget buys fewer than the ${BID_THRESHOLDS.target_cpa_min_30d} conversions / 30 days Target CPA needs to learn. Say so plainly: raise the budget, relax the target, or use Maximize Conversions first.`
+      : f.targetCpaReachable === "yes"
+        ? `- FEASIBILITY: the budget can fund the ${BID_THRESHOLDS.target_cpa_min_30d}+ conversions / 30 days Target CPA needs, if CPA lands near target.`
+        : "- FEASIBILITY: unknown (no target CPA) — do not invent one.",
+  ]);
   return `Recommend a bidding strategy anchored to the user's actual conversion volume + trend. Smart Bidding requires VOLUME and STABILITY — both gates must clear before a recommendation is safe.
 
 CORE RULE: Smart Bidding strategies need both (a) enough conversions to learn from AND (b) at least 7 uninterrupted days on the current strategy. Either gate failing forces a downgrade.
 
-Conversion volume thresholds (cite these to the user, never invent):
-- Manual CPC / ECPC: works with any volume
-- Maximize Conversions: needs ≥ 15 conversions / month
-- Target CPA (tCPA): needs ≥ 15 conversions / week sustained
-- Target ROAS (tROAS): needs ≥ 30 conversions / week AND consistent value tracking
-- Meta Advantage+ / Lowest-Cost: needs ≥ 50 conversions / 7 days at ad-set level (post learning-phase exit)
-- Cost Cap (Meta): needs ≥ 50 conversions / 7 days
-- TikTok ACO: needs ≥ 50 conversions / 7 days
+${BID_STRATEGY_RULES}
 
 INPUT — context:
 - Platform: ${input.platform}
@@ -54,25 +87,32 @@ The user has dropped a screenshot of their Recommendations page or Conversions c
 Extract the visible metrics — current strategy, conversion counts, CPA trend arrows, and any
 Google "Recommendations" suggestions. Trust the image over typed fields when they conflict.
 
-` : ""}PHASE 1 — SMART-BIDDING READINESS GATES:
+` : ""}${computed}
+
+PHASE 1 — SMART-BIDDING READINESS GATES:
 Check three gates. Each is ready / borderline / not_ready / unknown with a one-line observation:
-  GATE A · WEEKLY CONVERSION VOLUME: compare conversions_last_7d to the threshold for the
-    user's CURRENT strategy AND for the next-tier-up strategy. If 7d is missing, infer from
-    monthly × 7/30 and mark "inferred — provide 7-day count for accuracy".
+  GATE A · CONVERSION VOLUME: compare the computed conversions per 30 days to the threshold for the
+    user's CURRENT strategy AND for the next-tier-up strategy (rules above). If it came from the
+    monthly figure, add "provide the last-7-day count for accuracy".
   GATE B · TREND HEALTH: cpa_trend rising or volatile = borderline; stable or falling = ready.
   GATE C · STRATEGY STABILITY: if current_strategy_days_active < 7 the campaign is still
     in learning — any strategy change resets it.
 
-Overall readiness = the worst of the three gates.
+OVERALL READINESS = the worst gate, ranked not_ready < borderline < ready:
+- Any gate not_ready → not_ready.
+- Otherwise any gate borderline → borderline.
+- An unknown gate can never make the result "ready": if the known gates are ready and one or more
+  are unknown → borderline, and name the missing input. If every gate is unknown → unknown.
 
 PHASE 2 — PICK THE STRATEGY:
-Given the readiness verdict + the volume math:
-- If overall=ready AND volume clears tROAS thresholds + revenue tracking: Target ROAS.
-- If overall=ready AND volume clears tCPA: Target CPA.
-- If volume below tCPA but ≥ Maximize Conversions threshold: Maximize Conversions.
-- Below Maximize Conversions threshold OR borderline trend: ECPC (Enhanced CPC) — soft signal.
-- < 5 conversions/week or volatile trend: Manual CPC + bid adjustments.
-- Brand-new campaign with 0 conversion history: Maximize Clicks for 7 days, then re-evaluate.
+Given the readiness verdict + the volume rules above:
+- overall=ready AND volume clears the Target ROAS line AND value tracking exists: Target ROAS.
+- overall=ready AND volume clears the Target CPA line AND the budget feasibility above is not "no": Target CPA.
+- Volume clears the Maximize Conversions line (or Target CPA is not feasible on this budget): Maximize Conversions.
+- Below the Maximize Conversions line, or overall=not_ready on trend: Manual CPC + bid adjustments.
+- Brand-new campaign with no conversion history: Manual CPC (or capped Maximize Clicks for 1-2 weeks), then re-evaluate.
+- Never recommend Enhanced CPC (retired for Search).
+
 
 PHASE 3 — DECIDE:
 1. recommended_strategy: the strategy name from above.
@@ -88,7 +128,7 @@ PHASE 3 — DECIDE:
 Return ONLY valid JSON:
 {
   "smart_bidding_readiness": {
-    "weekly_conversions_vs_threshold": "string — '9 last 7d vs ≥ 15 needed for tCPA'",
+    "weekly_conversions_vs_threshold": "string — e.g. '25.7 conversions / 30 days vs 30 needed for Target CPA'",
     "trend_health": "string — e.g. 'rising — needs to stabilize first'",
     "overall": "ready | borderline | not_ready | unknown",
     "gates": [
