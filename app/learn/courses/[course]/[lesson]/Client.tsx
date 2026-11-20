@@ -2,17 +2,12 @@
 
 import Link from "next/link";
 import { ArrowLeft, Sparkles, BookOpen } from "lucide-react";
-import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
 import { Markdown } from "@/components/Markdown";
 import { findLesson } from "@/lib/courses";
 
 export default function LessonClient({ course, lesson }: { course: string; lesson: string }) {
-  return (
-    <ApiKeyGate>
-      <Inner courseSlug={course} lessonSlug={lesson} />
-    </ApiKeyGate>
-  );
+  return <Inner courseSlug={course} lessonSlug={lesson} />;
 }
 
 function Inner({ courseSlug, lessonSlug }: { courseSlug: string; lessonSlug: string }) {

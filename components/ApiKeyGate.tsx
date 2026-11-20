@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { hasAnyKeyConfigured } from "@/lib/settings";
+import { useHasAnyKeyStatus } from "@/lib/hooks/use-has-key";
 
 /**
  * Blocks a route until at least one provider key is configured, bouncing to
@@ -19,42 +19,29 @@ import { hasAnyKeyConfigured } from "@/lib/settings";
  *     stuck on "Loading…" forever. We listen for `storage` (fires in *other*
  *     tabs) plus our own `ados:provider-changed` event.
  *
- * Pages that are useful without a key (Settings — where you go to ADD the key;
+ * Pages that are useful without a key (static learn / benchmark / platform
+ * content, Settings — where you go to ADD the key;
  * the checklists — which make no LLM calls at all) must not use this. Gating
  * Settings behind it created a genuine dead end: the StatusBar's "No key"
  * badge linked to /settings, which bounced straight back to /setup.
  */
 export function ApiKeyGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  // External-store read: "unknown" during SSR + hydration, then the real value.
+  // Re-evaluates on `storage` (other tabs) and our own provider/vault events.
+  const status = useHasAnyKeyStatus();
 
-  const check = useCallback(() => {
-    if (hasAnyKeyConfigured()) {
-      setReady(true);
-      return;
-    }
-    setReady(false);
+  useEffect(() => {
+    if (status !== "no") return;
     // Read the location directly rather than via useSearchParams(): that hook
     // forces every page using this gate into client-side rendering (Next
     // errors out at build time without a Suspense boundary), and we only need
     // the value inside a browser-only effect anyway.
-    const next =
-      typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
+    const next = window.location.pathname + window.location.search;
     router.replace(`/setup?next=${encodeURIComponent(next || "/")}`);
-  }, [router]);
+  }, [status, router]);
 
-  useEffect(() => {
-    check();
-    const onChange = () => check();
-    window.addEventListener("storage", onChange);
-    window.addEventListener("ados:provider-changed", onChange);
-    return () => {
-      window.removeEventListener("storage", onChange);
-      window.removeEventListener("ados:provider-changed", onChange);
-    };
-  }, [check]);
-
-  if (!ready) {
+  if (status !== "yes") {
     return (
       <div className="min-h-[60vh] grid place-items-center text-zinc-500 text-sm" role="status" aria-live="polite">
         Loading…

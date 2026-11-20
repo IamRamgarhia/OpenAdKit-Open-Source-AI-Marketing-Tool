@@ -1,16 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
 import { findCourse } from "@/lib/courses";
 
 export default function CourseClient({ course: slug }: { course: string }) {
-  return (
-    <ApiKeyGate>
-      <Inner courseSlug={slug} />
-    </ApiKeyGate>
-  );
+  return <Inner courseSlug={slug} />;
 }
 
 function Inner({ courseSlug }: { courseSlug: string }) {
