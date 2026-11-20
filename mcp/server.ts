@@ -44,13 +44,13 @@ const text = (value: unknown, isError = false): TextResult => ({
 });
 
 const COMMON_INPUT = {
-  brand: z
+  client: z
     .string()
     .optional()
     .describe(
       "Optional saved client brand (id or business name from list_brands). Its tone, offers, audience and proof are used in the copy.",
     ),
-  language: z.string().optional().describe("Output language, e.g. 'Spanish', 'Hindi'. Defaults to English."),
+  output_language: z.string().optional().describe("Language for the generated copy, e.g. 'Spanish', 'Hindi'. Defaults to English."),
   tone_override: z.string().optional().describe("Override the brand's tone for this run."),
   mode: z
     .enum(["auto", "generate", "prompt"])
@@ -66,7 +66,7 @@ export function createServer(env: NodeJS.ProcessEnv = process.env): McpServer {
     {
       instructions:
         "OpenAdKit writes ad copy and campaign plans for Google, Meta, TikTok, LinkedIn, YouTube, X and email, " +
-        "and diagnoses ad performance from real numbers. Call list_brands first if the user mentions a client. " +
+        "and diagnoses ad performance from real numbers. Call list_brands first if the user mentions a client, and pass its id as `client`. " +
         "When a tool returns mode='prompt', write the JSON it asks for (follow the system and user prompt exactly, " +
         "respect every character limit) and then call validate_output with the same tool name before showing it.",
     },
@@ -181,9 +181,11 @@ function registerAiTool(server: McpServer, tool: AiTool, env: NodeJS.ProcessEnv)
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args: Record<string, unknown>, extra) => {
-      const { brand: brandRef, language, tone_override, mode = "auto", ...input } = args as {
-        brand?: string;
-        language?: string;
+      // Shared options use names no tool field uses (several tools have their
+      // own `brand` / `language` inputs), so nothing is shadowed or dropped.
+      const { client: brandRef, output_language: language, tone_override, mode = "auto", ...input } = args as {
+        client?: string;
+        output_language?: string;
         tone_override?: string;
         mode?: "auto" | "generate" | "prompt";
       } & Record<string, unknown>;
@@ -191,7 +193,7 @@ function registerAiTool(server: McpServer, tool: AiTool, env: NodeJS.ProcessEnv)
       let brand = null;
       if (brandRef) {
         brand = findBrand(brandRef, env);
-        if (!brand) return text(`No saved brand matches "${brandRef}". Call list_brands, or omit brand.`, true);
+        if (!brand) return text(`No saved brand matches "${brandRef}". Call list_brands, or omit client.`, true);
       }
       const opts = { brand, language, toneOverride: tone_override };
 

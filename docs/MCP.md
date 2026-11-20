@@ -73,8 +73,8 @@ Every AI tool also accepts these optional inputs:
 
 | Input | Meaning |
 |---|---|
-| `brand` | A saved client (id or business name from `list_brands`). Its tone, offers, audience and proof are used. |
-| `language` | Output language, e.g. `Spanish`, `Hindi`. Default English. |
+| `client` | A saved client brand (id or business name from `list_brands`). Its tone, offers, audience and proof are used. |
+| `output_language` | Language for the generated copy, e.g. `Spanish`, `Hindi`. Default English. |
 | `tone_override` | Override the brand's tone for this run. |
 | `mode` | `auto` (default), `generate` (require a key) or `prompt` (always return the prompt). |
 

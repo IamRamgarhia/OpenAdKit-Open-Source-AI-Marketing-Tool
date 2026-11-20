@@ -81,7 +81,7 @@ describe("OpenAdKit MCP server (stdio)", () => {
     for (const t of ["list_brands", "get_brand", "validate_output", "openadkit_status"]) expect(names).toContain(t);
     const meta = tools.find((t) => t.name === "generate_meta_ads")!;
     expect(meta.inputSchema.required).toEqual(expect.arrayContaining(["objective", "format", "product", "offer", "cta"]));
-    expect(Object.keys(meta.inputSchema.properties ?? {})).toEqual(expect.arrayContaining(["brand", "language", "mode"]));
+    expect(Object.keys(meta.inputSchema.properties ?? {})).toEqual(expect.arrayContaining(["client", "output_language", "mode"]));
   });
 
   it("reports prompt mode when no AI key is configured", async () => {
@@ -105,7 +105,7 @@ describe("OpenAdKit MCP server (stdio)", () => {
     const res = parse(
       await client.callTool({
         name: "generate_google_search_ads",
-        arguments: { goal: "Leads", product: "Teeth whitening", keyword: "teeth whitening pune", brand: BRAND.id },
+        arguments: { goal: "Leads", product: "Teeth whitening", keyword: "teeth whitening pune", client: BRAND.id },
       }),
     );
     expect(res.mode).toBe("prompt");
@@ -142,7 +142,7 @@ describe("OpenAdKit MCP server (stdio)", () => {
   it("errors clearly on an unknown brand and on generate mode without a key", async () => {
     const unknown = await client.callTool({
       name: "generate_hashtags",
-      arguments: { title: "Diwali sale", platform: "instagram", language: "English", brand: "no-such-brand" },
+      arguments: { title: "Diwali sale", platform: "instagram", language: "English", client: "no-such-brand" },
     });
     expect(unknown.isError).toBe(true);
     const noKey = await client.callTool({
@@ -203,5 +203,43 @@ describe("OpenAdKit MCP server — platform character limits", () => {
     (out.headlines[0] as Record<string, unknown>).trimmed_alt = "Know the Price Before We Start";
     const res = await client.callTool({ name: "validate_output", arguments: { tool: "generate_google_search_ads", output: out } });
     expect(parse(res).valid).toBe(true);
+  });
+});
+
+describe("OpenAdKit MCP server — tool fields are never shadowed by shared options", () => {
+  it("passes a tool's own brand / language fields through to the prompt", async () => {
+    const shop = parse(
+      await client.callTool({
+        name: "generate_google_shopping_feed",
+        arguments: {
+          product_title: "Darjeeling tea 100g",
+          current_description: "Nice tea.",
+          brand: "Leaf & Co",
+          product_category: "Food > Beverages > Tea",
+          attributes: "Loose leaf, 100 g",
+          price: "₹649",
+          client: BRAND.id,
+        },
+      }),
+    );
+    expect(shop.user).toContain("Leaf & Co");
+    expect(shop.user).not.toMatch(/undefined/);
+    expect(shop.system).toContain("Sunrise Dental Clinic");
+    const tags = parse(
+      await client.callTool({ name: "generate_hashtags", arguments: { title: "Diwali sale", platform: "instagram", language: "Hindi" } }),
+    );
+    expect(tags.user).toContain("Hindi");
+    expect(tags.user).not.toMatch(/undefined/);
+  });
+
+  it("no tool declares a field named like a shared option", async () => {
+    const { tools } = await client.listTools();
+    const { AI_TOOLS } = await import("@/lib/tools/registry");
+    for (const t of AI_TOOLS) {
+      for (const shared of ["client", "output_language", "tone_override", "mode"]) {
+        expect(Object.keys(t.input), `${t.name}.${shared}`).not.toContain(shared);
+      }
+    }
+    expect(tools.length).toBeGreaterThan(30);
   });
 });
