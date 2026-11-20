@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Plus, Trash2, FolderOpen, Loader2, Download, Printer } from "lucide-react";
+import { Plus, Trash2, FolderOpen, Loader2, Download, Printer, ListPlus, X } from "lucide-react";
 import { ApiKeyGate } from "@/components/ApiKeyGate";
 import { PageHeader } from "@/components/PageHeader";
 import { Section, Pill } from "@/components/OutputBlocks";
-import { listCampaigns, saveCampaign, deleteCampaign, listAds, type Campaign, type GeneratedAd } from "@/lib/storage";
+import { listCampaigns, saveCampaign, deleteCampaign, listAds, updateAd, getAd, type Campaign, type GeneratedAd } from "@/lib/storage";
 import { getActiveBrainId } from "@/lib/settings";
 import { showUndoToast } from "@/components/UndoToast";
 
@@ -17,10 +18,29 @@ const STATUS_TONE: Record<Campaign["status"], "live" | "pos" | "default" | "neg"
   done: "pos",
 };
 
+async function loadCampaignData() {
+  const id = getActiveBrainId();
+  const [c, a] = await Promise.all([listCampaigns(id ?? undefined), listAds({ brand_id: id ?? undefined })]);
+  return { id, campaigns: c, ads: a };
+}
+
+function newCampaign(brand_id: string, name: string, goal: string): Campaign {
+  return { id: crypto.randomUUID(), brand_id, name, goal, status: "planning", created_at: Date.now() };
+}
+
+function exportFilename(c: Campaign): string {
+  return `${c.name.replace(/[^a-z0-9-_ ]/gi, "_")}-${Date.now()}.md`;
+}
+
+const HTML_ESCAPES: Record<string, string> = { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" };
+const escapeHtml = (s: string) => s.replace(/[<>&"']/g, (ch) => HTML_ESCAPES[ch]);
+
 export default function CampaignsPage() {
   return (
     <ApiKeyGate>
-      <Inner />
+      <Suspense fallback={null}>
+        <Inner />
+      </Suspense>
     </ApiKeyGate>
   );
 }
@@ -33,33 +53,58 @@ function Inner() {
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [saving, setSaving] = useState(false);
+  const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
+  // ?add=<adId> — arriving from a generator's "Add to a campaign" next step.
+  const addId = useSearchParams().get("add");
+  const [pendingAd, setPendingAd] = useState<GeneratedAd | null>(null);
+  const [addedMsg, setAddedMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!addId) return;
+    let cancelled = false;
+    getAd(addId).then((a) => {
+      if (!cancelled) setPendingAd(a ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [addId]);
+
+  function apply(d: Awaited<ReturnType<typeof loadCampaignData>>) {
+    setActiveBrandId(d.id);
+    setCampaigns(d.campaigns);
+    setAds(d.ads);
+  }
   async function refresh() {
-    const id = getActiveBrainId();
-    setActiveBrandId(id);
-    const [c, a] = await Promise.all([listCampaigns(id ?? undefined), listAds({ brand_id: id ?? undefined })]);
-    setCampaigns(c);
-    setAds(a);
+    apply(await loadCampaignData());
   }
 
   useEffect(() => {
-    refresh();
-    const h = () => refresh();
-    window.addEventListener("ados:brains-changed", h);
-    return () => window.removeEventListener("ados:brains-changed", h);
+    let cancelled = false;
+    const load = () =>
+      loadCampaignData().then((d) => {
+        if (!cancelled) apply(d);
+      });
+    load();
+    window.addEventListener("ados:brains-changed", load);
+    window.addEventListener("ados:active-brain-changed", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ados:brains-changed", load);
+      window.removeEventListener("ados:active-brain-changed", load);
+    };
   }, []);
+
+  async function assign(adId: string, campaignId: string | undefined) {
+    await updateAd(adId, { campaign_id: campaignId });
+    setAds((cur) => cur.map((a) => (a.id === adId ? { ...a, campaign_id: campaignId } : a)));
+  }
 
   async function create() {
     if (!name.trim() || !activeBrandId) return;
     setSaving(true);
-    await saveCampaign({
-      id: crypto.randomUUID(),
-      brand_id: activeBrandId,
-      name: name.trim(),
-      goal: goal.trim(),
-      status: "planning",
-      created_at: Date.now(),
-    });
+    await saveCampaign(newCampaign(activeBrandId, name.trim(), goal.trim()));
     setName("");
     setGoal("");
     setCreating(false);
@@ -77,15 +122,19 @@ function Inner() {
   function printCampaign(c: Campaign) {
     const items = adsFor(c.id);
     if (!items.length) return;
-    const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=1100");
-    if (!w) return;
+    // No "noopener" in the features string: with it, window.open() returns
+    // null by spec, so the document could never be written and the button
+    // did nothing at all. Sever the back-reference manually instead.
+    setPrintError(null);
+    const w = window.open("", "_blank", "width=900,height=1100");
+    if (!w) {
+      setPrintError("Your browser blocked the print window. Allow pop-ups for this site and try again.");
+      return;
+    }
+    w.opener = null;
     const created = new Date(c.created_at).toLocaleString();
-    const safeName = (c.name || "Campaign").replace(/[<>&"']/g, (ch) =>
-      ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[ch] as string)
-    );
-    const escape = (s: string) => s.replace(/[<>&"']/g, (ch) =>
-      ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[ch] as string)
-    );
+    const safeName = escapeHtml(c.name || "Campaign");
+    const escape = escapeHtml;
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
 <title>${safeName} — OpenAdKit campaign</title>
@@ -161,9 +210,15 @@ function Inner() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${c.name.replace(/[^a-z0-9-_ ]/gi, "_")}-${Date.now()}.md`;
+    link.download = exportFilename(c);
+    link.style.display = "none";
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    // Defer revoke: revoking synchronously can cancel the download in Firefox/Safari.
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      link.remove();
+    }, 0);
   }
 
   return (
@@ -177,6 +232,46 @@ function Inner() {
       {!activeBrandId ? (
         <div className="border border-live/30 bg-live/5 text-live text-sm px-4 py-3 mb-4">
           No active brand. <Link href="/brand" className="underline">Set one</Link> first.
+        </div>
+      ) : null}
+
+      {pendingAd ? (
+        <div className="border border-live/40 bg-live/5 p-4 mb-4 space-y-2" data-testid="pending-add">
+          <div className="text-sm text-ink">
+            Add <strong>{pendingAd.title}</strong> to a campaign:
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {campaigns.map((c) => (
+              <button
+                key={c.id}
+                className="btn-ghost"
+                onClick={async () => {
+                  await assign(pendingAd.id, c.id);
+                  setAddedMsg(`Added "${pendingAd.title}" to ${c.name}.`);
+                  setPendingAd(null);
+                }}
+              >
+                <FolderOpen size={11} /> {c.name}
+              </button>
+            ))}
+            {!creating ? (
+              <button className="btn-primary" onClick={() => setCreating(true)} disabled={!activeBrandId}>
+                <Plus size={11} /> New campaign
+              </button>
+            ) : null}
+            <button className="btn-ghost" onClick={() => setPendingAd(null)}>Not now</button>
+          </div>
+        </div>
+      ) : null}
+      {addedMsg ? (
+        <div role="status" className="border border-pos/40 bg-pos/5 text-pos text-[12px] px-3 py-2 mb-4">
+          ✓ {addedMsg}
+        </div>
+      ) : null}
+
+      {printError ? (
+        <div role="alert" className="border border-neg/40 bg-neg/5 text-neg text-[12px] px-3 py-2 mb-4">
+          {printError}
         </div>
       ) : null}
 
@@ -239,9 +334,32 @@ function Inner() {
                       <span className="text-[11px] text-ink-faint">created {new Date(c.created_at).toLocaleDateString()}</span>
                     </div>
                     {c.goal ? <p className="text-sm text-ink-muted mt-1">{c.goal}</p> : null}
-                    <div className="text-[12px] text-ink-muted mt-2">
-                      {items.length === 0 ? "No ads assigned yet." : `${items.length} ad${items.length === 1 ? "" : "s"} grouped`}
+                    <div className="text-[12px] text-ink-muted mt-2 flex items-center gap-3 flex-wrap">
+                      <span>{items.length === 0 ? "No ads assigned yet." : `${items.length} ad${items.length === 1 ? "" : "s"} grouped`}</span>
+                      <button
+                        onClick={() => setAddingTo((cur) => (cur === c.id ? null : c.id))}
+                        className="inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-ui-wide text-live hover:underline"
+                        aria-expanded={addingTo === c.id}
+                      >
+                        <ListPlus size={11} /> {addingTo === c.id ? "done" : "add from history"}
+                      </button>
                     </div>
+                    {items.length ? (
+                      <ul className="mt-2 space-y-1" aria-label={`Ads in ${c.name}`}>
+                        {items.map((a) => (
+                          <li key={a.id} className="flex items-center gap-2 text-[12px] border border-base-700 px-2 py-1">
+                            <span className="text-[10px] font-mono uppercase tracking-ui-mega text-live w-14 shrink-0">{a.platform}</span>
+                            <Link href={`/history?focus=${encodeURIComponent(a.id)}`} className="flex-1 truncate text-ink hover:underline">{a.title}</Link>
+                            <button onClick={() => assign(a.id, undefined)} className="text-ink-faint hover:text-neg" aria-label={`Remove ${a.title} from campaign`} title="Remove from campaign">
+                              <X size={11} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {addingTo === c.id ? (
+                      <AddFromHistory ads={ads.filter((a) => a.campaign_id !== c.id)} onAdd={(id) => assign(id, c.id)} />
+                    ) : null}
                   </div>
                   <div className="flex gap-1">
                     {(["planning", "live", "paused", "done"] as const).map((s) => (
@@ -292,6 +410,42 @@ function Inner() {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+function AddFromHistory({ ads, onAdd }: { ads: GeneratedAd[]; onAdd: (id: string) => void }) {
+  const [q, setQ] = useState("");
+  const shown = ads
+    .filter((a) => !q || `${a.title} ${a.campaign_type} ${a.platform}`.toLowerCase().includes(q.toLowerCase()))
+    .slice(0, 30);
+  return (
+    <div className="mt-3 border border-base-700 bg-base-950/40 p-2 space-y-2" data-testid="add-from-history">
+      <input
+        className="input-base"
+        placeholder="filter saved ads for this client..."
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="Filter saved ads"
+      />
+      {shown.length === 0 ? (
+        <p className="text-[12px] text-ink-muted px-1">
+          No other saved ads for this client. <Link href="/history" className="text-live underline">Open history</Link>
+        </p>
+      ) : (
+        <ul className="max-h-64 overflow-y-auto divide-y divide-base-700">
+          {shown.map((a) => (
+            <li key={a.id} className="flex items-center gap-2 px-1 py-1.5 text-[12px]">
+              <span className="text-[10px] font-mono uppercase tracking-ui-mega text-live w-14 shrink-0">{a.platform}</span>
+              <span className="flex-1 truncate text-ink">{a.title}</span>
+              {a.campaign_id ? <span className="text-[10px] text-ink-faint">in another campaign</span> : null}
+              <button onClick={() => onAdd(a.id)} className="btn-ghost py-0.5" aria-label={`Add ${a.title}`}>
+                <Plus size={11} /> add
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

@@ -23,10 +23,20 @@ export interface GeneratorConfig<I extends Record<string, unknown>> {
   title: string;
   subtitle?: string;
   platform: Platform;
+  /** Derive the stored platform from the form (e.g. hashtags / reel ideas
+   *  have their own platform select). Falls back to `platform`. */
+  platformFor?: (input: I) => Platform;
   campaign_type: string;
   fields: InputField[];
   initial: I;
   buildPrompt: (input: I, brain: BrandBrain | null) => string;
+  /**
+   * Optional async pre-step run after validation, before the prompt is built
+   * (e.g. fetching a competitor URL). Return extra keys under `__`-prefixed
+   * names — they reach buildPrompt but are never persisted with the ad.
+   * A `warning` is shown in the info banner without failing the run.
+   */
+  prepareInput?: (input: I, signal: AbortSignal) => Promise<{ input: I; warning?: string }>;
   buildTitle: (input: I) => string;
   maxTokens?: number;
   temperature?: number;
