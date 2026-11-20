@@ -14,7 +14,8 @@
  *
  * The port now flows one way:
  *   resolve-ports.cjs / local-sync.cjs
- *     -> .env.local (ADFORGE_SYNC_PORT + NEXT_PUBLIC_ADFORGE_SYNC_PORT)
+ *     -> .env.local (OPENADKIT_SYNC_PORT + NEXT_PUBLIC_OPENADKIT_SYNC_PORT,
+ *        plus the legacy ADFORGE_* mirrors)
  *     -> Next inlines NEXT_PUBLIC_* at build time
  *     -> getSyncOrigin() here
  *     -> every browser-side caller
@@ -28,8 +29,12 @@
 
 import { isHostedMode } from "./env";
 
-/** Port baked in at build time by Next from .env.local, when present. */
-const BUILD_TIME_PORT = process.env.NEXT_PUBLIC_ADFORGE_SYNC_PORT;
+/** Port baked in at build time by Next from .env.local, when present.
+ *  NEXT_PUBLIC_OPENADKIT_SYNC_PORT is canonical; the pre-rebrand
+ *  NEXT_PUBLIC_ADFORGE_SYNC_PORT is still honoured as a fallback. Each name is
+ *  referenced literally so Next can inline it. */
+const BUILD_TIME_PORT =
+  process.env.NEXT_PUBLIC_OPENADKIT_SYNC_PORT || process.env.NEXT_PUBLIC_ADFORGE_SYNC_PORT;
 
 /** Historical/default ports worth probing when the build-time value is absent
  *  or wrong. 3006 is what the shell installers still write; 41574 is the

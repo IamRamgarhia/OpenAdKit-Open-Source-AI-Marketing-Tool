@@ -17,7 +17,7 @@
  * and every redirect hop. Resolved addresses are PINNED into the connection so
  * a hostile short-TTL DNS record can't answer the validation lookup and the
  * fetch differently (rebinding TOCTOU). Body capped at 500 KB. 15s timeout per
- * hop, max 5 redirects. Rate limited per client IP.
+ * hop, max 5 redirects. Rate limited per client IP behind a trusted proxy, globally otherwise.
  *
  * Mirrors the response shape of the sidecar (lib/url-ingest.ts uses both
  * interchangeably via serverProxyUrl()).
@@ -31,6 +31,7 @@ import {
   isPrivateOrLoopbackHost,
   extractMetadata,
   stripHtml as stripHtmlHelper,
+  rateLimitKey,
 } from "@/lib/server/url-helpers";
 
 // Force Node runtime (not Edge) — we need redirect-by-hand control + the
@@ -47,6 +48,9 @@ const USER_AGENT =
   "Mozilla/5.0 (compatible; OpenAdKit/1.0; +https://github.com/IamRamgarhia/OpenAdKit-Open-Source-AI-Marketing-Tool)";
 
 // --- Abuse control ---------------------------------------------------------
+// Bucket key comes from rateLimitKey() (lib/server/url-helpers.ts): forwarded
+// IP headers are only trusted on Vercel or with OPENADKIT_TRUST_PROXY=1 —
+// otherwise they are client-controlled and every request shares one bucket.
 // This route does a server-side fetch of any public URL. Without a limit,
 // anyone who finds a hosted deployment can use it as a free open proxy at the
 // operator's bandwidth/compute expense. In-memory token bucket per client IP:
@@ -56,13 +60,6 @@ const USER_AGENT =
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
 const rateBuckets = new Map<string, number[]>();
-
-function clientKey(req: Request): string {
-  const h = req.headers;
-  const fwd = h.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return h.get("x-real-ip") ?? h.get("cf-connecting-ip") ?? "unknown";
-}
 
 function rateLimited(key: string): boolean {
   const now = Date.now();
@@ -223,7 +220,7 @@ async function fetchWithRedirects(initialUrl: string): Promise<string> {
 }
 
 export async function GET(req: Request) {
-  if (rateLimited(clientKey(req))) {
+  if (rateLimited(rateLimitKey(req.headers))) {
     return NextResponse.json(
       { ok: false, error: `Rate limit: max ${RATE_LIMIT_MAX} ingests per minute.` },
       { status: 429, headers: { "Retry-After": "60" } }
