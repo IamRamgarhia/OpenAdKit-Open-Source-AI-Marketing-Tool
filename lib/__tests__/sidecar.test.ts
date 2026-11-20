@@ -2,7 +2,7 @@
  * scripts/local-sync.cjs — pure helpers (required with no side effects) plus
  * an integration test that spawns the real sidecar and talks HTTP to it.
  */
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { createRequire } from "node:module";
 import { EventEmitter } from "node:events";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -381,4 +381,25 @@ describe("sidecar integration (real HTTP)", () => {
     expect(JSON.parse(r.body)).toMatchObject({ ok: true, bye: true });
     await expect(exited).resolves.toBe(0);
   }, 15_000);
+});
+
+describe("configuredWebPort — explicit PORT wins", () => {
+  const saved = process.env.PORT;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.PORT;
+    else process.env.PORT = saved;
+  });
+
+  it("uses PORT from the environment over .env.local / the default", () => {
+    // Packaged apps (Windows host, install.sh launcher) have no .env.local and
+    // pass the port they picked; it must not be replaced by the 41573 default.
+    process.env.PORT = "45123";
+    expect(sc.configuredWebPort()).toBe(45123);
+  });
+
+  it("falls back to a valid port when PORT is unset or invalid", () => {
+    process.env.PORT = "not-a-port";
+    const p = sc.configuredWebPort();
+    expect(Number.isInteger(p) && p >= 1 && p <= 65535).toBe(true);
+  });
 });

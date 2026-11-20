@@ -174,6 +174,17 @@ function envPort(value, fallback) {
   return Number.isFinite(n) && n >= 1 && n <= 65535 ? n : fallback;
 }
 
+/**
+ * The web app's port. An explicit PORT in the environment wins — the
+ * launchers, installers and the Windows host all pass the port they chose —
+ * then .env.local (source installs), then the default. readEnvLocal() fills
+ * in a default PORT when the file is missing, so it must not come first or
+ * a packaged app's chosen port would be silently ignored.
+ */
+function configuredWebPort() {
+  return envPort(process.env.PORT, null) ?? envPort(readEnvLocal().PORT, 41573);
+}
+
 function readEnvLocal() {
   if (!fs.existsSync(ENV_LOCAL)) {
     return { PORT: "41573", OPENADKIT_SYNC_PORT: String(PORT), ADFORGE_SYNC_PORT: String(PORT) };
@@ -571,9 +582,7 @@ function startWeb() {
   if (webChild) {
     return { ok: false, error: "already running" };
   }
-  const env = readEnvLocal();
-  // .env.local (source installs) first; packaged apps have none and pass PORT in the environment.
-  webPort = Number(env.PORT) || Number(process.env.PORT) || 41573;
+  webPort = configuredWebPort();
   webStatus = "starting";
   webStartedAt = Date.now();
   webLastLog = "";
@@ -1043,8 +1052,7 @@ function stopWeb() {
  *  file read, and only on requests that need an authorization decision. */
 function refreshPorts() {
   try {
-    const env = readEnvLocal();
-    webPort = envPort(env.PORT, webPort);
+    webPort = configuredWebPort();
   } catch {
     /* keep the last known value */
   }
@@ -1344,7 +1352,7 @@ const server = http.createServer(async (req, res) => {
 
 // Pick up the configured web port at boot so /status is correct
 // before the user clicks Start.
-try { webPort = envPort(readEnvLocal().PORT, 41573); } catch {}
+try { webPort = configuredWebPort(); } catch {}
 
 // Single-instance lock. If another sidecar from THIS install is already
 // running (same PID still alive), exit early — the launcher script will
@@ -1450,5 +1458,6 @@ module.exports = {
   stripHtml,
   extractMetadata,
   resolveUserDataDir,
+  configuredWebPort,
   PORT,
 };
