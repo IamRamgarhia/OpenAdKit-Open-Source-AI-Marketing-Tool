@@ -103,7 +103,7 @@ export function StatusBar() {
     // page, so this is a real flex row at the bottom of the main column and is
     // genuinely pinned — no overlay, and no need for the content area to
     // reserve clearance padding underneath it.
-    <div className="shrink-0 z-20 border-t border-base-600 bg-base-950/85 backdrop-blur supports-[backdrop-filter]:bg-base-950/70">
+    <div className="shrink-0 z-20 border-t border-base-600 bg-base-950/85 backdrop-blur-sm supports-backdrop-filter:bg-base-950/70">
       <div className="flex items-center gap-3 px-4 md:px-10 py-2 text-[12px] text-ink-muted flex-wrap">
         <Cell>
           <span

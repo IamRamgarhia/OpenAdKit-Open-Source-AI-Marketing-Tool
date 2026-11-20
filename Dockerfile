@@ -1,26 +1,25 @@
-FROM node:20-alpine AS deps
+# syntax=docker/dockerfile:1
+# OpenAdKit — production image built from Next's standalone output.
+# Final image contains only server.js + traced node_modules + static assets.
+
+FROM node:24-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json* ./
-# `npm ci` for reproducible builds from the committed lockfile (npm install can
-# mutate it). (Audit finding.)
+COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
-# Run as the image's built-in non-root user (smaller blast radius). (Audit.)
+ENV NODE_ENV=production \
+    PORT=3005 \
+    HOSTNAME=0.0.0.0 \
+    NEXT_TELEMETRY_DISABLED=1
+COPY --from=builder --chown=node:node /app/.next/standalone ./
 USER node
-# The app binds 3005 (`next start -p 3005`), not 3000 — expose the real port so
-# `docker run -p 3005:3005` works out of the box. (Audit finding.)
 EXPOSE 3005
-CMD ["npm", "start"]
+CMD ["node", "server.js"]

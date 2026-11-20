@@ -127,7 +127,7 @@ export default function ProvidersPage() {
         subtitle="Free-tier limits and real per-run costs across all 9 providers — plus what your own history says about each one."
       />
 
-      <div className="border border-info/40 bg-info/[0.06] px-4 py-3 mb-4 text-[12px] text-ink leading-relaxed">
+      <div className="border border-info/40 bg-info/6 px-4 py-3 mb-4 text-[12px] text-ink leading-relaxed">
         <strong className="text-info">No invented scores.</strong> There is no ground truth for ad copy, so this
         page never claims one model is &ldquo;better&rdquo;. Every figure is either a published fact (price, free
         cap, vision) or measured from your own generations. The most useful signal is{" "}
@@ -160,7 +160,7 @@ export default function ProvidersPage() {
               return (
                 <tr
                   key={p.id}
-                  className={`border-b border-base-700/50 last:border-b-0 ${isActive ? "bg-live/[0.06]" : "hover:bg-base-800/30"}`}
+                  className={`border-b border-base-700/50 last:border-b-0 ${isActive ? "bg-live/6" : "hover:bg-base-800/30"}`}
                 >
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">

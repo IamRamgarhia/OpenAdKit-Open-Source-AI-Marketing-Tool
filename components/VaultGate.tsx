@@ -57,7 +57,7 @@ export function VaultGate() {
   if (!needsUnlock) return null;
 
   return (
-    <div className="border-b border-live/40 bg-live/[0.06] px-4 md:px-10 py-2">
+    <div className="border-b border-live/40 bg-live/6 px-4 md:px-10 py-2">
       <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
         <Lock size={12} className="text-live shrink-0" />
         <span className="text-[12px] text-ink">

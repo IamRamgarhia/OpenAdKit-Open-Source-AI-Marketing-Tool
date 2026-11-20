@@ -71,7 +71,7 @@ function LastGeneratedPill() {
   return (
     <Link
       href={`/history?focus=${encodeURIComponent(last.id)}`}
-      className="hidden md:flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-ui-wide text-ink-muted hover:text-live transition border border-base-700 hover:border-live/40 px-2 py-1 rounded-sm"
+      className="hidden md:flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-ui-wide text-ink-muted hover:text-live transition border border-base-700 hover:border-live/40 px-2 py-1 rounded-xs"
       title={last.title}
     >
       <span className="text-pos">●</span>

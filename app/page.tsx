@@ -99,7 +99,7 @@ export default function Dashboard() {
           before the user starts clicking tools and wonders why the output
           sounds nothing like their brand. */}
       {brains.length === 0 ? (
-        <div className="mb-6 border border-live/40 bg-live/[0.04] p-6 grid md:grid-cols-[1fr_auto] items-center gap-4 animate-fade-up">
+        <div className="mb-6 border border-live/40 bg-live/4 p-6 grid md:grid-cols-[1fr_auto] items-center gap-4 animate-fade-up">
           <div>
             <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-1">step 1 of 1</div>
             <h2 className="font-display italic text-2xl text-ink leading-tight">Add your first client to unlock everything.</h2>

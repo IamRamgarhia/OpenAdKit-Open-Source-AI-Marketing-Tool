@@ -286,7 +286,7 @@ export default function AlternativesPage() {
           </header>
 
           <div className="grid md:grid-cols-2 gap-4">
-            <div className="border border-pos/30 bg-pos/[0.04] p-4 space-y-2">
+            <div className="border border-pos/30 bg-pos/4 p-4 space-y-2">
               <h3 className="text-[11px] font-mono uppercase tracking-ui-wide text-pos">
                 Where {c.name} is strong
               </h3>
@@ -300,7 +300,7 @@ export default function AlternativesPage() {
               </ul>
             </div>
 
-            <div className="border border-neg/30 bg-neg/[0.04] p-4 space-y-2">
+            <div className="border border-neg/30 bg-neg/4 p-4 space-y-2">
               <h3 className="text-[11px] font-mono uppercase tracking-ui-wide text-neg">
                 Where {c.name} falls short
               </h3>
@@ -315,7 +315,7 @@ export default function AlternativesPage() {
             </div>
           </div>
 
-          <div className="border border-live/40 bg-live/[0.04] p-4 space-y-2">
+          <div className="border border-live/40 bg-live/4 p-4 space-y-2">
             <h3 className="text-[11px] font-mono uppercase tracking-ui-wide text-live">
               Why pick OpenAdKit over {c.name}
             </h3>

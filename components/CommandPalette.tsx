@@ -7,12 +7,12 @@ import {
   ArrowRight,
   Brain,
   Sparkles,
-  Facebook,
+  Users as MetaIcon,
   Search as GoogleIcon,
   Music2,
-  Linkedin,
-  Youtube,
-  Twitter,
+  Briefcase as LinkedInIcon,
+  MonitorPlay as YouTubeIcon,
+  AtSign as XIcon,
   Mail,
   Microscope,
   CalendarDays,
@@ -96,12 +96,12 @@ export function CommandPalette() {
   const actions = useMemo<Action[]>(() => {
     const groupIconMap: Record<string, any> = {
       "Start here": Sparkles,
-      "Meta · Facebook + Instagram": Facebook,
+      "Meta · Facebook + Instagram": MetaIcon,
       "Google · Search + PMax + Shopping": GoogleIcon,
       "TikTok": Music2,
-      "LinkedIn · B2B": Linkedin,
-      "YouTube": Youtube,
-      "X · Twitter": Twitter,
+      "LinkedIn · B2B": LinkedInIcon,
+      "YouTube": YouTubeIcon,
+      "X · Twitter": XIcon,
       "Email + Display": Mail,
       "Research & Insights": Microscope,
       "Routines": CalendarDays,
@@ -227,7 +227,7 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-base-950/80 backdrop-blur grid place-items-start pt-[10vh] px-4"
+      className="fixed inset-0 z-60 bg-base-950/80 backdrop-blur-sm grid place-items-start pt-[10vh] px-4"
       onClick={() => setOpen(false)}
       role="presentation"
     >
@@ -250,7 +250,7 @@ export function CommandPalette() {
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Jump to a page, switch client, find a saved ad…"
-            className="flex-1 bg-transparent outline-none text-[15px] text-ink placeholder-ink-subtle"
+            className="flex-1 bg-transparent outline-hidden text-[15px] text-ink placeholder-ink-subtle"
             aria-autocomplete="list"
             aria-controls="cmdk-listbox"
             aria-activedescendant={filtered[idx] ? `cmdk-opt-${filtered[idx].id}` : undefined}

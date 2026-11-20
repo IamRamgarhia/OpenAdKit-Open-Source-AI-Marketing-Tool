@@ -338,7 +338,7 @@ function Inner() {
           {schemaRecovered && parsed ? (
             <div
               role="status"
-              className="text-[11px] font-mono uppercase tracking-ui-mega text-live border border-live/30 bg-live/[0.04] px-2 py-1 inline-block"
+              className="text-[11px] font-mono uppercase tracking-ui-mega text-live border border-live/30 bg-live/4 px-2 py-1 inline-block"
               title="The model's first reply didn't match the expected structure, so we automatically re-asked it to correct the JSON. Content below was returned by the second attempt."
             >
               ↻ ai output auto-corrected (schema retry)
@@ -365,7 +365,7 @@ function StealOutput({ json }: { json: any }) {
   // ad copy — they didn't pay tokens for hallucinated competitor data.
   if (json?.error && !json?.teardown?.length) {
     return (
-      <div className="border border-live/40 bg-live/[0.04] p-5 space-y-3 animate-fade-up">
+      <div className="border border-live/40 bg-live/4 p-5 space-y-3 animate-fade-up">
         <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live flex items-center gap-2">
           <span className="h-1 w-1 bg-live" /> nothing to analyze
         </div>

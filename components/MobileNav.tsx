@@ -56,7 +56,7 @@ export function MobileNav() {
       <button
         ref={triggerRef}
         onClick={() => setOpen(true)}
-        className="md:hidden fixed top-3 left-3 z-40 h-11 w-11 grid place-items-center border border-base-600 bg-base-900/90 backdrop-blur"
+        className="md:hidden fixed top-3 left-3 z-40 h-11 w-11 grid place-items-center border border-base-600 bg-base-900/90 backdrop-blur-sm"
         aria-label="Open navigation"
         aria-expanded={open}
         aria-controls="mobile-nav-drawer"
@@ -70,7 +70,7 @@ export function MobileNav() {
           role="dialog"
           aria-modal="true"
           aria-label="Site navigation"
-          className="md:hidden fixed inset-0 z-50 bg-base-950/95 backdrop-blur overflow-y-auto"
+          className="md:hidden fixed inset-0 z-50 bg-base-950/95 backdrop-blur-sm overflow-y-auto"
         >
           <div className="flex items-center justify-between border-b border-base-600 px-4 py-3">
             <Link href="/" className="flex items-center gap-2">

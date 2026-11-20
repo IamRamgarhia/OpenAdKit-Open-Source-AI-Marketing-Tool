@@ -7,12 +7,12 @@ import {
   ChevronRight,
   ChevronDown,
   Sparkles,
-  Facebook,
+  Users as MetaIcon,
   Search as SearchIcon,
   Music2,
-  Linkedin,
-  Youtube,
-  Twitter,
+  Briefcase as LinkedInIcon,
+  MonitorPlay as YouTubeIcon,
+  AtSign as XIcon,
   Mail,
   Microscope,
   CalendarDays,
@@ -34,12 +34,12 @@ import type { BrandBrain } from "@/lib/brand-brain";
 // semantic fit (Google = search ads in this app). Same for TikTok → Music2.
 const GROUP_ICONS: Record<string, LucideIcon> = {
   "Start here": Sparkles,
-  "Meta · Facebook + Instagram": Facebook,
+  "Meta · Facebook + Instagram": MetaIcon,
   "Google · Search + PMax + Shopping": SearchIcon,
   "TikTok": Music2,
-  "LinkedIn · B2B": Linkedin,
-  "YouTube": Youtube,
-  "X · Twitter": Twitter,
+  "LinkedIn · B2B": LinkedInIcon,
+  "YouTube": YouTubeIcon,
+  "X · Twitter": XIcon,
   "Email + Display": Mail,
   "Research & Insights": Microscope,
   "Routines": CalendarDays,
@@ -138,8 +138,8 @@ export function Sidebar() {
       <div className="shrink-0 flex items-center gap-2.5 px-4 py-5 border-b border-base-700/60">
         <Link href="/" className="flex items-center gap-2.5 group" aria-label="OpenAdKit dashboard">
           <div className="relative h-9 w-9 grid place-items-center">
-            <div className="absolute inset-0 bg-live rounded-sm" />
-            <div className="absolute inset-0 bg-live/40 rounded-sm blur-md group-hover:blur-lg transition-all" />
+            <div className="absolute inset-0 bg-live rounded-xs" />
+            <div className="absolute inset-0 bg-live/40 rounded-xs blur-md group-hover:blur-lg transition-all" />
             <span className="relative text-base-950 font-bold font-display italic text-xl leading-none">A</span>
           </div>
           <div className="leading-tight">
@@ -174,10 +174,10 @@ export function Sidebar() {
                   src={activeBrand.favicon_url}
                   alt=""
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                  className="shrink-0 h-7 w-7 rounded-sm border border-live/40 bg-base-900 object-contain"
+                  className="shrink-0 h-7 w-7 rounded-xs border border-live/40 bg-base-900 object-contain"
                 />
               ) : (
-                <div className="shrink-0 h-7 w-7 grid place-items-center bg-live/20 border border-live/40 rounded-sm">
+                <div className="shrink-0 h-7 w-7 grid place-items-center bg-live/20 border border-live/40 rounded-xs">
                   <Brain size={12} className="text-live" />
                 </div>
               )}
@@ -247,9 +247,9 @@ export function Sidebar() {
         ) : (
           <Link
             href="/brand/new"
-            className="flex items-center gap-2.5 group p-1.5 rounded-sm border border-live/40 bg-live/[0.04] hover:bg-live/10 transition-colors"
+            className="flex items-center gap-2.5 group p-1.5 rounded-xs border border-live/40 bg-live/4 hover:bg-live/10 transition-colors"
           >
-            <div className="shrink-0 h-7 w-7 grid place-items-center bg-base-900 border border-live/40 rounded-sm">
+            <div className="shrink-0 h-7 w-7 grid place-items-center bg-base-900 border border-live/40 rounded-xs">
               <Plus size={12} className="text-live" />
             </div>
             <div className="flex-1 min-w-0">
@@ -279,7 +279,7 @@ export function Sidebar() {
                 aria-expanded={isOpen}
                 aria-controls={`navgroup-${g.title.replace(/[^a-z0-9]+/gi, "-")}`}
                 className={cn(
-                  "w-full group flex items-center gap-2 px-2.5 py-2 rounded-sm transition-colors",
+                  "w-full group flex items-center gap-2 px-2.5 py-2 rounded-xs transition-colors",
                   "text-[11px] font-semibold uppercase tracking-wider",
                   hasActive ? "text-ink" : "text-ink-muted hover:text-ink",
                   "hover:bg-base-900/60"
@@ -348,7 +348,7 @@ export function Sidebar() {
                           "group relative flex items-center gap-2 pl-7 pr-3 py-1.5 text-[13px] transition-colors",
                           isOpen && "animate-fade-up",
                           active
-                            ? "text-ink bg-gradient-to-r from-live/[0.08] to-transparent font-medium"
+                            ? "text-ink bg-linear-to-r from-live/8 to-transparent font-medium"
                             : "text-ink-muted hover:text-ink hover:bg-base-900/40"
                         )}
                       >

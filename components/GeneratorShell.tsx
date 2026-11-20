@@ -437,7 +437,7 @@ function Inner<I extends Record<string, unknown>>({ config, scope }: Props<I>) {
             </div>
 
             {!brain ? (
-              <div className="border border-live/40 bg-live/[0.06] px-4 py-3">
+              <div className="border border-live/40 bg-live/6 px-4 py-3">
                 <div className="flex items-start gap-2 mb-2">
                   <AlertTriangle size={14} className="shrink-0 mt-0.5 text-live" />
                   <div className="text-[13px] text-ink">
@@ -591,7 +591,7 @@ function applyQueryOverrides<I extends Record<string, unknown>>(
 
 function NextStepsPanel({ steps }: { steps: NextStep[] }) {
   return (
-    <div className="border border-live/30 bg-live/[0.03] p-4 rounded-md">
+    <div className="border border-live/30 bg-live/3 p-4 rounded-md">
       <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-3 pb-2 border-b border-base-700">
         What's next · this asset is saved, here are the natural follow-ups
       </div>
@@ -602,7 +602,7 @@ function NextStepsPanel({ steps }: { steps: NextStep[] }) {
             <li key={s.href + (s.carry?.platform ?? "")}>
               <Link
                 href={s.href + qs}
-                className="flex items-start gap-3 px-2 py-1.5 hover:bg-base-800/40 transition rounded-sm"
+                className="flex items-start gap-3 px-2 py-1.5 hover:bg-base-800/40 transition rounded-xs"
               >
                 <span className="text-live text-xs mt-0.5">→</span>
                 <div className="flex-1">
@@ -945,7 +945,7 @@ const OutputArea = memo(function OutputArea<I extends Record<string, unknown>>({
         {schemaRecovered ? (
           <div
             role="status"
-            className="text-[11px] font-mono uppercase tracking-ui-mega text-live border border-live/30 bg-live/[0.04] px-2 py-1 inline-block"
+            className="text-[11px] font-mono uppercase tracking-ui-mega text-live border border-live/30 bg-live/4 px-2 py-1 inline-block"
             title="The model's first reply didn't match the expected structure, so we automatically re-asked it to correct the JSON. Content below was returned by the second attempt."
           >
             ↻ ai output auto-corrected (schema retry)

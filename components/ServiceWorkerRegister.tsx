@@ -15,7 +15,8 @@ export function ServiceWorkerRegister() {
     // page load did a full reload for no reason.
     const hadControllerAtLoad = Boolean(navigator.serviceWorker.controller);
 
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    const buildId = process.env.NEXT_PUBLIC_BUILD_ID || "dev";
+    navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(buildId)}`).catch(() => {});
 
     // When a NEW sw takes over an already-controlled page (i.e. after a
     // deploy), reload so the shell HTML matches the new chunk URLs. Without

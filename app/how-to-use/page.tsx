@@ -155,7 +155,7 @@ const STEPS: Step[] = [
           works. Pick a model from the dropdown (defaults are sensible). Click{" "}
           <strong>Continue</strong>.
         </p>
-        <div className="border border-info/30 bg-info/[0.06] p-3 mt-4 text-[13px] text-info leading-relaxed">
+        <div className="border border-info/30 bg-info/6 p-3 mt-4 text-[13px] text-info leading-relaxed">
           You can add multiple provider keys and switch between them anytime in{" "}
           <Link href="/settings" className="underline">Settings</Link> — useful when you hit a
           free-tier rate limit. One-click swap to another provider.
@@ -194,7 +194,7 @@ const STEPS: Step[] = [
           </li>
           <li>Review the populated Brand Brain. Edit anything that looks off. Hit <strong>Save</strong>.</li>
         </ol>
-        <div className="border border-live/30 bg-live/[0.04] p-3 mt-4 text-[13px] text-ink leading-relaxed">
+        <div className="border border-live/30 bg-live/4 p-3 mt-4 text-[13px] text-ink leading-relaxed">
           <strong className="text-live">For agencies:</strong> repeat Step 3 for each client. Switch
           the "active client" from the top-bar dropdown anytime; every generator and optimizer
           automatically uses the active client's Brand Brain to keep voice consistent.
@@ -238,7 +238,7 @@ const STEPS: Step[] = [
             </ul>
           </li>
         </ol>
-        <div className="border border-info/30 bg-info/[0.06] p-3 mt-4 text-[13px] text-info leading-relaxed">
+        <div className="border border-info/30 bg-info/6 p-3 mt-4 text-[13px] text-info leading-relaxed">
           Hit <kbd className="border border-info/40 px-1 py-0.5 text-[11px]">⌘+↵</kbd> (Mac) or{" "}
           <kbd className="border border-info/40 px-1 py-0.5 text-[11px]">Ctrl+↵</kbd> (Windows)
           anywhere in the generator to regenerate without touching the mouse.
@@ -289,7 +289,7 @@ const STEPS: Step[] = [
             <Link href="/history" className="text-live underline">History</Link> page.
           </li>
         </ol>
-        <div className="border border-live/30 bg-live/[0.04] p-3 mt-4 text-[13px] text-ink leading-relaxed">
+        <div className="border border-live/30 bg-live/4 p-3 mt-4 text-[13px] text-ink leading-relaxed">
           Use <Link href="/launch-guide" className="text-live underline">Launch Guide</Link> in the
           sidebar for step-by-step screenshots walking you through Facebook Ads Manager or Google
           Ads from campaign creation to publish — useful if you're new to paid media.

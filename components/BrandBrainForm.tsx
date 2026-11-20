@@ -510,7 +510,7 @@ export function BrandBrainForm({ initial }: Props) {
           />
         </div>
 
-        <section className="border border-live/30 bg-live/[0.03] p-4 rounded-md space-y-4">
+        <section className="border border-live/30 bg-live/3 p-4 rounded-md space-y-4">
           <div>
             <h3 className="text-[11px] font-mono uppercase tracking-ui-mega text-live">Onboarding essentials · auto-filled from website</h3>
             <p className="text-xs text-ink-muted mt-1">

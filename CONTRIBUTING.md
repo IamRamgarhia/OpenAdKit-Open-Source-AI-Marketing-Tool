@@ -13,7 +13,7 @@ npm run dev
 
 Open http://localhost:3000, paste your Claude API key, you're in.
 
-Node 18.17+ is required by Next.js 14 — `.nvmrc` pins 20. If your team is on an older Node, run via Docker (`docker build -t ados . && docker run -p 3000:3000 ados`) — no Node install needed.
+Node 20.9+ is required by Next.js 16 — `.nvmrc` pins 24 (LTS). If your team is on an older Node, run via Docker (`docker build -t openadkit . && docker run -p 3005:3005 openadkit`) — no Node install needed.
 
 ## Project shape
 

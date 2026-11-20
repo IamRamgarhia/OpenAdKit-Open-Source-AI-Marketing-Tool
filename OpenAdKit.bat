@@ -43,6 +43,22 @@ if not exist node_modules (
         exit /b 1
     )
 )
+REM --- Production build (once, and again after updates) ---
+REM The web app runs from .next\standalone in production mode: starts in about
+REM a second and uses far less memory than the dev server.
+if not exist .next\standalone\server.js (
+    echo.
+    echo ===================================================
+    echo  Building OpenAdKit ^(one time, about a minute^)
+    echo ===================================================
+    call npm run build
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Build failed. Read the error above.
+        pause
+        exit /b 1
+    )
+)
 REM .env.local is NOT seeded here — the port resolver below detects first-run
 REM (no .env.local) and asks the OS for ports the kernel just confirmed are
 REM free. That avoids the 3000-range collision storm entirely.

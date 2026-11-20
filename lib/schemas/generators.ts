@@ -85,7 +85,7 @@ export const GooglePmaxSchema = z
     image_prompts: z
       .array(Loose({ ratio: z.string(), size: z.string(), prompt: z.string() }))
       .optional(),
-    video_script: z.record(z.any()).optional(),
+    video_script: z.record(z.string(), z.any()).optional(),
     audience_signals: z
       .array(Loose({ type: z.string(), value: z.string(), rationale: z.string() }))
       .optional(),
@@ -231,7 +231,7 @@ export const LinkedinSchema = z
       )
       .min(1),
     lead_form: Loose({ form_intro: z.string(), questions: z.array(z.any()) }).optional(),
-    audience_targeting: z.record(z.any()).optional(),
+    audience_targeting: z.record(z.string(), z.any()).optional(),
   })
   .passthrough();
 
@@ -385,13 +385,13 @@ export const ReelIdeasSchema = z
 // ──────────────────────────────────────────────────────────────────────────
 export const SparkAdsSchema = z
   .object({
-    boost_decision_criteria: z.record(z.any()).optional(),
-    creator_brief: z.record(z.any()).optional(),
-    adaptation_copy: z.record(z.any()).optional(),
-    disclosure: z.record(z.any()).optional(),
-    cta_overlay: z.record(z.any()).optional(),
-    scale_rules: z.record(z.any()).optional(),
-    audience_targeting: z.record(z.any()).optional(),
+    boost_decision_criteria: z.record(z.string(), z.any()).optional(),
+    creator_brief: z.record(z.string(), z.any()).optional(),
+    adaptation_copy: z.record(z.string(), z.any()).optional(),
+    disclosure: z.record(z.string(), z.any()).optional(),
+    cta_overlay: z.record(z.string(), z.any()).optional(),
+    scale_rules: z.record(z.string(), z.any()).optional(),
+    audience_targeting: z.record(z.string(), z.any()).optional(),
   })
   .passthrough();
 
@@ -411,13 +411,13 @@ export const BrandedHashtagChallengeSchema = z
       rationale: z.string(),
       potential_conflicts: Strings,
     }).optional(),
-    participation_mechanic: z.record(z.any()).optional(),
+    participation_mechanic: z.record(z.string(), z.any()).optional(),
     seed_creators: z.array(z.any()).optional(),
-    discover_page: z.record(z.any()).optional(),
-    sound_strategy: z.record(z.any()).optional(),
+    discover_page: z.record(z.string(), z.any()).optional(),
+    sound_strategy: z.record(z.string(), z.any()).optional(),
     six_day_timeline: z.array(z.any()).optional(),
-    success_metrics: z.record(z.any()).optional(),
-    compliance: z.record(z.any()).optional(),
+    success_metrics: z.record(z.string(), z.any()).optional(),
+    compliance: z.record(z.string(), z.any()).optional(),
   })
   .passthrough();
 
@@ -465,18 +465,18 @@ export const AbTestSchema = z
     sample_size_per_variant_clicks: z.number().optional(),
     expected_days_to_significance: z.union([z.string(), z.number()]).optional(),
     minimum_detectable_lift_pct: z.number().optional(),
-    decision_rules: z.record(z.string()).optional(),
+    decision_rules: z.record(z.string(), z.string()).optional(),
     failure_modes_to_avoid: Strings.optional(),
   })
   .passthrough();
 
 export const AdFatigueSchema = z
   .object({
-    computed_decay: z.record(z.any()).optional(),
+    computed_decay: z.record(z.string(), z.any()).optional(),
     fatigue_severity_overall: z.string().optional(),
     severity_reason: z.string().optional(),
-    signals: z.record(z.any()).optional(),
-    refresh_options: z.record(z.any()).optional(),
+    signals: z.record(z.string(), z.any()).optional(),
+    refresh_options: z.record(z.string(), z.any()).optional(),
     new_angles_to_test: z.array(z.any()).optional(),
     kill_threshold: z.string().optional(),
   })
@@ -484,11 +484,11 @@ export const AdFatigueSchema = z
 
 export const AudienceSchema = z
   .object({
-    computed_targets: z.record(z.any()).optional(),
+    computed_targets: z.record(z.string(), z.any()).optional(),
     audience_diagnosis: z.string().optional(),
-    cold_prospecting: z.record(z.any()).optional(),
-    warm_retargeting: z.record(z.any()).optional(),
-    hot_remarketing: z.record(z.any()).optional(),
+    cold_prospecting: z.record(z.string(), z.any()).optional(),
+    warm_retargeting: z.record(z.string(), z.any()).optional(),
+    hot_remarketing: z.record(z.string(), z.any()).optional(),
     exclusions: z.array(z.any()).optional(),
     platform_specific_features_to_enable: z.array(z.any()).optional(),
   })
@@ -496,15 +496,15 @@ export const AudienceSchema = z
 
 export const BidStrategySchema = z
   .object({
-    smart_bidding_readiness: z.record(z.any()).optional(),
+    smart_bidding_readiness: z.record(z.string(), z.any()).optional(),
     recommended_strategy: z.string().optional(),
     reason: z.string().optional(),
     fallback_strategy_if_data_insufficient: z.string().optional(),
-    learning_phase: z.record(z.any()).optional(),
+    learning_phase: z.record(z.string(), z.any()).optional(),
     bid_adjustments: z.array(z.any()).optional(),
     budget_pacing_recommendation: z.string().optional(),
     early_warning_signs: Strings.optional(),
-    graduation_path: z.record(z.any()).optional(),
+    graduation_path: z.record(z.string(), z.any()).optional(),
   })
   .passthrough();
 
@@ -513,9 +513,9 @@ export const BudgetPlannerSchema = z
     platform_split: z.array(z.any()).optional(),
     funnel_split_overall: z.array(z.any()).optional(),
     campaign_breakout: z.array(z.any()).optional(),
-    volume_projection: z.record(z.any()).optional(),
-    break_even: z.record(z.any()).optional(),
-    reserve: z.record(z.any()).optional(),
+    volume_projection: z.record(z.string(), z.any()).optional(),
+    break_even: z.record(z.string(), z.any()).optional(),
+    reserve: z.record(z.string(), z.any()).optional(),
     no_go_list: Strings.optional(),
   })
   .passthrough();
@@ -523,7 +523,7 @@ export const BudgetPlannerSchema = z
 export const BudgetWasteSchema = z
   .object({
     stop_condition: z.string().optional(),
-    pulse: z.record(z.any()).optional(),
+    pulse: z.record(z.string(), z.any()).optional(),
     audit: z.array(z.any()).optional(),
     top_5_fixes_by_roi: z.array(z.any()).optional(),
     reallocation_plan: z.string().optional(),
@@ -532,12 +532,12 @@ export const BudgetWasteSchema = z
 
 export const CtrSchema = z
   .object({
-    computed_metrics: z.record(z.any()).optional(),
+    computed_metrics: z.record(z.string(), z.any()).optional(),
     verdict: z.string().optional(),
     industry_benchmark_cited: z.string().optional(),
     diagnosis_summary: z.string().optional(),
     search_term_signals: z.array(z.any()).optional(),
-    scores: z.record(z.any()).optional(),
+    scores: z.record(z.string(), z.any()).optional(),
     rewrites: z.array(z.any()).optional(),
     full_rewritten_version: z.string().optional(),
     kill_or_iterate: z.string().optional(),
@@ -547,7 +547,7 @@ export const CtrSchema = z
 
 export const KeywordsSchema = z
   .object({
-    search_terms_analysis: z.record(z.any()).optional(),
+    search_terms_analysis: z.record(z.string(), z.any()).optional(),
     keywords: z
       .array(
         Loose({
@@ -559,21 +559,21 @@ export const KeywordsSchema = z
         })
       )
       .min(1),
-    negative_keywords: z.array(z.union([z.string(), z.record(z.any())])).optional(),
+    negative_keywords: z.array(z.union([z.string(), z.record(z.string(), z.any())])).optional(),
     ad_group_structure: z.array(z.any()).optional(),
     long_tail_opportunities: Strings.optional(),
     competitor_gaps: Strings.optional(),
-    bidding_recommendation: z.record(z.any()).optional(),
+    bidding_recommendation: z.record(z.string(), z.any()).optional(),
   })
   .passthrough();
 
 export const LandingPageSchema = z
   .object({
-    computed_metrics: z.record(z.any()).optional(),
-    overall_grade_pulse: z.record(z.any()).optional(),
-    scores: z.record(z.any()).optional(),
+    computed_metrics: z.record(z.string(), z.any()).optional(),
+    overall_grade_pulse: z.record(z.string(), z.any()).optional(),
+    scores: z.record(z.string(), z.any()).optional(),
     fixes: z.array(z.any()).optional(),
-    rewrite_above_the_fold: z.record(z.any()).optional(),
+    rewrite_above_the_fold: z.record(z.string(), z.any()).optional(),
     biggest_problem: z.string().optional(),
     biggest_opportunity: z.string().optional(),
   })
@@ -581,9 +581,9 @@ export const LandingPageSchema = z
 
 export const QualityScoreSchema = z
   .object({
-    computed_metrics: z.record(z.any()).optional(),
-    projected_qs: z.record(z.any()).optional(),
-    current_factors: z.record(z.any()).optional(),
+    computed_metrics: z.record(z.string(), z.any()).optional(),
+    projected_qs: z.record(z.string(), z.any()).optional(),
+    current_factors: z.record(z.string(), z.any()).optional(),
     search_term_signals: z.array(z.any()).optional(),
     fixes: z.array(z.any()).optional(),
     improved_headlines: z.array(z.any()).optional(),
@@ -606,7 +606,7 @@ export const SuggestionsSchema = z
           name: z.string(),
           why_this_brand: z.string(),
           target_audience: z.string(),
-          kpi_targets: z.record(z.any()),
+          kpi_targets: z.record(z.string(), z.any()),
           hooks: Strings,
           adOS_workflow: z.array(Loose({ step: z.string(), url: z.string() })),
         })
@@ -658,8 +658,8 @@ const TeardownItem = Loose({
 export const CompetitorStealSchema = z
   .object({
     teardown: z.array(TeardownItem).optional(),
-    pattern_recognition: z.record(z.any()).optional(),
-    positioning_attack_plan: z.record(z.any()).optional(),
+    pattern_recognition: z.record(z.string(), z.any()).optional(),
+    positioning_attack_plan: z.record(z.string(), z.any()).optional(),
     beat_their_ad: z
       .array(
         Loose({
@@ -693,7 +693,7 @@ export const BrandExtractionSchema = z
     products: z.union([Strings, z.string()]).optional(),
     platforms: z.union([Strings, z.string()]).optional(),
     content_pillars: z.union([Strings, z.string()]).optional(),
-    social_links: z.record(z.string()).optional(),
+    social_links: z.record(z.string(), z.string()).optional(),
     tone: z.string().optional(),
     personality_traits: z.union([Strings, z.string()]).optional(),
     writing_style: z.string().optional(),

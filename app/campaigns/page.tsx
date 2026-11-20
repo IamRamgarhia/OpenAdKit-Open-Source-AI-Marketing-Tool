@@ -209,7 +209,7 @@ function Inner() {
       </div>
 
       {campaigns.length === 0 ? (
-        <div className="border border-live/30 bg-live/[0.03] p-6 text-center">
+        <div className="border border-live/30 bg-live/3 p-6 text-center">
           <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-2">no campaigns yet</div>
           <h3 className="font-display italic text-xl text-ink leading-tight mb-2">Group your work by launch.</h3>
           <p className="text-sm text-ink-muted max-w-md mx-auto leading-relaxed mb-4">

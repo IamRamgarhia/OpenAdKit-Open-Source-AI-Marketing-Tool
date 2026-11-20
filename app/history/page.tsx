@@ -307,7 +307,7 @@ function HistoryInner() {
                 key={label}
                 role="menuitem"
                 onClick={() => { fn(); closeExportMenu(); }}
-                className="block w-full text-left px-3 py-2 text-[11px] font-mono uppercase tracking-ui-mega text-ink hover:bg-base-800/60 focus:bg-base-800/60 focus:outline-none"
+                className="block w-full text-left px-3 py-2 text-[11px] font-mono uppercase tracking-ui-mega text-ink hover:bg-base-800/60 focus:bg-base-800/60 focus:outline-hidden"
               >
                 {label}
               </button>
@@ -333,7 +333,7 @@ function HistoryInner() {
         </div>
       ) : filtered.length === 0 ? (
         ads.length === 0 ? (
-          <div className="border border-live/30 bg-live/[0.03] p-6 text-center">
+          <div className="border border-live/30 bg-live/3 p-6 text-center">
             <div className="text-[10px] font-mono uppercase tracking-ui-mega text-live mb-2">empty history</div>
             <h3 className="font-display italic text-xl text-ink leading-tight mb-2">Nothing generated yet.</h3>
             <p className="text-sm text-ink-muted max-w-md mx-auto leading-relaxed mb-4">

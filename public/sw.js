@@ -1,9 +1,12 @@
 // OpenAdKit service worker — offline shell only.
 // We DO NOT cache or proxy LLM provider / ingest API calls — those always go
 // live so stale responses never leak.
-// VERSION is rewritten by scripts/sw-stamp.cjs at build time to the current git
-// SHA so each deploy invalidates the previous shell cache. (Audit finding #38.)
-const VERSION = "openadkit-1dc52a2";
+// VERSION comes from the registration URL (/sw.js?v=<build id>), which
+// components/ServiceWorkerRegister.tsx sets from NEXT_PUBLIC_BUILD_ID. A new
+// build => a new script URL => the browser installs a fresh worker and the
+// activate handler deletes the previous shell cache. Nothing rewrites this
+// file at build time, so the git tree stays clean.
+const VERSION = "openadkit-" + (new URL(self.location.href).searchParams.get("v") || "dev");
 const SHELL = ["/", "/setup", "/manifest.webmanifest"];
 
 // Any GET request whose hostname includes one of these strings is left
