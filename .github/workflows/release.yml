@@ -1,0 +1,144 @@
+name: Release
+
+# Builds the downloadable app on a version tag (v1.2.0) or by hand, and
+# attaches it to a DRAFT GitHub release. A human publishes the draft;
+# releases/latest/download/... only ever points at published releases.
+#
+# Assets (fixed names so README links never change):
+#   OpenAdKit-Windows-Setup.exe   Windows installer (Inno Setup + WebView2 window)
+#   OpenAdKit-app.tar.gz          prebuilt app for install.sh (macOS / Linux)
+#   SHA256SUMS.txt                checked by install.sh and install.ps1
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  # Packaging changes are built (not released) on PRs so a broken installer
+  # is caught before a tag is pushed.
+  pull_request:
+    paths:
+      - "installer/**"
+      - "scripts/build-*.cjs"
+      - "scripts/local-sync.cjs"
+      - "next.config.mjs"
+      - "install.sh"
+      - "install.ps1"
+      - ".github/workflows/release.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  payload:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Version matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          pkg="v$(node -p 'require("./package.json").version')"
+          [ "$pkg" = "${GITHUB_REF_NAME}" ] || { echo "package.json is $pkg but tag is ${GITHUB_REF_NAME}"; exit 1; }
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: node scripts/build-payload.cjs
+      - name: Smoke-test the payload with plain node
+        run: |
+          cd dist/payload
+          PORT=3099 HOSTNAME=127.0.0.1 node server.js &
+          for i in $(seq 1 40); do curl -sf -o /dev/null http://127.0.0.1:3099/ && break; sleep 0.5; done
+          curl -sf -o /dev/null http://127.0.0.1:3099/ && curl -sf http://127.0.0.1:3099/api/runtime
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payload
+          path: |
+            dist/payload
+            dist/OpenAdKit-app.tar.gz
+          retention-days: 7
+
+  windows:
+    needs: payload
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: payload
+          path: dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build installer
+        run: node scripts/build-windows-installer.cjs
+      - name: Install silently and run the self-test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\OpenAdKit-Windows-Setup.exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "setup exit $($p.ExitCode)" }
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\OpenAdKit\OpenAdKit.exe"
+          & $exe --self-test; if ($LASTEXITCODE -notin 0,3) { throw "self-test exit $LASTEXITCODE" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/OpenAdKit-Windows-Setup.exe
+          retention-days: 7
+
+  release:
+    needs: [payload, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+      - name: Collect assets + checksums
+        run: |
+          mkdir out
+          cp art/payload/OpenAdKit-app.tar.gz out/
+          cp art/windows/OpenAdKit-Windows-Setup.exe out/
+          (cd out && sha256sum OpenAdKit-app.tar.gz OpenAdKit-Windows-Setup.exe > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: Create or update the draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          state=$(gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null || echo missing)
+          if [ "$state" = "false" ]; then echo "$tag is already published; not touching it."; exit 1; fi
+          notes=$(mktemp)
+          {
+            echo "## Install"
+            echo
+            echo "| Your computer | What to do |"
+            echo "|---|---|"
+            echo "| **Windows 10/11** | Download **OpenAdKit-Windows-Setup.exe** below and run it. Or paste in PowerShell: \`powershell -ExecutionPolicy Bypass -c \"irm https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.ps1 \| iex\"\` |"
+            echo "| **macOS** (Apple silicon & Intel) | Paste in Terminal: \`curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh \| bash\` |"
+            echo "| **Linux** | Same line as macOS. |"
+            echo
+            echo "Windows may say *\"Windows protected your PC\"* because the installer is not code-signed yet: click **More info → Run anyway**."
+            echo
+            echo "Checksums are in SHA256SUMS.txt (both one-line installers verify them automatically)."
+            echo
+            if [ -f "docs/releases/${tag}.md" ]; then cat "docs/releases/${tag}.md"; fi
+          } > "$notes"
+          if [ "$state" = "missing" ]; then
+            gh release create "$tag" out/* --draft --title "OpenAdKit ${tag}" --notes-file "$notes"
+          else
+            gh release edit "$tag" --notes-file "$notes"
+            gh release upload "$tag" out/* --clobber
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        with:
+          name: release-assets
+          path: out
+          retention-days: 7

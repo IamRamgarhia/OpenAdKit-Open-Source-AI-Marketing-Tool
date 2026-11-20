@@ -53,6 +53,8 @@ function main() {
   fs.cpSync(STANDALONE, PAYLOAD, { recursive: true });
   fs.mkdirSync(path.join(PAYLOAD, "scripts"), { recursive: true });
   fs.copyFileSync(path.join(ROOT, "scripts", "local-sync.cjs"), path.join(PAYLOAD, "scripts", "local-sync.cjs"));
+  // App icon for the macOS .app bundle / Linux .desktop entry made by install.sh.
+  fs.copyFileSync(path.join(ROOT, "installer", "art", "icon-512.png"), path.join(PAYLOAD, "icon.png"));
 
   // Secrets / user data must never ship.
   for (const f of [".env", ".env.local", ".env.production.local", ".env.test.local"]) {
