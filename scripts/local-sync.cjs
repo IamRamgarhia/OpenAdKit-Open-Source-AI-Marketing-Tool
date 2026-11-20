@@ -548,7 +548,9 @@ function resolveWebCommand(port) {
           args: [server],
           cwd: path.dirname(server),
           shell: false,
-          env: { NODE_ENV: "production", PORT: String(port), HOSTNAME: "127.0.0.1" },
+          // OPENADKIT_SYNC_PORT lets the web server tell the browser where this
+          // sidecar is (app/api/runtime), whatever port was baked in at build.
+          env: { NODE_ENV: "production", PORT: String(port), HOSTNAME: "127.0.0.1", OPENADKIT_SYNC_PORT: String(PORT) },
         };
       }
     }
@@ -559,7 +561,7 @@ function resolveWebCommand(port) {
     args: ["next", "dev", "-p", String(port)],
     cwd: PROJECT_ROOT,
     shell: isWin,
-    env: { PORT: String(port) },
+    env: { PORT: String(port), OPENADKIT_SYNC_PORT: String(PORT) },
   };
 }
 let webMode = "down";
@@ -570,7 +572,8 @@ function startWeb() {
     return { ok: false, error: "already running" };
   }
   const env = readEnvLocal();
-  webPort = Number(env.PORT) || 41573;
+  // .env.local (source installs) first; packaged apps have none and pass PORT in the environment.
+  webPort = Number(env.PORT) || Number(process.env.PORT) || 41573;
   webStatus = "starting";
   webStartedAt = Date.now();
   webLastLog = "";
