@@ -46,3 +46,8 @@ server.err.log
 dist/
 .installer-cache/
 mcp/dist/
+
+# local throwaway scripts
+/_*.cjs
+/_*.mjs
+/_*.js

@@ -14,6 +14,9 @@ const config = [
     ],
   },
   {
+    // Scoped to source files: the react-hooks plugin is only registered for
+    // these, so applying its rules to a stray .cjs/.json file crashes ESLint.
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts}"],
     rules: {
       // Apostrophes and quotes in JSX prose render correctly; in a copy-heavy
       // marketing app this rule fires on every contraction and is pure noise.
