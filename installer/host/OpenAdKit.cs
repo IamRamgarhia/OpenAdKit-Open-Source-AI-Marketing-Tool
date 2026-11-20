@@ -93,6 +93,7 @@ namespace OpenAdKit
         public static string NodeExe { get { return Path.Combine(AppDir, "node", "node.exe"); } }
         public static string Sidecar { get { return Path.Combine(AppDir, "app", "scripts", "local-sync.cjs"); } }
         public static string ServerJs { get { return Path.Combine(AppDir, "app", "server.js"); } }
+        public static string BuildId { get { return Path.Combine(AppDir, "app", ".next", "BUILD_ID"); } }
 
         public static string WebView2Version()
         {
@@ -102,7 +103,7 @@ namespace OpenAdKit
 
         static int SelfTest()
         {
-            string[] needed = new string[] { NodeExe, Sidecar, ServerJs };
+            string[] needed = new string[] { NodeExe, Sidecar, ServerJs, BuildId };
             foreach (string f in needed)
             {
                 if (!File.Exists(f)) { Console.Error.WriteLine("missing: " + f); return 2; }
@@ -291,7 +292,7 @@ namespace OpenAdKit
         {
             try
             {
-                if (!File.Exists(Program.NodeExe) || !File.Exists(Program.Sidecar))
+                if (!File.Exists(Program.NodeExe) || !File.Exists(Program.Sidecar) || !File.Exists(Program.BuildId))
                 {
                     Fail("OpenAdKit's files are incomplete. Please reinstall it.");
                     return;

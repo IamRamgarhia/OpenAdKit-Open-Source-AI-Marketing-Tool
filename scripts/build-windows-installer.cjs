@@ -164,6 +164,8 @@ function findIscc() {
 async function main() {
   if (process.platform !== "win32") fail("run this on Windows (CI uses windows-latest).");
   if (!fs.existsSync(path.join(PAYLOAD, "server.js"))) fail("dist/payload missing — run scripts/build-payload.cjs first.");
+  // The Next build is a dot-folder: easy to lose when copying/uploading.
+  if (!fs.existsSync(path.join(PAYLOAD, ".next", "BUILD_ID"))) fail("dist/payload/.next/BUILD_ID missing — the app build was not included (hidden-folder copy?).");
   const version = JSON.parse(fs.readFileSync(path.join(PAYLOAD, "payload.json"), "utf8")).version;
 
   console.log(`[build-windows] OpenAdKit ${version}`);

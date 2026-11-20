@@ -4,6 +4,18 @@ All notable changes to OpenAdKit are tracked here. Format loosely follows [Keep 
 
 ## [Unreleased]
 
+## [2.0.2] — 2026-11-20
+
+### Fixed
+- **Windows installer shipped without the app build.** CI's artifact upload
+  skips dot-folders by default, so `.next` never reached the Windows build
+  job and the installed app showed "did not start within 60 seconds". The
+  upload now includes hidden files, the installer build refuses a payload
+  without `.next/BUILD_ID`, the app's self-test checks for it, and CI starts
+  the *installed* app and requires a real page before a release can be made.
+  (Found by installing the v2.0.1 draft on a real Windows 11 PC; v2.0.1 was
+  never published.) The macOS/Linux archive was not affected.
+
 ## [2.0.1] — 2026-11-20
 
 ### Changed
